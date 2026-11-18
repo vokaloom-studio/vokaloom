@@ -18,13 +18,6 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { consumeCredit } from "@/lib/quota";
@@ -446,344 +439,387 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Control Deck: Vibe Presets, Search & Boss Reference Image Dropzone */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Left 7 Columns: Vibe Preset Chips + Keyword Input + Action Bar */}
-        <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100 lg:col-span-7">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                <Sparkles className="size-4 text-violet-400" />
-                1. Aesthetic Vibe &amp; Keyword Engine
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="border-violet-500/30 bg-violet-500/10 text-[11px] text-violet-300"
-              >
-                Batch Size: 15x Vertical (9:16)
-              </Badge>
-            </div>
-            <CardDescription className="text-xs text-zinc-400">
-              Select a candid Instagram vibe preset or type specific scene
-              details to pull 15 real portrait backgrounds.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            {/* Vibe Preset Chips */}
-            <div className="space-y-1.5">
-              <span className="text-xs font-medium text-zinc-300">
-                Vibe Presets
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {VIBE_PRESETS.map((vibe) => {
-                  const isActive = selectedVibe === vibe;
-                  return (
-                    <button
-                      key={vibe}
-                      type="button"
-                      onClick={() => handleVibeSelect(vibe)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
-                        isActive
-                          ? "border-violet-500 bg-violet-600 text-white shadow-sm shadow-violet-600/30"
-                          : "border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900"
-                      }`}
-                    >
-                      {vibe}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Search Keyword Input */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="aesthetic-search-input"
-                className="text-xs font-medium text-zinc-300"
-              >
-                Custom Scene / Aesthetic Modifier (Optional)
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-500" />
-                <Input
-                  id="aesthetic-search-input"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleGenerateClick();
-                    }
-                  }}
-                  placeholder="e.g. Mediterranean balcony morning espresso sunlight..."
-                  className="h-9 border-zinc-800 bg-zinc-950/90 pl-9 text-sm text-white placeholder:text-zinc-500"
-                />
-              </div>
-            </div>
-
-            {/* Action Bar */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              <Button
-                type="button"
-                onClick={handleGenerateClick}
-                disabled={isLoading}
-                className="bg-violet-600 text-white hover:bg-violet-500"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-1.5 size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-1.5 size-4" />
-                )}
-                Generate 15 Backgrounds
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleShuffleMore}
-                disabled={isLoading}
-                className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 hover:text-white"
-              >
-                <Shuffle className="mr-1.5 size-4" />
-                Shuffle 15 More (Page #{page + 1})
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleDownloadAllZip}
-                disabled={isZipping || items.length === 0}
-                className="ml-auto border border-emerald-500/30 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-              >
-                {isZipping ? (
-                  <Loader2 className="mr-1.5 size-4 animate-spin" />
-                ) : (
-                  <FolderArchive className="mr-1.5 size-4" />
-                )}
-                Download All 15 (.ZIP)
-              </Button>
-            </div>
-
-            {/* Live ZIP Progress Bar */}
-            {isZipping && (
-              <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950/80 p-3">
-                <div className="flex items-center justify-between text-xs text-zinc-300">
-                  <span>
-                    Bundling 15 vertical HD photos into{" "}
-                    <code className="text-violet-300">
-                      vokaloom-15-backgrounds.zip
-                    </code>
-                    ...
-                  </span>
-                  <span className="font-mono font-semibold text-emerald-400">
-                    {zipProgress}%
-                  </span>
-                </div>
-                <Progress value={zipProgress} className="h-2" />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Right 5 Columns: Boss Reference Image Aesthetic Matcher (Gemini 2.5 Flash) */}
-        <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100 lg:col-span-5">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                <Eye className="size-4 text-violet-400" />
-                2. Boss Reference Image Matcher
-              </CardTitle>
-              <Badge
-                variant="outline"
-                className="border-zinc-700 bg-zinc-950 text-[10px] text-zinc-300"
-              >
-                Gemini 2.5 Flash Vision
-              </Badge>
-            </div>
-            <CardDescription className="text-xs text-zinc-400">
-              Drop a screenshot or sample photo from your boss/client to extract
-              its aesthetic DNA and auto-pull 15 matching photos.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleReferenceFileChange}
-              className="hidden"
-              id="boss-reference-upload"
-            />
-
-            {!referencePreview ? (
-              <label
-                htmlFor="boss-reference-upload"
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-800 bg-zinc-950/60 px-4 py-6 text-center transition-colors hover:border-violet-500/60 hover:bg-zinc-950"
-              >
-                <div className="flex size-10 items-center justify-center rounded-full bg-violet-500/10 text-violet-400">
-                  <Upload className="size-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-zinc-200">
-                    Click to upload Boss Reference Photo
-                  </p>
-                  <p className="text-[11px] text-zinc-500">
-                    Supports .JPG, .PNG, .WEBP (up to 5 MB · auto-compressed)
-                  </p>
-                </div>
-              </label>
-            ) : (
-              <div className="flex items-start gap-3 rounded-xl border border-violet-500/30 bg-zinc-950/80 p-3">
-                <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={referencePreview}
-                    alt="Boss Reference Preview"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-semibold text-white">
-                      {referenceFileName || "Reference Image"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClearReference}
-                      className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                      title="Remove reference image"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-zinc-400">
-                    {visionUsed
-                      ? "Analyzed with Gemini 2.5 Flash Vision:"
-                      : "Extracted Aesthetic Search DNA:"}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {extractedTags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="border border-violet-500/30 bg-violet-500/15 px-1.5 py-0 text-[10px] text-violet-200"
-                      >
-                        #{tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Resolved Aesthetic Query Banner */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/70 px-3 py-2 text-xs">
-              <div className="flex items-center gap-1.5 text-zinc-400">
-                <CheckCircle2 className="size-3.5 text-emerald-400" />
-                <span>Active Query:</span>
-                <span className="font-medium text-zinc-200">
-                  &ldquo;{resolvedQuery}&rdquo;
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {extractedTags.slice(0, 4).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 3x5 Responsive Portrait Grid (15 Cards) */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="grid items-start gap-6 lg:grid-cols-12">
+      {/* Left Inspector (4 Columns): Compact, Dense Ergonomic Controls */}
+      <aside className="glass-panel overflow-hidden rounded-xl divide-y divide-white/[0.06] lg:sticky lg:top-20 lg:col-span-4">
+        {/* Inspector Title Bar */}
+        <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-white">
-              Vertical 9:16 Aesthetic Batch ({items.length} / 15 Photos)
+            <Sparkles className="size-3.5 text-violet-400" />
+            <h2 className="text-xs font-semibold tracking-tight text-white">
+              Aesthetic Inspector
             </h2>
-            <Badge
-              variant="outline"
-              className="border-zinc-800 bg-zinc-900 text-[11px] text-zinc-400"
-            >
-              Page #{page}
-            </Badge>
           </div>
-          <p className="text-xs text-zinc-400">
-            Click any card to download individual 1080×1920 vertical HD or use{" "}
-            <strong className="text-zinc-200">Download All 15 (.ZIP)</strong>
-          </p>
+          <Badge
+            variant="outline"
+            className="border-white/10 bg-white/[0.04] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300"
+          >
+            15x · 9:16 HD
+          </Badge>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
-          {items.map((item, index) => (
-            <div
-              key={item.id}
-              className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800/90 bg-zinc-900/70 transition-all hover:border-violet-500/60 hover:shadow-lg hover:shadow-violet-950/30"
+        {/* Section 1: Vibe Presets */}
+        <div className="space-y-2 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              Vibe Presets
+            </span>
+            <span className="font-mono text-[10px] text-zinc-500">
+              {selectedVibe}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {VIBE_PRESETS.map((vibe) => {
+              const isActive = selectedVibe === vibe;
+              return (
+                <button
+                  key={vibe}
+                  type="button"
+                  onClick={() => handleVibeSelect(vibe)}
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    isActive
+                      ? "border-violet-500/60 bg-violet-500/20 text-white shadow-xs"
+                      : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:bg-white/[0.05] hover:text-zinc-200"
+                  }`}
+                >
+                  {vibe}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Section 2: Custom Scene Search & Generation Actions */}
+        <div className="space-y-3 p-4">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="aesthetic-search-input"
+              className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400"
             >
-              {/* 9:16 Portrait Container */}
-              <div className="relative aspect-[9/16] w-full overflow-hidden bg-zinc-950">
+              Scene / Keyword Modifier
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
+              <Input
+                id="aesthetic-search-input"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleGenerateClick();
+                  }
+                }}
+                placeholder="Mediterranean balcony morning sunlight..."
+                className="h-8 border-white/[0.08] bg-zinc-950/80 pl-8 pr-7 text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search query"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-zinc-500 hover:text-zinc-200"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleGenerateClick}
+              disabled={isLoading}
+              className="h-8 bg-violet-600 text-xs font-medium text-white hover:bg-violet-500"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 size-3.5" />
+              )}
+              Generate 15 Backgrounds
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleShuffleMore}
+              disabled={isLoading}
+              title={`Load 15 more photos (Page #${page + 1})`}
+              className="h-8 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+            >
+              <Shuffle className="mr-1.5 size-3.5 text-zinc-400" />
+              Shuffle #{page + 1}
+            </Button>
+          </div>
+        </div>
+
+        {/* Section 3: Compact Boss Reference Matcher (Gemini 2.5 Flash Vision) */}
+        <div className="space-y-2.5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Eye className="size-3.5 text-violet-400" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                Boss Reference Matcher
+              </span>
+            </div>
+            <span className="rounded border border-white/[0.07] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+              Gemini 2.5
+            </span>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleReferenceFileChange}
+            className="hidden"
+            id="boss-reference-upload"
+          />
+
+          {!referencePreview ? (
+            <label
+              htmlFor="boss-reference-upload"
+              className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/[0.12] bg-zinc-950/60 p-2.5 transition-colors hover:border-violet-500/50 hover:bg-zinc-950/90"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-violet-500/25 bg-violet-500/10 text-violet-400 transition-colors group-hover:bg-violet-500/20">
+                <Upload className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-zinc-200">
+                  Upload reference image
+                </p>
+                <p className="text-[10px] text-zinc-500">
+                  JPG, PNG, WEBP · auto-matches 15 photos
+                </p>
+              </div>
+            </label>
+          ) : (
+            <div className="flex items-start gap-2.5 rounded-lg border border-violet-500/30 bg-zinc-950/80 p-2.5">
+              <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={referencePreview}
+                  alt="Boss Reference Preview"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="truncate text-xs font-medium text-white">
+                    {referenceFileName || "Reference Image"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearReference}
+                    className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Remove reference image"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400">
+                  {visionUsed
+                    ? "Gemini 2.5 Vision DNA:"
+                    : "Extracted Search DNA:"}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {extractedTags.slice(0, 4).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 font-mono text-[10px] text-violet-200"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 4: Active Aesthetic DNA Telemetry */}
+        <div className="space-y-2 bg-zinc-950/40 px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+            <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
+            <span className="shrink-0 text-zinc-500">Resolved:</span>
+            <span className="truncate font-medium text-zinc-200" title={resolvedQuery}>
+              &ldquo;{resolvedQuery}&rdquo;
+            </span>
+          </div>
+          {extractedTags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {extractedTags.slice(0, 5).map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Right Canvas (8 Columns): Floating Header + Elevated 9:16 Photo Grid */}
+      <section className="space-y-4 lg:col-span-8">
+        {/* Floating Canvas Header */}
+        <div className="glass-panel rounded-xl px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+              <h2 className="text-sm font-semibold tracking-tight text-white">
+                Aesthetic Canvas:{" "}
+                <span className="font-mono tabular-nums text-zinc-300">
+                  {items.length} / 15
+                </span>
+              </h2>
+
+              <Badge
+                variant="outline"
+                className="border-white/10 bg-white/[0.05] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300 backdrop-blur-md"
+              >
+                Page #{page}
+              </Badge>
+
+              <div className="hidden items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[11px] text-zinc-400 sm:inline-flex">
+                <span className="size-1.5 rounded-full bg-emerald-400" />
+                <span className="max-w-[240px] truncate" title={resolvedQuery}>
+                  {resolvedQuery}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={handleDownloadAllZip}
+              disabled={isZipping || items.length === 0}
+              className="h-8 shrink-0 border border-emerald-500/30 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 hover:text-white"
+            >
+              {isZipping ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <FolderArchive className="mr-1.5 size-3.5" />
+              )}
+              Download All (.ZIP)
+            </Button>
+          </div>
+
+          {/* Live ZIP Progress Bar */}
+          {isZipping && (
+            <div className="mt-2.5 space-y-1.5 border-t border-white/[0.06] pt-2.5">
+              <div className="flex items-center justify-between text-[11px] text-zinc-300">
+                <span>
+                  Packaging 15 vertical HD photos into{" "}
+                  <code className="text-violet-300">
+                    vokaloom-15-backgrounds.zip
+                  </code>
+                </span>
+                <span className="font-mono font-semibold tabular-nums text-emerald-400">
+                  {zipProgress}%
+                </span>
+              </div>
+              <Progress value={zipProgress} className="h-1.5" />
+            </div>
+          )}
+        </div>
+
+        {/* 15-Photo Frameless 9:16 Grid */}
+        <div className="relative">
+          {isLoading && items.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-black/40 pt-16 backdrop-blur-[2px]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/75 px-3.5 py-1.5 text-xs font-medium text-zinc-200 backdrop-blur-md">
+                <Loader2 className="size-3.5 animate-spin text-violet-400" />
+                Curating 15 vertical backgrounds...
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {items.map((item, index) => (
+              <div
+                key={item.id}
+                className="group relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/[0.08] transition-all duration-300 hover:ring-white/25"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.previewUrl}
                   alt={item.title}
                   loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
                 />
 
-                {/* Top Badges */}
-                <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-1">
-                  <Badge className="bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-xs">
+                {/* Top Glassmorphic Telemetry Badges */}
+                <div className="pointer-events-none absolute inset-x-2 top-2 flex items-center justify-between gap-1">
+                  <span className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white/90 tabular-nums backdrop-blur-md">
                     #{index + 1} · {item.aspect}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="border-white/20 bg-black/65 px-1.5 py-0.5 text-[10px] uppercase text-zinc-200 backdrop-blur-xs"
-                  >
+                  </span>
+                  <span className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-200 backdrop-blur-md">
                     {item.source}
-                  </Badge>
+                  </span>
                 </div>
 
-                {/* Bottom Overlay with Attribution & 1-Click Download */}
-                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8">
-                  <p className="line-clamp-1 text-[11px] font-medium text-white">
+                {/* Hover Quick Download Pill (Top/Center-Right Action on Hover, Always Accessible on Focus/Loading) */}
+                <div
+                  className={`absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ${
+                    downloadingId === item.id
+                      ? "opacity-100 scale-100"
+                      : "opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+                  }`}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleDownloadSingle(item, index)}
+                    disabled={downloadingId === item.id}
+                    title={`Download #${index + 1} HD`}
+                    className="h-8 rounded-full border border-white/15 bg-black/70 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-white hover:text-zinc-950"
+                  >
+                    {downloadingId === item.id ? (
+                      <Loader2 className="mr-1.5 size-3 animate-spin" />
+                    ) : (
+                      <Download className="mr-1.5 size-3" />
+                    )}
+                    HD
+                  </Button>
+                </div>
+
+                {/* Bottom Attribution & Mobile-Accessible Quick Download */}
+                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 pt-10">
+                  <p className="line-clamp-1 text-[11px] font-medium tracking-tight text-white/95">
                     {item.title}
                   </p>
-                  <div className="mt-1 flex items-center justify-between gap-1">
-                    <span className="flex items-center gap-1 truncate text-[10px] text-zinc-300">
+                  <div className="mt-1 flex items-center justify-between gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1 text-[10px] text-zinc-300/90">
                       <Camera className="size-3 shrink-0 text-violet-400" />
                       <span className="truncate">{item.photographer}</span>
                     </span>
-                    <Button
+                    <button
                       type="button"
-                      size="icon-xs"
-                      variant="secondary"
                       onClick={() => handleDownloadSingle(item, index)}
                       disabled={downloadingId === item.id}
-                      title={`Download #${index + 1} HD`}
-                      className="shrink-0 bg-white/90 text-zinc-950 hover:bg-white"
+                      aria-label={`Download photo #${index + 1} by ${item.photographer}`}
+                      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/60 text-zinc-200 backdrop-blur-md transition-colors hover:bg-white hover:text-zinc-950 sm:hidden"
                     >
                       {downloadingId === item.id ? (
                         <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <Download className="size-3" />
                       )}
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
