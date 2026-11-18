@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BackgroundFinder } from "@/components/background-finder";
 import {
   getQuotaState,
   activateOperatorKey,
@@ -255,25 +256,9 @@ export default function VokaloomStudioPage() {
 
           {/* Tab 1: Aesthetic Backgrounds (15x) */}
           <TabsContent value="backgrounds" className="mt-0 flex-1">
-            <Card className="border-zinc-800/80 bg-zinc-900/40 text-zinc-100">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg text-white">
-                  <ImageIcon className="size-5 text-violet-400" />
-                  15-Image Aesthetic Background Engine &amp; Boss Reference
-                  Matcher
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                  Pull 15 vertical (9:16) Instagram-ready lifestyle &amp; travel
-                  backgrounds in one click or match a reference photo with
-                  Gemini 2.5 Flash Vision.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-zinc-400">
-                  Background Finder module loading...
-                </p>
-              </CardContent>
-            </Card>
+            <BackgroundFinder
+              onRequirePaywall={() => setIsKeyModalOpen(true)}
+            />
           </TabsContent>
 
           {/* Tab 2: Realistic Voice Studio */}
