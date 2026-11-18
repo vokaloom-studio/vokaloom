@@ -9,26 +9,16 @@ import {
   Download,
   ShieldCheck,
   RotateCcw,
-  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BackgroundFinder } from "@/components/background-finder";
 import { VoiceStudio } from "@/components/voice-studio";
+import { PaywallModal } from "@/components/paywall-modal";
 import {
   getQuotaState,
-  activateOperatorKey,
   resetTrialForDemo,
   QUOTA_UPDATED_EVENT,
   type QuotaState,
@@ -47,13 +37,14 @@ export default function VokaloomStudioPage() {
     totalGenerations: 0,
   });
   const [activeTab, setActiveTab] = useState<string>("backgrounds");
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
-  const [operatorKeyInput, setOperatorKeyInput] = useState<string>("");
+  const [isPaywallOpen, setIsPaywallOpen] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    setQuota(getQuotaState());
+    queueMicrotask(() => {
+      setQuota(getQuotaState());
+    });
 
     const handleQuotaUpdate = (event: Event) => {
       const customEvent = event as CustomEvent<QuotaState>;
@@ -79,21 +70,6 @@ export default function VokaloomStudioPage() {
       );
     };
   }, []);
-
-  const handleUnlockOperator = (e: React.FormEvent) => {
-    e.preventDefault();
-    const result = activateOperatorKey(operatorKeyInput);
-    if (result.success) {
-      setQuota(result.state);
-      setOperatorKeyInput("");
-      setIsKeyModalOpen(false);
-      toast.success("Operator Mode Activated — Unlimited production unlocked!");
-    } else {
-      toast.error(
-        "Invalid Operator Key. Try VOKALOOM-ADMIN-2026 for demo operator mode."
-      );
-    }
-  };
 
   const handleResetTrial = () => {
     const fresh = resetTrialForDemo();
@@ -171,7 +147,7 @@ export default function VokaloomStudioPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsKeyModalOpen(true)}
+              onClick={() => setIsPaywallOpen(true)}
               className="border-violet-500/40 bg-violet-500/10 text-xs font-medium text-violet-200 hover:bg-violet-500/20 hover:text-white"
             >
               <KeyRound className="mr-1.5 size-3.5" />
@@ -231,8 +207,8 @@ export default function VokaloomStudioPage() {
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
-              <span> Commercial-Safe Pipeline:</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+              <span>Commercial-Safe Pipeline:</span>
               <Badge
                 variant="outline"
                 className="border-zinc-800 bg-zinc-900/60 text-[11px] text-zinc-300"
@@ -251,57 +227,24 @@ export default function VokaloomStudioPage() {
           {/* Tab 1: Aesthetic Backgrounds (15x) */}
           <TabsContent value="backgrounds" className="mt-0 flex-1">
             <BackgroundFinder
-              onRequirePaywall={() => setIsKeyModalOpen(true)}
+              onRequirePaywall={() => setIsPaywallOpen(true)}
             />
           </TabsContent>
 
           {/* Tab 2: Realistic Voice Studio */}
           <TabsContent value="voice" className="mt-0 flex-1">
-            <VoiceStudio onRequirePaywall={() => setIsKeyModalOpen(true)} />
+            <VoiceStudio onRequirePaywall={() => setIsPaywallOpen(true)} />
           </TabsContent>
         </Tabs>
       </main>
 
-      {/* Operator Key / Pro Pass Modal Shell */}
-      <Dialog open={isKeyModalOpen} onOpenChange={setIsKeyModalOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
-              <Crown className="size-5 text-violet-400" />
-              Unlock Vokaloom Pro / Operator Mode
-            </DialogTitle>
-            <DialogDescription className="text-zinc-400">
-              Enter your Operator Master Key for unlimited daily agency
-              production or upgrade to the $15 USD ($60,000 COP) Pro Pass.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUnlockOperator} className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label
-                htmlFor="operator-key-input"
-                className="text-xs font-medium text-zinc-300"
-              >
-                Operator / VIP Access Key
-              </label>
-              <Input
-                id="operator-key-input"
-                placeholder="e.g. VOKALOOM-ADMIN-2026"
-                value={operatorKeyInput}
-                onChange={(e) => setOperatorKeyInput(e.target.value)}
-                className="border-zinc-800 bg-zinc-900 text-white"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="submit"
-                className="w-full bg-violet-600 text-white hover:bg-violet-500"
-              >
-                Activate Operator Key
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* $15 USD / $60,000 COP Paywall & Operator Key Activation Modal */}
+      <PaywallModal
+        open={isPaywallOpen}
+        onOpenChange={setIsPaywallOpen}
+        quota={quota}
+        onQuotaChange={setQuota}
+      />
     </div>
   );
 }

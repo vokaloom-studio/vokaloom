@@ -179,12 +179,31 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
   // Load initial showcase batch on mount without deducting a trial credit
   useEffect(() => {
-    void fetchBatch({
-      targetPage: 1,
-      vibeOverride: "Luxury Travel",
-      consumeQuota: false,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let active = true;
+    fetch("/api/backgrounds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "",
+        vibe: "Luxury Travel",
+        page: 1,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: BackgroundsApiResponse | null) => {
+        if (!active || !data) return;
+        setItems(data.items || []);
+        setResolvedQuery(data.resolvedQuery || "Luxury Travel candid vertical");
+        setExtractedTags(data.extractedTags || []);
+        setVisionUsed(Boolean(data.visionUsed));
+      })
+      .catch(() => {
+        // Ignore initial preload failure
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleGenerateClick = () => {

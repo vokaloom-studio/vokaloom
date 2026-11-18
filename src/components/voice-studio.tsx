@@ -110,6 +110,31 @@ interface VoiceHistoryItem {
 
 const VOICE_HISTORY_KEY = "vokaloom_voice_history_v1";
 
+function createVoiceHistoryEntry(params: {
+  text: string;
+  voiceLabel: string;
+  engine: string;
+  audioUrl: string;
+  durationMs: number;
+  isClone: boolean;
+}): VoiceHistoryItem {
+  const now = new Date();
+  return {
+    id: `voice-${now.getTime()}`,
+    text: params.text,
+    voiceLabel: params.voiceLabel,
+    engine: params.engine,
+    audioUrl: params.audioUrl,
+    durationMs: params.durationMs,
+    createdAt: now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+    isClone: params.isClone,
+  };
+}
+
 export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const [text, setText] = useState<string>(SAMPLE_SCRIPTS[0].text);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("sofia-es");
@@ -129,18 +154,20 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(VOICE_HISTORY_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as VoiceHistoryItem[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setHistory(parsed.slice(0, 10));
-          setActiveOutput(parsed[0]);
+    queueMicrotask(() => {
+      try {
+        const saved = window.localStorage.getItem(VOICE_HISTORY_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as VoiceHistoryItem[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHistory(parsed.slice(0, 10));
+            setActiveOutput(parsed[0]);
+          }
         }
+      } catch {
+        // Ignore storage read issues
       }
-    } catch {
-      // Ignore storage read issues
-    }
+    });
   }, []);
 
   const saveHistory = (items: VoiceHistoryItem[]) => {
@@ -254,8 +281,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         throw new Error(data.error || "Voice synthesis failed");
       }
 
-      const newItem: VoiceHistoryItem = {
-        id: `voice-${Date.now()}`,
+      const newItem = createVoiceHistoryEntry({
         text: cleanText,
         voiceLabel:
           cloneMode && referenceAudioName
@@ -264,13 +290,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         engine: data.engine || "Kokoro-82M (Apache-2.0)",
         audioUrl: data.audioUrl,
         durationMs: data.durationMs || 3200,
-        createdAt: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
         isClone: Boolean(cloneMode && referenceAudioBase64),
-      };
+      });
 
       setActiveOutput(newItem);
       saveHistory([newItem, ...history]);
