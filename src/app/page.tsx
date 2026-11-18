@@ -15,13 +15,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -32,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BackgroundFinder } from "@/components/background-finder";
+import { VoiceStudio } from "@/components/voice-studio";
 import {
   getQuotaState,
   activateOperatorKey,
@@ -263,24 +257,7 @@ export default function VokaloomStudioPage() {
 
           {/* Tab 2: Realistic Voice Studio */}
           <TabsContent value="voice" className="mt-0 flex-1">
-            <Card className="border-zinc-800/80 bg-zinc-900/40 text-zinc-100">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg text-white">
-                  <Mic className="size-5 text-violet-400" />
-                  Realistic AI Voiceover &amp; Zero-Shot Voice Cloning Studio
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                  Synthesize natural Spanish &amp; English voiceovers using
-                  Apache-2.0 Kokoro-82M or zero-shot clone any voice in 15
-                  seconds via MIT F5-TTS.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-zinc-400">
-                  Voice Studio module loading...
-                </p>
-              </CardContent>
-            </Card>
+            <VoiceStudio onRequirePaywall={() => setIsKeyModalOpen(true)} />
           </TabsContent>
         </Tabs>
       </main>
