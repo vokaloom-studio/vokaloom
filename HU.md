@@ -93,3 +93,14 @@ $$
 * **CA-06.2 (Checkout & Key Unlock):** Includes a primary button redirecting to a Wompi / Nequi / Stripe payment link, plus an **"Enter Access / Operator Key"** input that unlocks Pro/Operator mode immediately.
 
 ---
+
+### **HU-07: Dedicated Admin Control Panel & Server-Side Access Verification [MUST HAVE]**
+> **As the** workspace operator,  
+> **I want a** protected `/admin` control center and server-side access code verification (`/api/admin`),  
+> **So that** master keys are never leaked in the public UI, I can inspect live AI engine health (`GEMINI_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `FAL_KEY`), configure pricing/checkout links, and copy 1-click VIP invite links for clients.
+
+#### **Acceptance Criteria (CA):**
+* **CA-07.1 (Zero Client Key Leakage):** Public UI removes all demo master key hints and `"Reset Demo"` buttons; access codes are verified server-side via `POST /api/admin`.
+* **CA-07.2 (Protected `/admin` Dashboard):** Provides an Admin Login Gate and 4 control cards: API & AI Engine Health Status, Commercial & Paywall Configuration, Client Access Links & WhatsApp Invite Generator, and Operator Sandbox & Device Controls.
+
+---

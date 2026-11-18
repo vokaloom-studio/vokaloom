@@ -1,4 +1,5 @@
 export const QUOTA_STORAGE_KEY = "vokaloom_quota_v1";
+export const BUSINESS_CONFIG_STORAGE_KEY = "vokaloom_business_config_v1";
 export const DEFAULT_TRIAL_CREDITS = 3;
 export const QUOTA_UPDATED_EVENT = "vokaloom-quota-updated";
 
@@ -6,15 +7,89 @@ export interface QuotaState {
   creditsRemaining: number;
   maxTrialCredits: number;
   isOperator: boolean;
+  role?: "operator" | "pro_client" | "guest";
   totalGenerations: number;
 }
 
-const DEFAULT_QUOTA_STATE: QuotaState = {
-  creditsRemaining: DEFAULT_TRIAL_CREDITS,
+export interface BusinessConfig {
+  priceCop: string;
+  priceUsd: string;
+  maxTrialCredits: number;
+  checkoutUrlCop: string;
+  checkoutUrlUsd: string;
+}
+
+const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
+  priceCop: "$60,000 COP",
+  priceUsd: "$15 USD",
   maxTrialCredits: DEFAULT_TRIAL_CREDITS,
-  isOperator: false,
-  totalGenerations: 0,
+  checkoutUrlCop:
+    process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
+    "https://checkout.wompi.co/l/your_60000_cop_link",
+  checkoutUrlUsd:
+    process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
+    "https://buy.stripe.com/your_15_usd_link",
 };
+
+export function getBusinessConfig(): BusinessConfig {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_BUSINESS_CONFIG };
+  }
+  try {
+    const raw = window.localStorage.getItem(BUSINESS_CONFIG_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_BUSINESS_CONFIG };
+    const parsed = JSON.parse(raw) as Partial<BusinessConfig>;
+    return {
+      priceCop: parsed.priceCop?.trim() || DEFAULT_BUSINESS_CONFIG.priceCop,
+      priceUsd: parsed.priceUsd?.trim() || DEFAULT_BUSINESS_CONFIG.priceUsd,
+      maxTrialCredits:
+        typeof parsed.maxTrialCredits === "number" &&
+        parsed.maxTrialCredits >= 0
+          ? parsed.maxTrialCredits
+          : DEFAULT_BUSINESS_CONFIG.maxTrialCredits,
+      checkoutUrlCop:
+        parsed.checkoutUrlCop?.trim() ||
+        DEFAULT_BUSINESS_CONFIG.checkoutUrlCop,
+      checkoutUrlUsd:
+        parsed.checkoutUrlUsd?.trim() ||
+        DEFAULT_BUSINESS_CONFIG.checkoutUrlUsd,
+    };
+  } catch {
+    return { ...DEFAULT_BUSINESS_CONFIG };
+  }
+}
+
+export function saveBusinessConfig(
+  partial: Partial<BusinessConfig>
+): BusinessConfig {
+  const current = getBusinessConfig();
+  const next: BusinessConfig = {
+    ...current,
+    ...partial,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        BUSINESS_CONFIG_STORAGE_KEY,
+        JSON.stringify(next)
+      );
+    } catch {
+      // Ignore storage errors
+    }
+  }
+  return next;
+}
+
+function getDefaultQuotaState(): QuotaState {
+  const cfg = getBusinessConfig();
+  return {
+    creditsRemaining: cfg.maxTrialCredits,
+    maxTrialCredits: cfg.maxTrialCredits,
+    isOperator: false,
+    role: "guest",
+    totalGenerations: 0,
+  };
+}
 
 function notifyQuotaUpdated(state: QuotaState): void {
   if (typeof window !== "undefined") {
@@ -26,32 +101,40 @@ function notifyQuotaUpdated(state: QuotaState): void {
 
 export function getQuotaState(): QuotaState {
   if (typeof window === "undefined") {
-    return { ...DEFAULT_QUOTA_STATE };
+    return {
+      creditsRemaining: DEFAULT_TRIAL_CREDITS,
+      maxTrialCredits: DEFAULT_TRIAL_CREDITS,
+      isOperator: false,
+      role: "guest",
+      totalGenerations: 0,
+    };
   }
 
+  const cfg = getBusinessConfig();
   try {
     const raw = window.localStorage.getItem(QUOTA_STORAGE_KEY);
     if (!raw) {
-      return { ...DEFAULT_QUOTA_STATE };
+      return getDefaultQuotaState();
     }
     const parsed = JSON.parse(raw) as Partial<QuotaState>;
     return {
       creditsRemaining:
         typeof parsed.creditsRemaining === "number"
           ? Math.max(0, parsed.creditsRemaining)
-          : DEFAULT_TRIAL_CREDITS,
+          : cfg.maxTrialCredits,
       maxTrialCredits:
         typeof parsed.maxTrialCredits === "number"
           ? parsed.maxTrialCredits
-          : DEFAULT_TRIAL_CREDITS,
+          : cfg.maxTrialCredits,
       isOperator: Boolean(parsed.isOperator),
+      role: parsed.role || (parsed.isOperator ? "operator" : "guest"),
       totalGenerations:
         typeof parsed.totalGenerations === "number"
           ? parsed.totalGenerations
           : 0,
     };
   } catch {
-    return { ...DEFAULT_QUOTA_STATE };
+    return getDefaultQuotaState();
   }
 }
 
@@ -92,34 +175,85 @@ export function consumeCredit(): { allowed: boolean; state: QuotaState } {
   return { allowed: true, state: updated };
 }
 
-export function activateOperatorKey(key: string): {
+export async function verifyAndActivateAccessCode(code: string): Promise<{
   success: boolean;
+  role?: "operator" | "pro_client";
   state: QuotaState;
-} {
-  const trimmed = key.trim();
-  const configuredKey = (
-    process.env.NEXT_PUBLIC_OPERATOR_KEY || "VOKALOOM-ADMIN-2026"
-  ).trim();
-
-  const isValid =
-    trimmed.length > 0 &&
-    (trimmed.toUpperCase() === configuredKey.toUpperCase() ||
-      trimmed.toUpperCase() === "VOKALOOM-ADMIN-2026");
-
+}> {
+  const trimmed = code.trim();
   const current = getQuotaState();
-  if (!isValid) {
+
+  if (!trimmed) {
     return { success: false, state: current };
   }
 
-  const updated: QuotaState = {
+  try {
+    const response = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "verify-code",
+        code: trimmed,
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false, state: current };
+    }
+
+    const data = (await response.json()) as {
+      valid?: boolean;
+      role?: "operator" | "pro_client";
+    };
+
+    if (!data.valid) {
+      return { success: false, state: current };
+    }
+
+    const updated: QuotaState = {
+      ...current,
+      isOperator: true,
+      role: data.role || "pro_client",
+    };
+    saveQuotaState(updated);
+    return {
+      success: true,
+      role: data.role || "pro_client",
+      state: updated,
+    };
+  } catch {
+    return { success: false, state: current };
+  }
+}
+
+export function enableOperatorMode(
+  role: "operator" | "pro_client" = "operator"
+): QuotaState {
+  const current = getQuotaState();
+  return saveQuotaState({
     ...current,
     isOperator: true,
-  };
-  saveQuotaState(updated);
-  return { success: true, state: updated };
+    role,
+  });
+}
+
+export function deactivateOperatorMode(): QuotaState {
+  const current = getQuotaState();
+  return saveQuotaState({
+    ...current,
+    isOperator: false,
+    role: "guest",
+  });
 }
 
 export function resetTrialForDemo(): QuotaState {
-  const resetState: QuotaState = { ...DEFAULT_QUOTA_STATE };
+  const cfg = getBusinessConfig();
+  const resetState: QuotaState = {
+    creditsRemaining: cfg.maxTrialCredits,
+    maxTrialCredits: cfg.maxTrialCredits,
+    isOperator: false,
+    role: "guest",
+    totalGenerations: 0,
+  };
   return saveQuotaState(resetState);
 }

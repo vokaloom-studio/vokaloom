@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Sparkles,
   Image as ImageIcon,
   Mic,
-  KeyRound,
+  Crown,
   Download,
   ShieldCheck,
-  RotateCcw,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +20,7 @@ import { VoiceStudio } from "@/components/voice-studio";
 import { PaywallModal } from "@/components/paywall-modal";
 import {
   getQuotaState,
-  activateOperatorKey,
-  resetTrialForDemo,
+  verifyAndActivateAccessCode,
   QUOTA_UPDATED_EVENT,
   type QuotaState,
 } from "@/lib/quota";
@@ -35,6 +35,7 @@ export default function VokaloomStudioPage() {
     creditsRemaining: 3,
     maxTrialCredits: 3,
     isOperator: false,
+    role: "guest",
     totalGenerations: 0,
   });
   const [activeTab, setActiveTab] = useState<string>("backgrounds");
@@ -45,25 +46,19 @@ export default function VokaloomStudioPage() {
   useEffect(() => {
     queueMicrotask(() => {
       const params = new URLSearchParams(window.location.search);
-      const operatorParam = params.get("operator");
       const keyParam = params.get("key");
 
-      if (operatorParam === "1") {
-        const res = activateOperatorKey("VOKALOOM-ADMIN-2026");
-        setQuota(res.state);
-        toast.success(
-          "VIP Operator Mode unlocked via invite link! Unlimited generations active."
-        );
-      } else if (keyParam) {
-        const res = activateOperatorKey(keyParam);
-        if (res.success) {
-          setQuota(res.state);
-          toast.success(
-            "VIP Operator Mode unlocked via invite link! Unlimited generations active."
-          );
-        } else {
-          setQuota(getQuotaState());
-        }
+      if (keyParam) {
+        void verifyAndActivateAccessCode(keyParam).then((res) => {
+          if (res.success) {
+            setQuota(res.state);
+            toast.success(
+              "VIP Access unlocked via invite link! Unlimited generations active."
+            );
+          } else {
+            setQuota(getQuotaState());
+          }
+        });
       } else {
         setQuota(getQuotaState());
       }
@@ -93,12 +88,6 @@ export default function VokaloomStudioPage() {
       );
     };
   }, []);
-
-  const handleResetTrial = () => {
-    const fresh = resetTrialForDemo();
-    setQuota(fresh);
-    toast.info("Trial reset to 3/3 free credits for demo testing.");
-  };
 
   const handleInstallPwa = async () => {
     if (deferredPrompt) {
@@ -150,7 +139,9 @@ export default function VokaloomStudioPage() {
             {quota.isOperator ? (
               <Badge className="border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
                 <ShieldCheck className="mr-1.5 size-3.5" />
-                Operator Mode: Unlimited
+                {quota.role === "operator"
+                  ? "Operator Mode: Unlimited"
+                  : "Pro Pass: Unlimited"}
               </Badge>
             ) : (
               <Badge
@@ -166,27 +157,26 @@ export default function VokaloomStudioPage() {
               </Badge>
             )}
 
-            {/* Unlock Pro / Operator Key Button */}
+            {/* Admin Panel Link (visible when Operator / Pro Mode is active) */}
+            {quota.isOperator && (
+              <Link
+                href="/admin"
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 hover:text-white"
+              >
+                <Settings className="size-3.5" />
+                Admin Panel
+              </Link>
+            )}
+
+            {/* Upgrade to Pro Button */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsPaywallOpen(true)}
               className="border-violet-500/40 bg-violet-500/10 text-xs font-medium text-violet-200 hover:bg-violet-500/20 hover:text-white"
             >
-              <KeyRound className="mr-1.5 size-3.5" />
-              Unlock Pro / Operator Key
-            </Button>
-
-            {/* Demo Reset Trial Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetTrial}
-              title="Reset trial credits to 3/3 for demo"
-              className="text-xs text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-            >
-              <RotateCcw className="mr-1 size-3.5" />
-              <span className="hidden md:inline">Reset Demo</span>
+              <Crown className="mr-1.5 size-3.5" />
+              Upgrade to Pro
             </Button>
 
             {/* Install App PWA Hint */}
@@ -242,7 +232,7 @@ export default function VokaloomStudioPage() {
                 variant="outline"
                 className="border-zinc-800 bg-zinc-900/60 text-[11px] text-zinc-300"
               >
-                Kokoro-82M (Apache-2.0) + F5-TTS (MIT)
+                Gemini Neural TTS + Kokoro-82M + F5-TTS
               </Badge>
             </div>
           </div>
@@ -261,7 +251,7 @@ export default function VokaloomStudioPage() {
         </Tabs>
       </main>
 
-      {/* $15 USD / $60,000 COP Paywall & Operator Key Activation Modal */}
+      {/* $15 USD / $60,000 COP Paywall & Client Access Code Activation Modal */}
       <PaywallModal
         open={isPaywallOpen}
         onOpenChange={setIsPaywallOpen}

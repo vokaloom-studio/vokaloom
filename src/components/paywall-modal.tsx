@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Crown,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Sparkles,
   CreditCard,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { activateOperatorKey, type QuotaState } from "@/lib/quota";
+import {
+  getBusinessConfig,
+  verifyAndActivateAccessCode,
+  type BusinessConfig,
+  type QuotaState,
+} from "@/lib/quota";
 
 export interface PaywallModalProps {
   open: boolean;
@@ -33,8 +39,8 @@ export interface PaywallModalProps {
 const PRO_BENEFITS = [
   "Unlimited 15-Image Aesthetic Batches (9:16 Vertical HD + ZIP Export)",
   "Unlimited Boss Reference Image Matching (Gemini 2.5 Flash Vision)",
-  "Unlimited Realistic AI Voiceovers (Spanish & English via Kokoro-82M)",
-  "Unlimited Zero-Shot Custom Voice Cloning (10–30s Audio via MIT F5-TTS)",
+  "Unlimited Realistic AI Voiceovers (Spanish & English Neural TTS)",
+  "Unlimited Zero-Shot Custom Voice Cloning (10–20s Audio via MIT F5-TTS)",
   "100% Commercial & Agency Service-Fulfillment License",
 ];
 
@@ -44,34 +50,59 @@ export function PaywallModal({
   quota,
   onQuotaChange,
 }: PaywallModalProps) {
-  const [operatorKey, setOperatorKey] = useState<string>("");
+  const [accessCode, setAccessCode] = useState<string>("");
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [businessConfig, setBusinessConfig] = useState<BusinessConfig>({
+    priceCop: "$60,000 COP",
+    priceUsd: "$15 USD",
+    maxTrialCredits: 3,
+    checkoutUrlCop:
+      process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
+      "https://checkout.wompi.co/l/your_60000_cop_link",
+    checkoutUrlUsd:
+      process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
+      "https://buy.stripe.com/your_15_usd_link",
+  });
 
-  const checkoutUrlCop =
-    process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
-    "https://checkout.wompi.co/l/your_60000_cop_link";
-  const checkoutUrlUsd =
-    process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
-    "https://buy.stripe.com/your_15_usd_link";
+  useEffect(() => {
+    if (open) {
+      queueMicrotask(() => {
+        setBusinessConfig(getBusinessConfig());
+      });
+    }
+  }, [open]);
 
   const handleOpenCheckout = (url: string, label: string) => {
     window.open(url, "_blank", "noopener,noreferrer");
     toast.info(`Opened ${label} checkout in a new tab.`);
   };
 
-  const handleActivateKey = (e: React.FormEvent) => {
+  const handleActivateKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = activateOperatorKey(operatorKey);
-    if (res.success) {
-      onQuotaChange?.(res.state);
-      setOperatorKey("");
-      onOpenChange(false);
-      toast.success(
-        "Operator / VIP Mode Activated! Unlimited generations unlocked."
-      );
-    } else {
-      toast.error(
-        "Invalid Access Key. Enter VOKALOOM-ADMIN-2026 to unlock Operator Mode."
-      );
+    if (!accessCode.trim()) {
+      toast.error("Please enter your access code.");
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      const res = await verifyAndActivateAccessCode(accessCode);
+      if (res.success) {
+        onQuotaChange?.(res.state);
+        setAccessCode("");
+        onOpenChange(false);
+        toast.success(
+          res.role === "operator"
+            ? "Operator Mode Activated! Unlimited generations unlocked."
+            : "Pro Pass Activated! Unlimited generations unlocked."
+        );
+      } else {
+        toast.error(
+          "Invalid Access Code. Please verify your Pro Pass code or complete checkout above."
+        );
+      }
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -87,7 +118,7 @@ export function PaywallModal({
             {quota.isOperator ? (
               <Badge className="border border-emerald-500/40 bg-emerald-500/15 text-xs text-emerald-300">
                 <ShieldCheck className="mr-1 size-3" />
-                Operator Active
+                Pro Pass Active
               </Badge>
             ) : (
               <Badge
@@ -118,10 +149,12 @@ export function PaywallModal({
               All-In-One Fulfillment Pass
             </span>
             <div className="text-right">
-              <span className="text-lg font-bold text-white">$15 USD</span>
+              <span className="text-lg font-bold text-white">
+                {businessConfig.priceUsd}
+              </span>
               <span className="text-xs text-zinc-400">
                 {" "}
-                / ~$60,000 COP · mes
+                / ~{businessConfig.priceCop} · mes
               </span>
             </div>
           </div>
@@ -144,12 +177,16 @@ export function PaywallModal({
           <Button
             type="button"
             onClick={() =>
-              handleOpenCheckout(checkoutUrlCop, "Wompi / Nequi / PSE ($60,000 COP)")
+              handleOpenCheckout(
+                businessConfig.checkoutUrlCop,
+                `Wompi / Nequi / PSE (${businessConfig.priceCop})`
+              )
             }
             className="h-10 w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-xs font-semibold text-white shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500 sm:text-sm"
           >
             <CreditCard className="mr-2 size-4" />
-            Suscribirse por $60,000 COP / mes (Nequi / PSE / Wompi)
+            Suscribirse por {businessConfig.priceCop} / mes (Nequi / PSE /
+            Wompi)
             <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
           </Button>
 
@@ -157,12 +194,15 @@ export function PaywallModal({
             type="button"
             variant="outline"
             onClick={() =>
-              handleOpenCheckout(checkoutUrlUsd, "Stripe Global ($15 USD)")
+              handleOpenCheckout(
+                businessConfig.checkoutUrlUsd,
+                `Stripe Global (${businessConfig.priceUsd})`
+              )
             }
             className="h-10 w-full border-zinc-700 bg-zinc-900 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 hover:text-white sm:text-sm"
           >
             <CreditCard className="mr-2 size-4 text-violet-400" />
-            Subscribe for $15 USD / month (Stripe Global)
+            Subscribe for {businessConfig.priceUsd} / month (Stripe Global)
             <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
           </Button>
         </div>
@@ -176,34 +216,35 @@ export function PaywallModal({
           <div className="w-full border-t border-zinc-800" />
         </div>
 
-        {/* Operator / VIP Access Key Form */}
+        {/* Pro Pass / Client Access Code Form */}
         <form onSubmit={handleActivateKey} className="space-y-2.5">
           <label
-            htmlFor="paywall-operator-key"
-            className="flex items-center justify-between text-xs font-medium text-zinc-300"
+            htmlFor="paywall-access-code"
+            className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
           >
-            <span className="flex items-center gap-1.5">
-              <KeyRound className="size-3.5 text-violet-400" />
-              Operator / VIP Access Key
-            </span>
-            <span className="font-mono text-[11px] text-zinc-500">
-              Demo: VOKALOOM-ADMIN-2026
-            </span>
+            <KeyRound className="size-3.5 text-violet-400" />
+            Have a Pro Pass or Client Access Code?
           </label>
           <div className="flex gap-2">
             <Input
-              id="paywall-operator-key"
-              value={operatorKey}
-              onChange={(e) => setOperatorKey(e.target.value)}
-              placeholder="Enter VOKALOOM-ADMIN-2026..."
+              id="paywall-access-code"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value)}
+              placeholder="Enter your access code..."
+              disabled={isVerifying}
               className="h-9 border-zinc-800 bg-zinc-900 font-mono text-xs text-white placeholder:text-zinc-500"
             />
             <Button
               type="submit"
               variant="secondary"
+              disabled={isVerifying}
               className="h-9 shrink-0 border border-violet-500/40 bg-violet-500/20 px-4 text-xs font-semibold text-violet-200 hover:bg-violet-500/30 hover:text-white"
             >
-              Unlock Unlimited
+              {isVerifying ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                "Unlock Unlimited"
+              )}
             </Button>
           </div>
         </form>
