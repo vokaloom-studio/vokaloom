@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#050507",
   colorScheme: "dark",
 };
 
@@ -25,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark h-full antialiased">
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-50 selection:bg-violet-500/30 selection:text-violet-200">
+    <html lang="en" className="dark h-full antialiased no-scrollbar">
+      <body className="min-h-full flex flex-col bg-background text-foreground font-sans antialiased tracking-tight no-scrollbar selection:bg-violet-500/25 selection:text-violet-100">
         {children}
         <Toaster theme="dark" richColors position="bottom-right" />
       </body>
