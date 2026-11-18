@@ -180,9 +180,9 @@ const CURATED_VERTICAL_POOL: CuratedPhotoSeed[] = [
     vibeCategory: "Nature Sunset",
   },
   {
-    photoId: "1507525428034-b723cf961d3e",
+    photoId: "1507608616759-54f48f0af0ee",
     title: "Mediterranean Yacht Deck Sunset POV",
-    photographer: "Sean Oulashin",
+    photographer: "Cappadocia Creator",
     vibeCategory: "Luxury Travel",
   },
   {
@@ -375,6 +375,33 @@ async function fetchFromUnsplash(
   }
 }
 
+function scoreSeedRelevance(
+  seed: CuratedPhotoSeed,
+  vibe: string,
+  query: string
+): number {
+  let score = 0;
+  const lowerVibe = vibe.toLowerCase();
+  const haystack = `${seed.title} ${seed.vibeCategory}`.toLowerCase();
+
+  if (lowerVibe && seed.vibeCategory.toLowerCase().includes(lowerVibe)) {
+    score += 10;
+  }
+
+  const queryTokens = `${vibe} ${query}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3);
+
+  for (const token of queryTokens) {
+    if (haystack.includes(token)) {
+      score += 4;
+    }
+  }
+
+  return score;
+}
+
 function buildCuratedBatch(
   count: number,
   vibe: string,
@@ -383,13 +410,11 @@ function buildCuratedBatch(
 ): BackgroundItem[] {
   const pool = [...CURATED_VERTICAL_POOL];
 
-  // Prioritize items matching the chosen vibe preset first, then rotate by page
+  // Score each photo seed against both vibe AND keywords in query
   const prioritized = pool.sort((a, b) => {
-    const aMatch =
-      vibe && a.vibeCategory.toLowerCase().includes(vibe.toLowerCase()) ? -1 : 0;
-    const bMatch =
-      vibe && b.vibeCategory.toLowerCase().includes(vibe.toLowerCase()) ? -1 : 0;
-    return aMatch - bMatch;
+    const scoreA = scoreSeedRelevance(a, vibe, query);
+    const scoreB = scoreSeedRelevance(b, vibe, query);
+    return scoreB - scoreA;
   });
 
   const offset = ((Math.max(1, page) - 1) * 7) % prioritized.length;
@@ -421,6 +446,46 @@ function buildCuratedBatch(
   return items;
 }
 
+export async function GET(request: Request) {
+  try {
+    const proxyUrl = new URL(request.url).searchParams.get("proxyUrl");
+    if (
+      !proxyUrl ||
+      (!proxyUrl.startsWith("https://images.pexels.com/") &&
+        !proxyUrl.startsWith("https://images.unsplash.com/"))
+    ) {
+      return NextResponse.json(
+        { error: "Invalid or disallowed proxyUrl origin." },
+        { status: 400 }
+      );
+    }
+
+    const upstream = await fetch(proxyUrl);
+    if (!upstream.ok) {
+      return NextResponse.json(
+        { error: `Upstream image returned ${upstream.status}` },
+        { status: upstream.status }
+      );
+    }
+
+    const arrayBuffer = await upstream.arrayBuffer();
+    return new Response(arrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type":
+          upstream.headers.get("Content-Type") || "image/jpeg",
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
+  } catch (error) {
+    console.error("Image proxy error:", error);
+    return NextResponse.json(
+      { error: "Failed to proxy image download." },
+      { status: 502 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as BackgroundsRequest;
@@ -428,10 +493,9 @@ export async function POST(request: Request) {
     const vibe = (body.vibe || "Luxury Travel").trim();
     const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
 
-    const baseSearchTerms = [vibe, rawQuery]
-      .filter(Boolean)
-      .join(" ")
-      .trim() || "aesthetic travel lifestyle candid vertical";
+    const baseSearchTerms =
+      [vibe, rawQuery].filter(Boolean).join(" ").trim() ||
+      "aesthetic travel lifestyle candid vertical";
 
     // Step A: Vision Reference Matcher via Gemini 2.5 Flash
     let resolvedQuery = baseSearchTerms;
@@ -464,7 +528,12 @@ export async function POST(request: Request) {
     const remainingNeeded = Math.max(0, 15 - combined.length);
     const curatedTopUp =
       remainingNeeded > 0
-        ? buildCuratedBatch(remainingNeeded, vibe, rawQuery, page)
+        ? buildCuratedBatch(
+            remainingNeeded,
+            vibe,
+            visionUsed ? resolvedQuery : rawQuery,
+            page
+          )
         : [];
 
     const final15 = [...combined, ...curatedTopUp].slice(0, 15);

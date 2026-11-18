@@ -204,8 +204,10 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Reference voice sample must be under 10 MB.");
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error(
+        "Reference voice sample must be under 3 MB. Tip: upload a 10-to-20 second .MP3 or .WAV clip under 3 MB."
+      );
       return;
     }
 

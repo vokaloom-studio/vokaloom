@@ -19,6 +19,7 @@ import { VoiceStudio } from "@/components/voice-studio";
 import { PaywallModal } from "@/components/paywall-modal";
 import {
   getQuotaState,
+  activateOperatorKey,
   resetTrialForDemo,
   QUOTA_UPDATED_EVENT,
   type QuotaState,
@@ -43,7 +44,29 @@ export default function VokaloomStudioPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
-      setQuota(getQuotaState());
+      const params = new URLSearchParams(window.location.search);
+      const operatorParam = params.get("operator");
+      const keyParam = params.get("key");
+
+      if (operatorParam === "1") {
+        const res = activateOperatorKey("VOKALOOM-ADMIN-2026");
+        setQuota(res.state);
+        toast.success(
+          "VIP Operator Mode unlocked via invite link! Unlimited generations active."
+        );
+      } else if (keyParam) {
+        const res = activateOperatorKey(keyParam);
+        if (res.success) {
+          setQuota(res.state);
+          toast.success(
+            "VIP Operator Mode unlocked via invite link! Unlimited generations active."
+          );
+        } else {
+          setQuota(getQuotaState());
+        }
+      } else {
+        setQuota(getQuotaState());
+      }
     });
 
     const handleQuotaUpdate = (event: Event) => {

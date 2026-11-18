@@ -52,6 +52,52 @@ interface BackgroundsApiResponse {
   page: number;
 }
 
+/**
+ * Compresses any uploaded reference photo (up to 5 MB) down to ~120 KB JPEG
+ * using an HTML5 Canvas so Vercel's 4.5 MB serverless body limit is never exceeded.
+ */
+async function compressImageFileToBase64(
+  file: File,
+  maxDim = 1024,
+  quality = 0.82
+): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      const img = new window.Image();
+      img.onerror = () =>
+        resolve({ base64: dataUrl, mimeType: file.type || "image/jpeg" });
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve({ base64: dataUrl, mimeType: file.type || "image/jpeg" });
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+        resolve({ base64: compressedBase64, mimeType: "image/jpeg" });
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function generateOfflineVerticalFallbackBlob(
   item: BackgroundItem,
   index: number
@@ -83,6 +129,34 @@ async function generateOfflineVerticalFallbackBlob(
       0.92
     );
   });
+}
+
+async function fetchImageBlobWithCorsProxy(
+  item: BackgroundItem,
+  index: number
+): Promise<Blob> {
+  const proxiedEndpoint = `/api/backgrounds?proxyUrl=${encodeURIComponent(
+    item.downloadUrl
+  )}`;
+  try {
+    const proxyRes = await fetch(proxiedEndpoint);
+    if (proxyRes.ok) {
+      return await proxyRes.blob();
+    }
+  } catch {
+    // Fall through to direct fetch
+  }
+
+  try {
+    const directRes = await fetch(item.downloadUrl);
+    if (directRes.ok) {
+      return await directRes.blob();
+    }
+  } catch {
+    // Fall through to offline canvas generator
+  }
+
+  return generateOfflineVerticalFallbackBlob(item, index);
 }
 
 export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
@@ -225,7 +299,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     setSelectedVibe(vibe);
   };
 
-  const handleReferenceFileChange = (
+  const handleReferenceFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
@@ -242,11 +316,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = String(reader.result || "");
+    try {
+      const { base64, mimeType } = await compressImageFileToBase64(
+        file,
+        1024,
+        0.82
+      );
       setReferencePreview(base64);
-      setReferenceMimeType(file.type);
+      setReferenceMimeType(mimeType);
       setReferenceFileName(file.name);
       toast.info(
         "Analyzing Boss Reference Image aesthetic & matching 15 backgrounds..."
@@ -254,11 +331,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       void fetchBatch({
         targetPage: 1,
         refBase64: base64,
-        refMime: file.type,
+        refMime: mimeType,
         consumeQuota: true,
       });
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error("Could not process reference image.");
+    }
   };
 
   const handleClearReference = () => {
@@ -274,14 +352,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const handleDownloadSingle = async (item: BackgroundItem, index: number) => {
     setDownloadingId(item.id);
     try {
-      let blob: Blob;
-      try {
-        const res = await fetch(item.downloadUrl);
-        if (!res.ok) throw new Error("Image fetch failed");
-        blob = await res.blob();
-      } catch {
-        blob = await generateOfflineVerticalFallbackBlob(item, index);
-      }
+      const blob = await fetchImageBlobWithCorsProxy(item, index);
 
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -318,14 +389,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       await Promise.all(
         items.map(async (item, index) => {
-          let blob: Blob;
-          try {
-            const response = await fetch(item.downloadUrl);
-            if (!response.ok) throw new Error("Direct fetch failed");
-            blob = await response.blob();
-          } catch {
-            blob = await generateOfflineVerticalFallbackBlob(item, index);
-          }
+          const blob = await fetchImageBlobWithCorsProxy(item, index);
 
           const num = String(index + 1).padStart(2, "0");
           const cleanAuthor = item.photographer
@@ -567,7 +631,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     Click to upload Boss Reference Photo
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    Supports .JPG, .PNG, .WEBP (up to 5 MB)
+                    Supports .JPG, .PNG, .WEBP (up to 5 MB · auto-compressed)
                   </p>
                 </div>
               </label>

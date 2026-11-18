@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
+import { GoogleGenAI } from "@google/genai";
 
 export const maxDuration = 60;
 
@@ -14,10 +15,49 @@ function isValidFalKey(val: string | undefined): boolean {
   return Boolean(val && val.trim().length > 5 && val.trim() !== "your_fal_ai_key");
 }
 
+function isValidGeminiKey(val: string | undefined): boolean {
+  return Boolean(
+    val && val.trim().length > 5 && val.trim() !== "your_google_ai_studio_key"
+  );
+}
+
+/**
+ * Wraps raw 24kHz 16-bit mono signed-integer PCM bytes in a 44-byte RIFF WAVE header.
+ */
+function wrapPcmInWavHeader(
+  pcmBuffer: Buffer,
+  sampleRate = 24000,
+  numChannels = 1,
+  bitsPerSample = 16
+): Buffer {
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const pcmDataSize = pcmBuffer.length;
+  const header = Buffer.alloc(44);
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcmDataSize, 4);
+  header.write("WAVE", 8);
+
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
+  header.writeUInt16LE(1, 20); // AudioFormat (1 = PCM)
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+
+  header.write("data", 36);
+  header.writeUInt32LE(pcmDataSize, 40);
+
+  return Buffer.concat([header, pcmBuffer]);
+}
+
 /**
  * Generates a valid, playable 24kHz 16-bit PCM WAV data URI with realistic
  * speech-cadence harmonic formants so the audio player, download button,
- * and session history work 100% offline/keyless.
+ * and session history work 100% offline/keyless when neither FAL_KEY nor GEMINI_API_KEY is configured.
  */
 function synthesizePlayableWavDataUri(
   text: string,
@@ -25,12 +65,10 @@ function synthesizePlayableWavDataUri(
   isClone: boolean
 ): { dataUri: string; durationMs: number } {
   const sampleRate = 24000;
-  // Scale duration by word count (between 2.2s and 6.0s)
   const words = text.trim().split(/\s+/).filter(Boolean);
   const durationSec = Math.min(6.0, Math.max(2.2, words.length * 0.24));
   const numSamples = Math.floor(sampleRate * durationSec);
 
-  // Pick base fundamental pitch by voice preset
   let baseFreq = 135;
   if (voiceId.includes("sofia") || voiceId.includes("abella")) {
     baseFreq = 210;
@@ -40,48 +78,24 @@ function synthesizePlayableWavDataUri(
     baseFreq = 175;
   }
 
-  const pcmDataSize = numSamples * 2; // 16-bit mono
-  const buffer = Buffer.alloc(44 + pcmDataSize);
+  const pcmBuffer = Buffer.alloc(numSamples * 2);
+  const syllableRate = 4.2;
 
-  // RIFF Header
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(36 + pcmDataSize, 4);
-  buffer.write("WAVE", 8);
-
-  // fmt sub-chunk
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
-  buffer.writeUInt16LE(1, 20); // AudioFormat (1 = PCM)
-  buffer.writeUInt16LE(1, 22); // NumChannels (1 = mono)
-  buffer.writeUInt32LE(sampleRate, 24); // SampleRate
-  buffer.writeUInt32LE(sampleRate * 2, 28); // ByteRate
-  buffer.writeUInt16LE(2, 32); // BlockAlign
-  buffer.writeUInt16LE(16, 34); // BitsPerSample
-
-  // data sub-chunk
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(pcmDataSize, 40);
-
-  const syllableRate = 4.2; // syllables per second
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
-    // Smooth fade-in and fade-out
     const globalEnv =
       Math.min(1, t / 0.08) * Math.min(1, (durationSec - t) / 0.15);
 
-    // Speech syllable envelope with micro-pauses
     const syllablePhase = (t * syllableRate) % 1;
     const syllableEnv =
       syllablePhase < 0.78
         ? Math.sin((syllablePhase / 0.78) * Math.PI)
         : 0.05;
 
-    // Intonation curve across phrases
     const pitchMod =
       1 + 0.08 * Math.sin(2 * Math.PI * 1.1 * t) - 0.04 * (t / durationSec);
     const f0 = baseFreq * pitchMod;
 
-    // Warm vocal formants (fundamental + 2nd, 3rd, and 4th harmonics)
     const wave =
       0.55 * Math.sin(2 * Math.PI * f0 * t) +
       0.25 * Math.sin(2 * Math.PI * (f0 * 2) * t + 0.3) +
@@ -93,12 +107,12 @@ function synthesizePlayableWavDataUri(
       Math.min(1, wave * globalEnv * syllableEnv * 0.65)
     );
     const int16 = Math.floor(sampleValue * 32767);
-    buffer.writeInt16LE(int16, 44 + i * 2);
+    pcmBuffer.writeInt16LE(int16, i * 2);
   }
 
-  const base64 = buffer.toString("base64");
+  const wavBuffer = wrapPcmInWavHeader(pcmBuffer, sampleRate, 1, 16);
   return {
-    dataUri: `data:audio/wav;base64,${base64}`,
+    dataUri: `data:audio/wav;base64,${wavBuffer.toString("base64")}`,
     durationMs: Math.round(durationSec * 1000),
   };
 }
@@ -150,6 +164,7 @@ export async function POST(request: Request) {
     }
 
     const falKey = process.env.FAL_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
 
     // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
     if (referenceAudioBase64 && isValidFalKey(falKey)) {
@@ -174,7 +189,7 @@ export async function POST(request: Request) {
           });
         }
       } catch (err) {
-        console.warn("F5-TTS live call failed, falling back to demo synth:", err);
+        console.warn("F5-TTS live call failed, trying next engine:", err);
       }
     }
 
@@ -214,11 +229,70 @@ export async function POST(request: Request) {
           });
         }
       } catch (err) {
-        console.warn("Kokoro-82M live call failed, falling back to demo synth:", err);
+        console.warn("Kokoro-82M live call failed, trying Gemini TTS:", err);
       }
     }
 
-    // Mode C: Zero-Key Instant Fallback
+    // Mode B2: Gemini 2.5 Flash Native Neural TTS via GEMINI_API_KEY
+    if (isValidGeminiKey(geminiKey)) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey!.trim() });
+        const voiceName =
+          voiceId.includes("sofia") || voiceId.includes("abella")
+            ? "Aoede"
+            : voiceId.includes("lucas")
+              ? "Puck"
+              : "Charon";
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `Read this voiceover script naturally and expressively in ${
+                    language === "es" ? "Spanish" : "English"
+                  }: ${text}`,
+                },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName,
+                },
+              },
+            },
+          },
+        });
+
+        const base64Pcm =
+          response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Pcm) {
+          const pcmBuffer = Buffer.from(base64Pcm, "base64");
+          const wavBuffer = wrapPcmInWavHeader(pcmBuffer, 24000, 1, 16);
+          const durationMs = Math.max(
+            500,
+            Math.round((pcmBuffer.length / (24000 * 2)) * 1000)
+          );
+          return NextResponse.json({
+            audioUrl: "data:audio/wav;base64," + wavBuffer.toString("base64"),
+            engine: "Gemini 2.5 Neural TTS",
+            language,
+            durationMs,
+            isFallback: false,
+          });
+        }
+      } catch (err) {
+        console.warn("Gemini 2.5 Native TTS call failed, falling back to demo synth:", err);
+      }
+    }
+
+    // Mode C: Zero-Key Instant Offline Fallback
     const synth = synthesizePlayableWavDataUri(
       text,
       voiceId,
@@ -226,7 +300,7 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({
       audioUrl: synth.dataUri,
-      engine: "Demo Fallback (Add FAL_KEY for Live Neural TTS)",
+      engine: "Demo Fallback (Add FAL_KEY or GEMINI_API_KEY for Live Neural TTS)",
       language,
       durationMs: synth.durationMs,
       isFallback: true,
