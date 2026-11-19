@@ -349,6 +349,10 @@ const en = {
   "api.modelSwap.processError": "Unable to process model scene placement.",
   "api.voice.invalidLength":
     "Script text must be between 1 and 1,500 characters in length.",
+  "api.voice.invalidReferenceAudio":
+    "Reference audio must be a valid base64 audio data URI (.ogg, .opus, .mp3, .wav, .m4a, .aac, .webm).",
+  "api.voice.referenceAudioTooLarge":
+    "Reference audio exceeds the 3 MB maximum size limit.",
   "api.voice.engine.f5tts": "F5-TTS (MIT Clone)",
   "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
   "api.voice.engine.geminiTts": "Gemini 2.5 Neural TTS",
@@ -736,6 +740,10 @@ const es: Record<TranslationKey, string> = {
     "No se pudo procesar la colocación del modelo en escena.",
   "api.voice.invalidLength":
     "El texto del guion debe tener entre 1 y 1,500 caracteres.",
+  "api.voice.invalidReferenceAudio":
+    "El audio de referencia debe ser un URI de datos base64 de audio válido (.ogg, .opus, .mp3, .wav, .m4a, .aac, .webm).",
+  "api.voice.referenceAudioTooLarge":
+    "El audio de referencia supera el límite máximo de 3 MB.",
   "api.voice.engine.f5tts": "F5-TTS (Clonación MIT)",
   "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
   "api.voice.engine.geminiTts": "Gemini 2.5 TTS Neural",
