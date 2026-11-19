@@ -2,11 +2,20 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import { resolveApiKey } from "@/lib/server-secrets";
+import {
+  DEFAULT_MAX_IMAGE_BYTES,
+  DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
+  UpstreamConcurrencyLimitError,
+  UpstreamImageTooLargeError,
+  UpstreamStatusError,
+  fetchAllowedBackgroundImage,
+  parseAllowedBackgroundUrl,
+} from "@/lib/upstream-image";
 
 export const maxDuration = 60;
 
-const UPSTREAM_FETCH_TIMEOUT_MS = 10_000;
-const MAX_PROXY_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
+const MAX_PROXY_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
 
 export interface BackgroundItem {
   id: string;
@@ -461,95 +470,60 @@ export async function GET(request: Request) {
   );
   try {
     const proxyUrl = reqUrl.searchParams.get("proxyUrl");
-    if (
-      !proxyUrl ||
-      (!proxyUrl.startsWith("https://images.pexels.com/") &&
-        !proxyUrl.startsWith("https://images.unsplash.com/"))
-    ) {
+    const parsedProxyUrl = parseAllowedBackgroundUrl(proxyUrl);
+    if (!parsedProxyUrl) {
       return NextResponse.json(
         { error: translate(locale, "api.bg.invalidProxyOrigin") },
         { status: 400 }
       );
     }
 
-    const upstream = await fetch(proxyUrl, {
-      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
-    });
-    if (!upstream.ok) {
-      return NextResponse.json(
-        {
-          error: translate(locale, "api.bg.upstreamStatus", {
-            status: upstream.status,
-          }),
-        },
-        { status: upstream.status }
-      );
-    }
-
-    const declaredLength = upstream.headers.get("content-length");
-    if (declaredLength) {
-      const parsedLength = Number(declaredLength);
-      if (
-        Number.isFinite(parsedLength) &&
-        parsedLength > MAX_PROXY_IMAGE_BYTES
-      ) {
-        await upstream.body?.cancel().catch(() => {});
-        return NextResponse.json(
-          { error: translate(locale, "api.bg.proxyTooLarge") },
-          { status: 413 }
-        );
+    const { bytes, contentType } = await fetchAllowedBackgroundImage(
+      parsedProxyUrl,
+      {
+        maxBytes: MAX_PROXY_IMAGE_BYTES,
+        timeoutMs: UPSTREAM_FETCH_TIMEOUT_MS,
+        signal: request.signal,
       }
-    }
+    );
 
-    let bodyBytes: Uint8Array;
-    if (upstream.body) {
-      const reader = upstream.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let totalBytes = 0;
+    const responseBuffer =
+      bytes.byteOffset === 0 &&
+      bytes.byteLength === bytes.buffer.byteLength &&
+      bytes.buffer instanceof ArrayBuffer
+        ? bytes.buffer
+        : bytes.slice().buffer;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          totalBytes += value.byteLength;
-          if (totalBytes > MAX_PROXY_IMAGE_BYTES) {
-            await reader.cancel().catch(() => {});
-            return NextResponse.json(
-              { error: translate(locale, "api.bg.proxyTooLarge") },
-              { status: 413 }
-            );
-          }
-          chunks.push(value);
-        }
-      }
-
-      const merged = new Uint8Array(totalBytes);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      bodyBytes = merged;
-    } else {
-      const arrayBuffer = await upstream.arrayBuffer();
-      if (arrayBuffer.byteLength > MAX_PROXY_IMAGE_BYTES) {
-        return NextResponse.json(
-          { error: translate(locale, "api.bg.proxyTooLarge") },
-          { status: 413 }
-        );
-      }
-      bodyBytes = new Uint8Array(arrayBuffer);
-    }
-
-    return new Response(bodyBytes.buffer as ArrayBuffer, {
+    return new Response(responseBuffer, {
       status: 200,
       headers: {
-        "Content-Type":
-          upstream.headers.get("Content-Type") || "image/jpeg",
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=3600",
       },
     });
   } catch (error) {
+    if (error instanceof UpstreamImageTooLargeError) {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.proxyTooLarge") },
+        { status: 413 }
+      );
+    }
+    if (error instanceof UpstreamStatusError) {
+      return NextResponse.json(
+        {
+          error: translate(locale, "api.bg.upstreamStatus", {
+            status: error.status,
+          }),
+        },
+        { status: error.status }
+      );
+    }
+    if (error instanceof UpstreamConcurrencyLimitError) {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.proxyFailed") },
+        { status: 503, headers: { "Retry-After": "2" } }
+      );
+    }
     console.error("Image proxy error:", error);
     return NextResponse.json(
       { error: translate(locale, "api.bg.proxyFailed") },

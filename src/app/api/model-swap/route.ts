@@ -2,11 +2,20 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import { resolveApiKey } from "@/lib/server-secrets";
+import {
+  DEFAULT_MAX_IMAGE_BYTES,
+  DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
+  UpstreamConcurrencyLimitError,
+  UpstreamImageTooLargeError,
+  UpstreamStatusError,
+  fetchAllowedBackgroundImage,
+  parseAllowedBackgroundUrl,
+} from "@/lib/upstream-image";
 
 export const maxDuration = 60;
 
-const UPSTREAM_FETCH_TIMEOUT_MS = 10_000;
-const MAX_BACKGROUND_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
+const MAX_BACKGROUND_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
 
 interface ModelSwapRequestBody {
   modelImageBase64?: string;
@@ -32,13 +41,6 @@ function parseBase64DataUrl(
     }
   }
   return { data: trimmed, mimeType: defaultMime };
-}
-
-function isAllowedBackgroundUrl(url: string): boolean {
-  return (
-    url.startsWith("https://images.pexels.com/") ||
-    url.startsWith("https://images.unsplash.com/")
-  );
 }
 
 function extractImagePart(response: {
@@ -70,8 +72,14 @@ export async function POST(request: Request) {
       locale = resolveRequestLocale(request, body.locale);
     }
 
-    const modelImageRaw = (body.modelImageBase64 || "").trim();
-    const backgroundUrl = (body.backgroundUrl || "").trim();
+    const modelImageRaw =
+      typeof body.modelImageBase64 === "string"
+        ? body.modelImageBase64.trim()
+        : "";
+    const backgroundUrl =
+      typeof body.backgroundUrl === "string"
+        ? body.backgroundUrl.trim()
+        : "";
 
     if (!modelImageRaw || !backgroundUrl) {
       return NextResponse.json(
@@ -80,7 +88,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!isAllowedBackgroundUrl(backgroundUrl)) {
+    const parsedBackgroundUrl = parseAllowedBackgroundUrl(backgroundUrl);
+    if (!parsedBackgroundUrl) {
       return NextResponse.json(
         { error: translate(locale, "api.modelSwap.invalidBackgroundOrigin") },
         { status: 400 }
@@ -97,38 +106,46 @@ export async function POST(request: Request) {
       });
     }
 
-    const bgResponse = await fetch(backgroundUrl, {
-      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
-    });
-    if (!bgResponse.ok) {
-      return NextResponse.json({
-        resultImageUrl: null,
-        fallbackComposite: true,
-        engine: translate(locale, "api.modelSwap.fallbackEngine"),
-        isFallback: true,
+    let bgBytes: Uint8Array;
+    let bgContentType: string;
+    try {
+      const fetched = await fetchAllowedBackgroundImage(parsedBackgroundUrl, {
+        maxBytes: MAX_BACKGROUND_IMAGE_BYTES,
+        timeoutMs: UPSTREAM_FETCH_TIMEOUT_MS,
+        signal: request.signal,
       });
+      bgBytes = fetched.bytes;
+      bgContentType = fetched.contentType;
+    } catch (fetchErr) {
+      if (fetchErr instanceof UpstreamStatusError) {
+        return NextResponse.json({
+          resultImageUrl: null,
+          fallbackComposite: true,
+          engine: translate(locale, "api.modelSwap.fallbackEngine"),
+          isFallback: true,
+        });
+      }
+      if (fetchErr instanceof UpstreamImageTooLargeError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.bg.proxyTooLarge") },
+          { status: 413 }
+        );
+      }
+      if (fetchErr instanceof UpstreamConcurrencyLimitError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.modelSwap.processError") },
+          { status: 503, headers: { "Retry-After": "2" } }
+        );
+      }
+      throw fetchErr;
     }
 
-    const declaredLength = bgResponse.headers.get("content-length");
-    if (declaredLength && Number(declaredLength) > MAX_BACKGROUND_IMAGE_BYTES) {
-      await bgResponse.body?.cancel().catch(() => {});
-      return NextResponse.json(
-        { error: translate(locale, "api.bg.proxyTooLarge") },
-        { status: 413 }
-      );
-    }
-
-    const bgBuffer = Buffer.from(await bgResponse.arrayBuffer());
-    if (bgBuffer.byteLength > MAX_BACKGROUND_IMAGE_BYTES) {
-      return NextResponse.json(
-        { error: translate(locale, "api.bg.proxyTooLarge") },
-        { status: 413 }
-      );
-    }
-    const bgBase64 = bgBuffer.toString("base64");
-    const bgMimeType =
-      bgResponse.headers.get("Content-Type")?.split(";")[0]?.trim() ||
-      "image/jpeg";
+    const bgBase64 = Buffer.from(
+      bgBytes.buffer,
+      bgBytes.byteOffset,
+      bgBytes.byteLength
+    ).toString("base64");
+    const bgMimeType = bgContentType.split(";")[0]?.trim() || "image/jpeg";
     const modelPart = parseBase64DataUrl(modelImageRaw);
 
     const ai = new GoogleGenAI({ apiKey: geminiKey });
