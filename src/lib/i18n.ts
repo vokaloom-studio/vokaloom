@@ -125,10 +125,16 @@ const en = {
     "Could not generate scene composite. Please try again.",
   "bg.toast.downloadedComposite": "Downloaded 9:16 model composite!",
   "bg.toast.downloadedSingle": "Downloaded #{index} ({photographer})",
+  "bg.toast.downloadSingleFallback":
+    "Upstream image unavailable for #{index}; saved offline placeholder instead.",
   "bg.toast.downloadSingleError": "Could not download photo.",
   "bg.toast.generateFirst": "Generate a batch of backgrounds first.",
   "bg.toast.downloadedZip":
     "Downloaded vokaloom-backgrounds.zip ({count} HD photos)!",
+  "bg.toast.downloadedZipPartial":
+    "Downloaded ZIP with {realCount}/{totalCount} real photos ({placeholderCount} used offline placeholders after proxy failures).",
+  "bg.toast.downloadedZipAllFallback":
+    "Downloaded ZIP contains {count} offline placeholder images only — upstream proxy downloads failed.",
   "bg.toast.zipError":
     "Failed to package ZIP archive. Try individual downloads.",
   "bg.readme.header": "VOKALOOM STUDIO — {count}x AESTHETIC BACKGROUND BATCH",
@@ -139,6 +145,8 @@ const en = {
   "bg.readme.attributionsHeader":
     "PHOTOGRAPHER ATTRIBUTIONS (Pexels / Unsplash Commercial Safe):",
   "bg.readme.itemLine": "{num}. \"{title}\" — Photo by {photographer} ({source})",
+  "bg.readme.placeholderNotice":
+    "NOTICE: Upstream image download failed for frame(s) {frames}; synthetic offline placeholder JPEGs were included instead.",
 
   // Voice Studio (src/components/voice-studio.tsx)
   "voice.configTitle": "Script & Voice",
@@ -339,6 +347,8 @@ const en = {
   "api.bg.invalidProxyOrigin": "Invalid or disallowed proxyUrl origin.",
   "api.bg.upstreamStatus": "Upstream image returned {status}",
   "api.bg.proxyFailed": "Failed to proxy image download.",
+  "api.bg.proxyBusy":
+    "Image proxy is temporarily busy. Please retry shortly.",
   "api.bg.proxyTooLarge": "Upstream image exceeds 15 MB proxy limit.",
   "api.bg.invalidUpstreamContentType":
     "Upstream resource did not return a supported image Content-Type.",
@@ -515,10 +525,16 @@ const es: Record<TranslationKey, string> = {
     "No se pudo generar la composición de escena. Intenta de nuevo.",
   "bg.toast.downloadedComposite": "¡Composición 9:16 descargada!",
   "bg.toast.downloadedSingle": "Descargada #{index} ({photographer})",
+  "bg.toast.downloadSingleFallback":
+    "Imagen de origen no disponible para #{index}; se guardó marcador offline.",
   "bg.toast.downloadSingleError": "No se pudo descargar la foto.",
   "bg.toast.generateFirst": "Genera primero un lote de fondos.",
   "bg.toast.downloadedZip":
     "¡Descargado vokaloom-backgrounds.zip ({count} fotos HD)!",
+  "bg.toast.downloadedZipPartial":
+    "ZIP descargado con {realCount}/{totalCount} fotos reales ({placeholderCount} usaron marcadores offline tras fallos del proxy).",
+  "bg.toast.downloadedZipAllFallback":
+    "El ZIP descargado solo contiene {count} imágenes de marcador offline; fallaron todas las descargas del proxy.",
   "bg.toast.zipError":
     "Error al empaquetar el archivo ZIP. Prueba las descargas individuales.",
   "bg.readme.header": "VOKALOOM STUDIO — LOTE DE {count} FONDOS ESTÉTICOS",
@@ -529,6 +545,8 @@ const es: Record<TranslationKey, string> = {
   "bg.readme.attributionsHeader":
     "ATRIBUCIÓN DE FOTÓGRAFOS (Pexels / Unsplash Uso Comercial Seguro):",
   "bg.readme.itemLine": "{num}. \"{title}\" — Foto por {photographer} ({source})",
+  "bg.readme.placeholderNotice":
+    "AVISO: Falló la descarga original en el cuadro(s) {frames}; se incluyeron marcadores sintéticos offline.",
 
   // Voice Studio (src/components/voice-studio.tsx)
   "voice.configTitle": "Guion y Voz",
@@ -740,6 +758,8 @@ const es: Record<TranslationKey, string> = {
   "api.bg.invalidProxyOrigin": "Origen de proxyUrl no válido o no permitido.",
   "api.bg.upstreamStatus": "La imagen de origen devolvió el estado {status}",
   "api.bg.proxyFailed": "No se pudo obtener la imagen a través del proxy.",
+  "api.bg.proxyBusy":
+    "El proxy de imágenes está ocupado temporalmente. Reintenta en unos segundos.",
   "api.bg.proxyTooLarge":
     "La imagen de origen supera el límite de 15 MB del proxy.",
   "api.bg.invalidUpstreamContentType":

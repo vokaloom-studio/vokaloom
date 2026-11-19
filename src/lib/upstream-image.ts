@@ -265,6 +265,7 @@ interface SemaphoreWaiter {
 export class AsyncSemaphore {
   private active = 0;
   private draining = false;
+  private drainPending = false;
   private readonly maxConcurrent: number;
   private readonly maxQueueSize: number;
   private readonly queueTimeoutMs: number;
@@ -334,50 +335,57 @@ export class AsyncSemaphore {
   }
 
   private drain(): void {
-    if (this.draining) return;
+    if (this.draining) {
+      this.drainPending = true;
+      return;
+    }
     this.draining = true;
 
     try {
-      const now = Date.now();
-      this.pruneStaleWaiters(now);
+      do {
+        this.drainPending = false;
+        const now = Date.now();
+        this.pruneStaleWaiters(now);
 
-      while (this.active < this.maxConcurrent && this.waiters.length > 0) {
-        const next = this.waiters.shift()!;
-        if (next.settled) {
-          continue;
-        }
-        if (next.signal?.aborted) {
-          next.fail(
-            toAbortError(
-              next.signal,
-              "Request aborted while queued for upstream fetch."
-            )
-          );
-          continue;
-        }
-        if (this.isWaiterExpired(next, now)) {
-          next.fail(
-            new UpstreamConcurrencyLimitError(
-              "Timed out waiting for upstream image fetch capacity."
-            )
-          );
-          continue;
-        }
+        while (this.active < this.maxConcurrent && this.waiters.length > 0) {
+          const next = this.waiters.shift()!;
+          if (next.settled) {
+            continue;
+          }
+          if (next.signal?.aborted) {
+            next.fail(
+              toAbortError(
+                next.signal,
+                "Request aborted while queued for upstream fetch."
+              )
+            );
+            continue;
+          }
+          if (this.isWaiterExpired(next, now)) {
+            next.fail(
+              new UpstreamConcurrencyLimitError(
+                "Timed out waiting for upstream image fetch capacity."
+              )
+            );
+            continue;
+          }
 
-        if (!next.claim()) {
-          continue;
-        }
+          if (!next.claim()) {
+            continue;
+          }
 
-        this.active += 1;
-        const release = this.createRelease();
-        try {
-          next.grant(release);
-        } catch {
-          release();
+          this.active += 1;
+          const release = this.createRelease();
+          try {
+            next.grant(release);
+          } catch {
+            release();
+          }
         }
-      }
+      } while (this.drainPending);
     } finally {
       this.draining = false;
+      this.drainPending = false;
     }
   }
 

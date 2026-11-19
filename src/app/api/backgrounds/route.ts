@@ -523,19 +523,34 @@ export async function GET(request: Request) {
       );
     }
     if (error instanceof UpstreamStatusError) {
+      const status = error.status >= 400 ? error.status : 502;
+      const retryHeaders: Record<string, string> | undefined =
+        status === 503 || status === 429
+          ? { "Retry-After": "2", "Cache-Control": "no-store" }
+          : { "Cache-Control": "no-store" };
       return NextResponse.json(
         {
           error: translate(locale, "api.bg.upstreamStatus", {
             status: error.status,
           }),
+          retryable: status === 503 || status === 429,
         },
-        { status: error.status }
+        { status, headers: retryHeaders }
       );
     }
     if (error instanceof UpstreamConcurrencyLimitError) {
       return NextResponse.json(
-        { error: translate(locale, "api.bg.proxyFailed") },
-        { status: 503, headers: { "Retry-After": "2" } }
+        {
+          error: translate(locale, "api.bg.proxyBusy"),
+          retryAfterSeconds: 2,
+        },
+        {
+          status: 503,
+          headers: {
+            "Retry-After": "2",
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
     console.error("Image proxy error:", error);

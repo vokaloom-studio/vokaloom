@@ -179,35 +179,154 @@ async function generateOfflineVerticalFallbackBlob(
   });
 }
 
+const ZIP_EXPORT_CONCURRENCY = 4;
+const MAX_PROXY_DOWNLOAD_ATTEMPTS = 3;
+const PROXY_BASE_RETRY_DELAY_MS = 250;
+const PROXY_MAX_RETRY_DELAY_MS = 4_000;
+
+type ImageFetchSource = "proxy" | "direct" | "placeholder";
+
+interface ImageBlobFetchResult {
+  blob: Blob;
+  source: ImageFetchSource;
+  lastProxyStatus?: number;
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(headerVal: string | null): number | null {
+  if (!headerVal) return null;
+  const trimmed = headerVal.trim();
+  if (!trimmed) return null;
+
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(PROXY_MAX_RETRY_DELAY_MS, Math.max(100, seconds * 1000));
+    }
+  }
+
+  const parsedDate = Date.parse(trimmed);
+  if (Number.isFinite(parsedDate)) {
+    const deltaMs = parsedDate - Date.now();
+    if (deltaMs > 0) {
+      return Math.min(PROXY_MAX_RETRY_DELAY_MS, Math.max(100, deltaMs));
+    }
+  }
+
+  return null;
+}
+
+function isValidImageBlob(blob: Blob): boolean {
+  return (
+    blob.size > 0 && (!blob.type || blob.type.toLowerCase().startsWith("image/"))
+  );
+}
+
+async function runWithConcurrency<T>(
+  tasks: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  if (tasks.length === 0) return;
+  const limit = Math.max(1, Math.min(concurrency, tasks.length));
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (nextIndex < tasks.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        await worker(tasks[currentIndex], currentIndex);
+      }
+    })
+  );
+}
+
 async function fetchImageBlobWithCorsProxy(
   item: BackgroundItem,
   index: number,
   locale: Locale
-): Promise<Blob> {
+): Promise<ImageBlobFetchResult> {
   const proxiedEndpoint = `/api/backgrounds?proxyUrl=${encodeURIComponent(
     item.downloadUrl
   )}`;
-  try {
-    const proxyRes = await fetch(proxiedEndpoint, {
-      headers: { [LOCALE_HEADER]: locale },
-    });
-    if (proxyRes.ok) {
-      return await proxyRes.blob();
+  let lastProxyStatus: number | undefined;
+
+  for (let attempt = 0; attempt < MAX_PROXY_DOWNLOAD_ATTEMPTS; attempt += 1) {
+    let retryDelayMs: number | null = null;
+
+    try {
+      const proxyRes = await fetch(proxiedEndpoint, {
+        headers: { [LOCALE_HEADER]: locale },
+      });
+
+      if (proxyRes.ok) {
+        const blob = await proxyRes.blob();
+        if (isValidImageBlob(blob)) {
+          return { blob, source: "proxy" };
+        }
+        break;
+      }
+
+      lastProxyStatus = proxyRes.status;
+      const retryAfterHeader = proxyRes.headers.get("retry-after");
+      const shouldRetry =
+        proxyRes.status === 503 ||
+        proxyRes.status === 429 ||
+        Boolean(retryAfterHeader);
+
+      if (!shouldRetry) {
+        break;
+      }
+
+      retryDelayMs =
+        parseRetryAfterMs(retryAfterHeader) ??
+        Math.min(
+          PROXY_MAX_RETRY_DELAY_MS,
+          PROXY_BASE_RETRY_DELAY_MS * 2 ** attempt +
+            Math.floor(Math.random() * 100)
+        );
+    } catch {
+      retryDelayMs = Math.min(
+        PROXY_MAX_RETRY_DELAY_MS,
+        PROXY_BASE_RETRY_DELAY_MS * 2 ** attempt +
+          Math.floor(Math.random() * 100)
+      );
     }
-  } catch {
-    // Fall through to direct fetch
+
+    if (
+      attempt < MAX_PROXY_DOWNLOAD_ATTEMPTS - 1 &&
+      retryDelayMs !== null
+    ) {
+      await sleepMs(retryDelayMs);
+    }
   }
 
   try {
     const directRes = await fetch(item.downloadUrl);
     if (directRes.ok) {
-      return await directRes.blob();
+      const blob = await directRes.blob();
+      if (isValidImageBlob(blob)) {
+        return { blob, source: "direct", lastProxyStatus };
+      }
     }
   } catch {
     // Fall through to offline canvas generator
   }
 
-  return generateOfflineVerticalFallbackBlob(item, index, locale);
+  const placeholderBlob = await generateOfflineVerticalFallbackBlob(
+    item,
+    index,
+    locale
+  );
+  return {
+    blob: placeholderBlob,
+    source: "placeholder",
+    lastProxyStatus,
+  };
 }
 
 function sampleSceneTemperatureTint(bgImg: HTMLImageElement): string {
@@ -256,7 +375,11 @@ async function generateClientCanvasComposite(
   if (!ctx) return modelBase64;
 
   let sceneTint = "rgba(255, 205, 150, 0.14)";
-  const bgBlob = await fetchImageBlobWithCorsProxy(item, index, locale);
+  const { blob: bgBlob } = await fetchImageBlobWithCorsProxy(
+    item,
+    index,
+    locale
+  );
   const bgObjectUrl = URL.createObjectURL(bgBlob);
   try {
     const bgImg = await loadImageElement(bgObjectUrl);
@@ -800,7 +923,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const handleDownloadSingle = async (item: BackgroundItem, index: number) => {
     setDownloadingId(item.id);
     try {
-      const blob = await fetchImageBlobWithCorsProxy(item, index, locale);
+      const { blob, source } = await fetchImageBlobWithCorsProxy(
+        item,
+        index,
+        locale
+      );
 
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -813,12 +940,19 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-      toast.success(
-        t("bg.toast.downloadedSingle", {
-          index: index + 1,
-          photographer: item.photographer,
-        })
-      );
+
+      if (source === "placeholder") {
+        toast.warning(
+          t("bg.toast.downloadSingleFallback", { index: index + 1 })
+        );
+      } else {
+        toast.success(
+          t("bg.toast.downloadedSingle", {
+            index: index + 1,
+            photographer: item.photographer,
+          })
+        );
+      }
     } catch {
       toast.error(t("bg.toast.downloadSingleError"));
     } finally {
@@ -850,10 +984,18 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       const folderName = `vokaloom-${exportItems.length}-backgrounds`;
       const folder = zip.folder(folderName);
       let completedCount = 0;
+      let realImageCount = 0;
+      const placeholderIndices: number[] = [];
 
-      await Promise.all(
-        exportItems.map(async (item, index) => {
-          const blob = await fetchImageBlobWithCorsProxy(item, index, locale);
+      await runWithConcurrency(
+        exportItems,
+        ZIP_EXPORT_CONCURRENCY,
+        async (item, index) => {
+          const { blob, source } = await fetchImageBlobWithCorsProxy(
+            item,
+            index,
+            locale
+          );
 
           const num = String(index + 1).padStart(2, "0");
           const cleanAuthor = item.photographer
@@ -863,6 +1005,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           const filename = `${num}-${item.source}-${cleanAuthor || "creator"}-9x16.jpg`;
 
           folder?.file(filename, blob);
+          if (source === "placeholder") {
+            placeholderIndices.push(index + 1);
+          } else {
+            realImageCount += 1;
+          }
           completedCount += 1;
           setZipProgress(
             Math.min(
@@ -870,15 +1017,24 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               Math.round((completedCount / exportItems.length) * 85) + 5
             )
           );
-        })
+        }
       );
 
+      placeholderIndices.sort((a, b) => a - b);
       const attributionLines = [
         t("bg.readme.header", { count: exportItems.length }),
         t("bg.readme.query", { query: resolvedQuery }),
         t("bg.readme.vibe", { vibe: selectedVibe }),
         t("bg.readme.aspect"),
         "",
+        ...(placeholderIndices.length > 0
+          ? [
+              t("bg.readme.placeholderNotice", {
+                frames: placeholderIndices.map((n) => `#${n}`).join(", "),
+              }),
+              "",
+            ]
+          : []),
         t("bg.readme.attributionsHeader"),
         ...exportItems.map((item, i) =>
           t("bg.readme.itemLine", {
@@ -903,9 +1059,24 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success(
-        t("bg.toast.downloadedZip", { count: exportItems.length })
-      );
+      const placeholderCount = placeholderIndices.length;
+      if (placeholderCount === 0) {
+        toast.success(
+          t("bg.toast.downloadedZip", { count: exportItems.length })
+        );
+      } else if (realImageCount > 0) {
+        toast.warning(
+          t("bg.toast.downloadedZipPartial", {
+            realCount: realImageCount,
+            placeholderCount,
+            totalCount: exportItems.length,
+          })
+        );
+      } else {
+        toast.error(
+          t("bg.toast.downloadedZipAllFallback", { count: placeholderCount })
+        );
+      }
     } catch (error) {
       console.error("ZIP compression error:", error);
       toast.error(t("bg.toast.zipError"));
