@@ -63,10 +63,20 @@ export type ServerQuotaEnforcementResult =
       response: NextResponse;
     };
 
+function buildQuotaExhaustedResponse(locale: Locale): NextResponse {
+  return NextResponse.json(
+    {
+      error: translate(locale, "api.quota.exhausted"),
+      quotaExceeded: true,
+    },
+    { status: 402 }
+  );
+}
+
 /**
- * Enforces server-side entitlement (`operator` / `pro_client`) and signed + IP-backed
- * guest trial quotas across paid generation routes so bypassing localStorage cannot
- * drain upstream API keys.
+ * Enforces server-side entitlement (`operator` / `pro_client`) and signed +
+ * atomically reserved IP-backed guest trial quotas across paid generation routes
+ * so concurrent requests or bypassing localStorage cannot drain upstream API keys.
  */
 export async function enforceServerGenerationQuota(
   request: Request,
@@ -79,33 +89,31 @@ export async function enforceServerGenerationQuota(
   }
 
   const now = Date.now();
-  const [cookieTrial, ipUsed] = await Promise.all([
-    getVerifiedTrialUsageFromCookie(now, cookieHeader),
-    getGuestTrialStore().getCount(getClientIp(request)),
-  ]);
-
+  const cookieTrial = await getVerifiedTrialUsageFromCookie(now, cookieHeader);
   const cookieUsed = cookieTrial?.used ?? 0;
-  const effectiveUsed = Math.max(cookieUsed, ipUsed);
 
-  if (effectiveUsed >= MAX_GUEST_TRIAL_CREDITS) {
+  if (cookieUsed >= MAX_GUEST_TRIAL_CREDITS) {
     return {
       allowed: false,
-      response: NextResponse.json(
-        {
-          error: translate(locale, "api.quota.exhausted"),
-          quotaExceeded: true,
-        },
-        { status: 402 }
-      ),
+      response: buildQuotaExhaustedResponse(locale),
     };
   }
 
   const clientIp = getClientIp(request);
-  await getGuestTrialStore().recordFailure(clientIp);
+  const consumption = await getGuestTrialStore().tryConsume(clientIp, {
+    floorCount: cookieUsed,
+  });
 
-  const nextUsed = effectiveUsed + 1;
-  const resetAt = cookieTrial?.resetAt ?? now + TRIAL_TTL_MS;
-  const trialCookieToken = signTrialToken(nextUsed, resetAt, now) ?? undefined;
+  if (!consumption.allowed) {
+    return {
+      allowed: false,
+      response: buildQuotaExhaustedResponse(locale),
+    };
+  }
+
+  const resetAt = cookieTrial?.resetAt ?? consumption.resetAt;
+  const trialCookieToken =
+    signTrialToken(consumption.count, resetAt, now) ?? undefined;
 
   return {
     allowed: true,

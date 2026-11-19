@@ -483,6 +483,17 @@ export function maskSecret(val: string | undefined): string | null {
   return `${trimmed.slice(0, 4)}••••${trimmed.slice(-4)}`;
 }
 
+let envWriteQueue: Promise<void> = Promise.resolve();
+
+function withEnvWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = envWriteQueue.then(fn, fn);
+  envWriteQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 export async function persistLocalEnvIfDev(
   updates: Partial<Record<SecretKeyName, string>>,
   keysToClear: SecretKeyName[] = []
@@ -491,65 +502,80 @@ export async function persistLocalEnvIfDev(
     return false;
   }
 
-  try {
+  return withEnvWriteLock(async () => {
     const envPath = path.join(process.cwd(), ".env.local");
-    let existing = "";
+    const envDir = path.dirname(envPath);
+    const tempPath = path.join(
+      envDir,
+      `.env.local.tmp-${process.pid}-${Date.now()}-${crypto.randomUUID()}`
+    );
+
     try {
-      existing = await fs.readFile(envPath, "utf8");
+      let existing = "";
+      try {
+        existing = await fs.readFile(envPath, "utf8");
+      } catch {
+        existing = "";
+      }
+
+      const lines = existing ? existing.split(/\r?\n/) : [];
+      const remainingKeys = new Set<SecretKeyName>();
+      const clearSet = new Set<SecretKeyName>(keysToClear);
+
+      for (const name of SECRET_KEY_NAMES) {
+        const val = updates[name]?.trim();
+        if (val && isValidSecretValue(val, name)) {
+          remainingKeys.add(name);
+        }
+      }
+
+      const nextLines: string[] = [];
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine || trimmedLine.startsWith("#")) {
+          nextLines.push(line);
+          continue;
+        }
+
+        const eqIndex = line.indexOf("=");
+        if (eqIndex <= 0) {
+          nextLines.push(line);
+          continue;
+        }
+
+        const keyPart = line.slice(0, eqIndex).trim() as SecretKeyName;
+        if (clearSet.has(keyPart)) {
+          continue;
+        }
+
+        if (remainingKeys.has(keyPart)) {
+          const cleanVal = updates[keyPart]!.trim().replace(/[\r\n]/g, "");
+          nextLines.push(`${keyPart}=${cleanVal}`);
+          remainingKeys.delete(keyPart);
+        } else {
+          nextLines.push(line);
+        }
+      }
+
+      for (const keyToAdd of remainingKeys) {
+        const cleanVal = updates[keyToAdd]!.trim().replace(/[\r\n]/g, "");
+        nextLines.push(`${keyToAdd}=${cleanVal}`);
+      }
+
+      const normalizedContent =
+        nextLines
+          .filter((l, idx) => idx < nextLines.length - 1 || l !== "")
+          .join("\n") + "\n";
+
+      await fs.writeFile(tempPath, normalizedContent, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      await fs.rename(tempPath, envPath);
+      return true;
     } catch {
-      existing = "";
+      await fs.unlink(tempPath).catch(() => undefined);
+      return false;
     }
-
-    const lines = existing ? existing.split(/\r?\n/) : [];
-    const remainingKeys = new Set<SecretKeyName>();
-    const clearSet = new Set<SecretKeyName>(keysToClear);
-
-    for (const name of SECRET_KEY_NAMES) {
-      const val = updates[name]?.trim();
-      if (val && isValidSecretValue(val, name)) {
-        remainingKeys.add(name);
-      }
-    }
-
-    const nextLines: string[] = [];
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith("#")) {
-        nextLines.push(line);
-        continue;
-      }
-
-      const eqIndex = line.indexOf("=");
-      if (eqIndex <= 0) {
-        nextLines.push(line);
-        continue;
-      }
-
-      const keyPart = line.slice(0, eqIndex).trim() as SecretKeyName;
-      if (clearSet.has(keyPart)) {
-        continue;
-      }
-
-      if (remainingKeys.has(keyPart)) {
-        const cleanVal = updates[keyPart]!.trim().replace(/[\r\n]/g, "");
-        nextLines.push(`${keyPart}=${cleanVal}`);
-        remainingKeys.delete(keyPart);
-      } else {
-        nextLines.push(line);
-      }
-    }
-
-    for (const keyToAdd of remainingKeys) {
-      const cleanVal = updates[keyToAdd]!.trim().replace(/[\r\n]/g, "");
-      nextLines.push(`${keyToAdd}=${cleanVal}`);
-    }
-
-    const normalizedContent =
-      nextLines.filter((l, idx) => idx < nextLines.length - 1 || l !== "").join("\n") +
-      "\n";
-    await fs.writeFile(envPath, normalizedContent, "utf8");
-    return true;
-  } catch {
-    return false;
-  }
+  });
 }

@@ -22,8 +22,11 @@ import { Input } from "@/components/ui/input";
 import { useLocale } from "@/components/locale-provider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
+  DEFAULT_CHECKOUT_URL_COP,
+  DEFAULT_CHECKOUT_URL_USD,
   getBusinessConfig,
   hasProAccess,
+  sanitizeCheckoutUrl,
   verifyAndActivateAccessCode,
   type BusinessConfig,
   type QuotaState,
@@ -56,12 +59,8 @@ export function PaywallModal({
     priceCop: "$60,000 COP",
     priceUsd: "$15 USD",
     maxTrialCredits: 3,
-    checkoutUrlCop:
-      process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
-      "https://checkout.wompi.co/l/your_60000_cop_link",
-    checkoutUrlUsd:
-      process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
-      "https://buy.stripe.com/your_15_usd_link",
+    checkoutUrlCop: DEFAULT_CHECKOUT_URL_COP,
+    checkoutUrlUsd: DEFAULT_CHECKOUT_URL_USD,
   });
 
   useEffect(() => {
@@ -72,8 +71,16 @@ export function PaywallModal({
     }
   }, [open]);
 
-  const handleOpenCheckout = (url: string, label: string) => {
-    window.open(url, "_blank", "noopener,noreferrer");
+  const handleOpenCheckout = (
+    url: string,
+    label: string,
+    fallbackUrl: string = DEFAULT_CHECKOUT_URL_COP
+  ) => {
+    const safeUrl = sanitizeCheckoutUrl(url, fallbackUrl);
+    if (safeUrl !== url.trim()) {
+      setBusinessConfig(getBusinessConfig());
+    }
+    window.open(safeUrl, "_blank", "noopener,noreferrer");
     toast.info(t("paywall.toast.openedCheckout", { label }));
   };
 
@@ -107,6 +114,7 @@ export function PaywallModal({
   const proActive = hasProAccess(quota);
   const copCheckout = {
     url: businessConfig.checkoutUrlCop,
+    fallbackUrl: DEFAULT_CHECKOUT_URL_COP,
     label: t("paywall.checkoutCopLabel", { priceCop: businessConfig.priceCop }),
     buttonText: t("paywall.checkoutCopButton", {
       priceCop: businessConfig.priceCop,
@@ -114,6 +122,7 @@ export function PaywallModal({
   };
   const usdCheckout = {
     url: businessConfig.checkoutUrlUsd,
+    fallbackUrl: DEFAULT_CHECKOUT_URL_USD,
     label: t("paywall.checkoutUsdLabel", { priceUsd: businessConfig.priceUsd }),
     buttonText: t("paywall.checkoutUsdButton", {
       priceUsd: businessConfig.priceUsd,
@@ -223,7 +232,11 @@ export function PaywallModal({
               type="button"
               data-testid="btn-checkout-primary"
               onClick={() =>
-                handleOpenCheckout(primaryCheckout.url, primaryCheckout.label)
+                handleOpenCheckout(
+                  primaryCheckout.url,
+                  primaryCheckout.label,
+                  primaryCheckout.fallbackUrl
+                )
               }
               className="h-auto min-h-9.5 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400"
             >
@@ -239,7 +252,8 @@ export function PaywallModal({
               onClick={() =>
                 handleOpenCheckout(
                   secondaryCheckout.url,
-                  secondaryCheckout.label
+                  secondaryCheckout.label,
+                  secondaryCheckout.fallbackUrl
                 )
               }
               className="h-auto min-h-9 w-full whitespace-normal border-white/[0.1] bg-[#13151D] px-3 py-2 text-center text-xs font-semibold text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26]"

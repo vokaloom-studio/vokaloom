@@ -37,7 +37,10 @@ import {
   type Locale,
   type TranslationKey,
 } from "@/lib/i18n";
-import { consumeCredit } from "@/lib/quota";
+import {
+  consumeCredit,
+  reconcileServerQuotaExhausted,
+} from "@/lib/quota";
 import type { BackgroundItem } from "@/app/api/backgrounds/route";
 
 export interface BackgroundFinderProps {
@@ -401,6 +404,21 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const [zipTargetCount, setZipTargetCount] = useState<number>(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  const handleQuotaExceeded402 = (payload?: {
+    error?: string;
+    quotaExceeded?: boolean;
+  }) => {
+    const reconciled = reconcileServerQuotaExhausted(payload);
+    toast.warning(
+      payload?.error ||
+        t("quota.exhaustedToast", {
+          remaining: reconciled.creditsRemaining,
+          max: reconciled.maxTrialCredits,
+        })
+    );
+    onRequirePaywall();
+  };
+
   const fetchBatch = async (opts: {
     targetPage: number;
     batchSizeOverride?: 5 | 15;
@@ -450,11 +468,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       if (!response.ok) {
         const errPayload = (await response.json().catch(() => ({}))) as {
           error?: string;
+          quotaExceeded?: boolean;
         };
         if (response.status === 402) {
-          onRequirePaywall();
+          handleQuotaExceeded402(errPayload);
+          return;
         }
-        throw new Error(errPayload.error || `HTTP ${response.status}`);
+        throw new Error(errPayload.error || t("bg.toast.fetchError"));
       }
 
       const data = (await response.json()) as BackgroundsApiResponse;
@@ -477,7 +497,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       }
     } catch (error) {
       console.error("Failed to fetch backgrounds:", error);
-      toast.error(t("bg.toast.fetchError"));
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : t("bg.toast.fetchError")
+      );
     } finally {
       setIsLoading(false);
     }
@@ -712,10 +736,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         }),
       });
 
-      const data = (await res.json()) as ModelSwapApiResponse;
+      const data = (await res.json().catch(() => ({}))) as ModelSwapApiResponse & {
+        quotaExceeded?: boolean;
+      };
       if (!res.ok) {
         if (res.status === 402) {
-          onRequirePaywall();
+          setSwapModalOpen(false);
+          handleQuotaExceeded402(data);
+          return;
         }
         throw new Error(data.error || t("bg.toast.modelSwapError"));
       }

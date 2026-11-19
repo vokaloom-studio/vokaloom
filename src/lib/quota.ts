@@ -35,16 +35,79 @@ export interface BusinessConfig {
   checkoutUrlUsd: string;
 }
 
+const SAFE_FALLBACK_CHECKOUT_URL_COP =
+  "https://checkout.wompi.co/l/your_60000_cop_link";
+const SAFE_FALLBACK_CHECKOUT_URL_USD =
+  "https://buy.stripe.com/your_15_usd_link";
+
+function isLocalDevHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]" ||
+    normalized.endsWith(".localhost")
+  );
+}
+
+/**
+ * Allows only `https:` URLs or `http:` URLs pointing to local/dev hosts,
+ * rejecting `javascript:`, `data:`, credentialed URLs, and non-local plain HTTP.
+ */
+export function isAllowedCheckoutUrl(rawUrl: string): boolean {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) {
+      return false;
+    }
+    if (parsed.protocol === "https:") {
+      return Boolean(parsed.hostname);
+    }
+    if (parsed.protocol === "http:") {
+      return isLocalDevHostname(parsed.hostname);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function sanitizeCheckoutUrl(
+  rawUrl: string | undefined,
+  fallbackUrl: string
+): string {
+  const safeFallback = isAllowedCheckoutUrl(fallbackUrl)
+    ? new URL(fallbackUrl.trim()).toString()
+    : SAFE_FALLBACK_CHECKOUT_URL_COP;
+
+  const trimmed = rawUrl?.trim();
+  if (!trimmed || !isAllowedCheckoutUrl(trimmed)) {
+    return safeFallback;
+  }
+  return new URL(trimmed).toString();
+}
+
+export const DEFAULT_CHECKOUT_URL_COP = sanitizeCheckoutUrl(
+  process.env.NEXT_PUBLIC_CHECKOUT_URL_COP,
+  SAFE_FALLBACK_CHECKOUT_URL_COP
+);
+
+export const DEFAULT_CHECKOUT_URL_USD = sanitizeCheckoutUrl(
+  process.env.NEXT_PUBLIC_CHECKOUT_URL_USD,
+  SAFE_FALLBACK_CHECKOUT_URL_USD
+);
+
 const DEFAULT_BUSINESS_CONFIG: BusinessConfig = {
   priceCop: "$60,000 COP",
   priceUsd: "$15 USD",
   maxTrialCredits: DEFAULT_TRIAL_CREDITS,
-  checkoutUrlCop:
-    process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
-    "https://checkout.wompi.co/l/your_60000_cop_link",
-  checkoutUrlUsd:
-    process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
-    "https://buy.stripe.com/your_15_usd_link",
+  checkoutUrlCop: DEFAULT_CHECKOUT_URL_COP,
+  checkoutUrlUsd: DEFAULT_CHECKOUT_URL_USD,
 };
 
 export function getBusinessConfig(): BusinessConfig {
@@ -60,15 +123,18 @@ export function getBusinessConfig(): BusinessConfig {
       priceUsd: parsed.priceUsd?.trim() || DEFAULT_BUSINESS_CONFIG.priceUsd,
       maxTrialCredits:
         typeof parsed.maxTrialCredits === "number" &&
+        Number.isFinite(parsed.maxTrialCredits) &&
         parsed.maxTrialCredits >= 0
           ? parsed.maxTrialCredits
           : DEFAULT_BUSINESS_CONFIG.maxTrialCredits,
-      checkoutUrlCop:
-        parsed.checkoutUrlCop?.trim() ||
-        DEFAULT_BUSINESS_CONFIG.checkoutUrlCop,
-      checkoutUrlUsd:
-        parsed.checkoutUrlUsd?.trim() ||
-        DEFAULT_BUSINESS_CONFIG.checkoutUrlUsd,
+      checkoutUrlCop: sanitizeCheckoutUrl(
+        parsed.checkoutUrlCop,
+        DEFAULT_BUSINESS_CONFIG.checkoutUrlCop
+      ),
+      checkoutUrlUsd: sanitizeCheckoutUrl(
+        parsed.checkoutUrlUsd,
+        DEFAULT_BUSINESS_CONFIG.checkoutUrlUsd
+      ),
     };
   } catch {
     return { ...DEFAULT_BUSINESS_CONFIG };
@@ -79,21 +145,39 @@ export function saveBusinessConfig(
   partial: Partial<BusinessConfig>
 ): BusinessConfig {
   const current = getBusinessConfig();
-  const next: BusinessConfig = {
-    ...current,
-    ...partial,
+  const merged: BusinessConfig = {
+    priceCop: partial.priceCop?.trim() || current.priceCop,
+    priceUsd: partial.priceUsd?.trim() || current.priceUsd,
+    maxTrialCredits:
+      typeof partial.maxTrialCredits === "number" &&
+      Number.isFinite(partial.maxTrialCredits) &&
+      partial.maxTrialCredits >= 0
+        ? partial.maxTrialCredits
+        : current.maxTrialCredits,
+    checkoutUrlCop: sanitizeCheckoutUrl(
+      partial.checkoutUrlCop !== undefined
+        ? partial.checkoutUrlCop
+        : current.checkoutUrlCop,
+      DEFAULT_BUSINESS_CONFIG.checkoutUrlCop
+    ),
+    checkoutUrlUsd: sanitizeCheckoutUrl(
+      partial.checkoutUrlUsd !== undefined
+        ? partial.checkoutUrlUsd
+        : current.checkoutUrlUsd,
+      DEFAULT_BUSINESS_CONFIG.checkoutUrlUsd
+    ),
   };
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(
         BUSINESS_CONFIG_STORAGE_KEY,
-        JSON.stringify(next)
+        JSON.stringify(merged)
       );
     } catch {
       // Ignore storage errors
     }
   }
-  return next;
+  return merged;
 }
 
 function getDefaultQuotaState(): QuotaState {
@@ -308,4 +392,27 @@ export function resetTrialForDemo(): QuotaState {
     totalGenerations: 0,
   };
   return saveQuotaState(resetState);
+}
+
+/**
+ * Reconciles client quota state with server authority when an API route
+ * returns HTTP 402 (quota exhausted), zeroing remaining client trial credits
+ * and clearing stale local privilege flags while broadcasting the update.
+ */
+export function reconcileServerQuotaExhausted(payload?: {
+  quotaExceeded?: boolean;
+}): QuotaState {
+  if (payload && payload.quotaExceeded === false) {
+    return getQuotaState();
+  }
+
+  const current = getQuotaState();
+  const reconciled: QuotaState = {
+    ...current,
+    creditsRemaining: 0,
+    isOperator: false,
+    isPro: false,
+    role: "guest",
+  };
+  return saveQuotaState(reconciled);
 }

@@ -30,7 +30,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/components/locale-provider";
 import { LOCALE_HEADER, type TranslationKey } from "@/lib/i18n";
-import { consumeCredit } from "@/lib/quota";
+import {
+  consumeCredit,
+  reconcileServerQuotaExhausted,
+} from "@/lib/quota";
 
 export interface VoiceStudioProps {
   onRequirePaywall: () => void;
@@ -415,17 +418,27 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         }),
       });
 
-      const data = (await response.json()) as {
+      const data = (await response.json().catch(() => ({}))) as {
         audioUrl?: string;
         engine?: string;
         durationMs?: number;
         isFallback?: boolean;
         error?: string;
+        quotaExceeded?: boolean;
       };
 
       if (!response.ok || !data.audioUrl) {
         if (response.status === 402) {
+          const reconciled = reconcileServerQuotaExhausted(data);
+          toast.warning(
+            data.error ||
+              t("quota.exhaustedToast", {
+                remaining: reconciled.creditsRemaining,
+                max: reconciled.maxTrialCredits,
+              })
+          );
           onRequirePaywall();
+          return;
         }
         throw new Error(data.error || t("voice.toast.synthFailed"));
       }
