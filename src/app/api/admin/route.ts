@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import net from "node:net";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
@@ -24,7 +25,21 @@ import {
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const MAX_TRACKED_IPS = 5_000;
+const DEFAULT_TRUSTED_PROXY_HOPS = 1;
+const MAX_TRUSTED_PROXY_HOPS = 10;
+const MAX_IP_HEADER_LENGTH = 100;
+const MAX_FORWARDED_HEADER_LENGTH = 4096;
 const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
+
+const ALLOWED_PROXY_HEADERS = new Set([
+  "x-vercel-forwarded-for",
+  "cf-connecting-ip",
+  "true-client-ip",
+  "fly-client-ip",
+  "x-real-ip",
+  "x-forwarded-for",
+]);
 
 function getVipClientCodes(): string[] {
   const raw =
@@ -47,39 +62,252 @@ function timingSafeEqualIgnoreCase(a: string, b: string): boolean {
   return crypto.timingSafeEqual(digestA, digestB);
 }
 
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function getTrustedProxyHops(): number {
+  const raw = process.env.TRUST_PROXY_HOPS?.trim();
+  if (!raw) return DEFAULT_TRUSTED_PROXY_HOPS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_TRUSTED_PROXY_HOPS;
+  return Math.min(parsed, MAX_TRUSTED_PROXY_HOPS);
+}
+
+/**
+ * Validates and canonicalizes an IPv4/IPv6 literal (stripping optional port/brackets
+ * and collapsing IPv4-mapped IPv6 addresses to IPv4) so equivalent forms share one bucket.
+ */
+function normalizeIp(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== "string") return null;
+  let candidate = raw.trim();
+  if (!candidate || candidate.length > MAX_IP_HEADER_LENGTH) return null;
+
+  if (
+    candidate.startsWith('"') &&
+    candidate.endsWith('"') &&
+    candidate.length >= 2
+  ) {
+    candidate = candidate.slice(1, -1).trim();
   }
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return realIp || "unknown";
+
+  if (candidate.startsWith("[")) {
+    const bracketMatch = /^\[([^\]]+)\](?::(\d{1,5}))?$/.exec(candidate);
+    if (!bracketMatch) return null;
+    if (bracketMatch[2]) {
+      const port = Number.parseInt(bracketMatch[2], 10);
+      if (port < 1 || port > 65535) return null;
+    }
+    candidate = bracketMatch[1];
+  } else {
+    // Only strip :port from IPv4 literals so bare IPv6 colons stay intact.
+    const ipv4PortMatch = /^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$/.exec(
+      candidate
+    );
+    if (ipv4PortMatch) {
+      const port = Number.parseInt(ipv4PortMatch[2], 10);
+      if (port < 1 || port > 65535) return null;
+      candidate = ipv4PortMatch[1];
+    }
+  }
+
+  const version = net.isIP(candidate);
+  if (version === 0) return null;
+  if (version === 4) return candidate;
+
+  try {
+    const hostname = new URL(`http://[${candidate}]`).hostname;
+    const unwrapped =
+      hostname.startsWith("[") && hostname.endsWith("]")
+        ? hostname.slice(1, -1)
+        : hostname;
+
+    const mappedMatch = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(
+      unwrapped
+    );
+    if (mappedMatch) {
+      const hi = Number.parseInt(mappedMatch[1], 16);
+      const lo = Number.parseInt(mappedMatch[2], 16);
+      return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    }
+
+    return unwrapped.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts and validates the client IP from a comma-separated forwarding header.
+ * For multi-hop proxies, indexes from the right by trusted proxy hop count so
+ * client-supplied leftmost entries cannot spoof the attributed IP.
+ */
+function extractForwardedIp(
+  headerValue: string | null,
+  trustedHops: number,
+  pickFirst = false
+): string | null {
+  if (!headerValue || headerValue.length > MAX_FORWARDED_HEADER_LENGTH) {
+    return null;
+  }
+
+  const segments = headerValue
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return null;
+
+  if (pickFirst) {
+    return normalizeIp(segments[0]);
+  }
+
+  const targetIndex = segments.length - trustedHops;
+  if (targetIndex < 0 || targetIndex >= segments.length) {
+    return null;
+  }
+  return normalizeIp(segments[targetIndex]);
+}
+
+function isLoopbackIp(ip: string): boolean {
+  return ip === "::1" || ip === "127.0.0.1" || ip.startsWith("127.");
+}
+
+/**
+ * Resolves client IP only from headers trusted in the active deployment environment,
+ * falling back to connection-level metadata or `"unknown"` when headers are unverified.
+ */
+function getClientIp(request: Request): string {
+  const directIp =
+    "ip" in request && typeof (request as { ip?: unknown }).ip === "string"
+      ? normalizeIp((request as { ip?: string }).ip)
+      : null;
+
+  const configuredHeader = process.env.TRUSTED_PROXY_HEADER?.trim().toLowerCase();
+  const trustedHops = getTrustedProxyHops();
+
+  if (configuredHeader && ALLOWED_PROXY_HEADERS.has(configuredHeader)) {
+    const raw = request.headers.get(configuredHeader);
+    const parsed =
+      configuredHeader === "x-forwarded-for"
+        ? extractForwardedIp(raw, trustedHops)
+        : configuredHeader === "x-vercel-forwarded-for"
+          ? extractForwardedIp(raw, trustedHops, true)
+          : normalizeIp(raw);
+    return parsed ?? directIp ?? "unknown";
+  }
+
+  const isVercel =
+    process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV?.trim());
+  if (isVercel) {
+    const vercelIp =
+      extractForwardedIp(
+        request.headers.get("x-vercel-forwarded-for"),
+        trustedHops,
+        true
+      ) ??
+      normalizeIp(request.headers.get("x-real-ip")) ??
+      extractForwardedIp(request.headers.get("x-forwarded-for"), trustedHops);
+    if (vercelIp) return vercelIp;
+  }
+
+  const isCloudflare =
+    process.env.CF_PAGES === "1" ||
+    isTruthyEnv(process.env.TRUST_CLOUDFLARE) ||
+    process.env.TRUST_PROXY_PLATFORM?.trim().toLowerCase() === "cloudflare";
+  if (isCloudflare) {
+    const cfIp =
+      normalizeIp(request.headers.get("cf-connecting-ip")) ??
+      normalizeIp(request.headers.get("x-real-ip"));
+    if (cfIp) return cfIp;
+  }
+
+  if (Boolean(process.env.FLY_APP_NAME?.trim())) {
+    const flyIp = normalizeIp(request.headers.get("fly-client-ip"));
+    if (flyIp) return flyIp;
+  }
+
+  if (isTruthyEnv(process.env.TRUST_PROXY)) {
+    const forwardedIp = extractForwardedIp(
+      request.headers.get("x-forwarded-for"),
+      trustedHops
+    );
+    // Next.js defaults x-forwarded-for to socket.remoteAddress (often loopback behind Nginx);
+    // prefer a valid x-real-ip when x-forwarded-for only reflects a local loopback hop.
+    if (forwardedIp && !isLoopbackIp(forwardedIp)) {
+      return forwardedIp;
+    }
+
+    const realIp = normalizeIp(request.headers.get("x-real-ip"));
+    if (realIp) {
+      return realIp;
+    }
+
+    if (forwardedIp) {
+      return forwardedIp;
+    }
+  }
+
+  return directIp ?? "unknown";
+}
+
+function pruneExpiredAttempts(now: number): void {
+  for (const [key, record] of LOGIN_ATTEMPTS) {
+    if (now > record.resetAt) {
+      LOGIN_ATTEMPTS.delete(key);
+    }
+  }
+}
+
+function evictEarliestExpiringAttempt(): boolean {
+  let targetKey: string | undefined;
+  let earliestResetAt = Infinity;
+
+  for (const [key, record] of LOGIN_ATTEMPTS) {
+    if (record.resetAt < earliestResetAt) {
+      earliestResetAt = record.resetAt;
+      targetKey = key;
+    }
+  }
+
+  if (targetKey === undefined) {
+    targetKey = LOGIN_ATTEMPTS.keys().next().value;
+  }
+  if (targetKey === undefined) {
+    return false;
+  }
+
+  return LOGIN_ATTEMPTS.delete(targetKey);
 }
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  pruneExpiredAttempts(now);
   const record = LOGIN_ATTEMPTS.get(ip);
   if (!record) return false;
-  if (now > record.resetAt) {
-    LOGIN_ATTEMPTS.delete(ip);
-    return false;
-  }
   return record.count >= MAX_FAILED_LOGIN_ATTEMPTS;
 }
 
 function recordFailedLogin(ip: string): void {
   const now = Date.now();
+  pruneExpiredAttempts(now);
+
   const existing = LOGIN_ATTEMPTS.get(ip);
-  if (!existing || now > existing.resetAt) {
-    LOGIN_ATTEMPTS.set(ip, {
-      count: 1,
-      resetAt: now + RATE_LIMIT_WINDOW_MS,
-    });
+  if (existing) {
+    existing.count += 1;
+    LOGIN_ATTEMPTS.set(ip, existing);
     return;
   }
-  existing.count += 1;
-  LOGIN_ATTEMPTS.set(ip, existing);
+
+  while (LOGIN_ATTEMPTS.size >= MAX_TRACKED_IPS) {
+    if (!evictEarliestExpiringAttempt()) break;
+  }
+
+  LOGIN_ATTEMPTS.set(ip, {
+    count: 1,
+    resetAt: now + RATE_LIMIT_WINDOW_MS,
+  });
 }
 
 function clearFailedLogins(ip: string): void {
@@ -388,8 +616,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const clientIp = getClientIp(request);
-    if (body.action === "admin-login" && isRateLimited(clientIp)) {
+    const isAdminLogin = body.action === "admin-login";
+    const clientIp = isAdminLogin ? getClientIp(request) : "";
+    if (isAdminLogin && isRateLimited(clientIp)) {
       return NextResponse.json(
         {
           valid: false,
@@ -399,9 +628,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const submitted = (body.code || "").trim();
+    const submitted = typeof body.code === "string" ? body.code.trim() : "";
     if (!submitted) {
-      if (body.action === "admin-login") {
+      if (isAdminLogin) {
         recordFailedLogin(clientIp);
       }
       return NextResponse.json(
@@ -417,7 +646,7 @@ export async function POST(request: Request) {
       timingSafeEqualIgnoreCase(submitted, c)
     );
 
-    if (body.action === "admin-login" && !isOperator) {
+    if (isAdminLogin && !isOperator) {
       recordFailedLogin(clientIp);
       return NextResponse.json(
         {
@@ -438,7 +667,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (body.action === "admin-login" && isOperator) {
+    if (isAdminLogin && isOperator) {
       clearFailedLogins(clientIp);
     }
 
