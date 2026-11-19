@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "Bilingual (EN/ES) Content & Voiceover Workstation: 15-Image Aesthetic Background Engine & Realistic AI Voice Studio. / Estación de Contenido y Locución IA: 15 Fondos Estéticos Verticales y Estudio de Voz Neural Realista.",
     start_url: "/",
     display: "standalone",
-    background_color: "#09090b",
-    theme_color: "#09090b",
+    background_color: "#060608",
+    theme_color: "#060608",
     orientation: "portrait-primary",
     icons: [
       {

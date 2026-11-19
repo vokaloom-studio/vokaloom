@@ -133,10 +133,10 @@ export function PaywallModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="studio-deck relative max-h-[94vh] overflow-y-auto no-scrollbar border-white/[0.12] border-t-2 border-t-amber-500/80 bg-[#0B0C10] p-0 text-[#F4F4F5] shadow-2xl sm:max-w-xl">
+      <DialogContent className="studio-deck max-h-[94vh] overflow-y-auto border-white/[0.12] border-t-2 border-t-amber-500/80 bg-[#0B0C10] p-0 text-[#F4F4F5] sm:max-w-xl">
         <div className="space-y-3.5 p-4 sm:p-5">
           <DialogHeader className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2 pr-8 font-mono text-[11px]">
+            <div className="flex flex-wrap items-center gap-2 pr-10 font-mono text-[11px] md:pr-8">
               <span className="text-amber-400">{t("paywall.badgeTitle")}</span>
               <span className="text-zinc-600">·</span>
               {proActive ? (
@@ -174,7 +174,7 @@ export function PaywallModal({
               data-testid="currency-cop"
               onClick={() => setCurrency("cop")}
               aria-pressed={currency === "cop"}
-              className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
+              className={`min-h-10 rounded-md px-2.5 py-2 text-center font-mono text-[11px] font-medium transition-colors md:min-h-0 md:px-2 md:py-1.5 md:text-[10.5px] ${
                 currency === "cop"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
@@ -187,7 +187,7 @@ export function PaywallModal({
               data-testid="currency-usd"
               onClick={() => setCurrency("usd")}
               aria-pressed={currency === "usd"}
-              className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
+              className={`min-h-10 rounded-md px-2.5 py-2 text-center font-mono text-[11px] font-medium transition-colors md:min-h-0 md:px-2 md:py-1.5 md:text-[10.5px] ${
                 currency === "usd"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
@@ -238,7 +238,7 @@ export function PaywallModal({
                   primaryCheckout.fallbackUrl
                 )
               }
-              className="h-auto min-h-9.5 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400"
+              className="h-auto min-h-11 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:min-h-9.5"
             >
               <CreditCard className="mr-2 size-3.5 shrink-0" />
               <span>{primaryCheckout.buttonText}</span>
@@ -256,7 +256,7 @@ export function PaywallModal({
                   secondaryCheckout.fallbackUrl
                 )
               }
-              className="h-auto min-h-9 w-full whitespace-normal border-white/[0.1] bg-[#13151D] px-3 py-2 text-center text-xs font-semibold text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26]"
+              className="h-auto min-h-11 w-full whitespace-normal border-white/[0.1] bg-[#13151D] px-3 py-2 text-center text-xs font-semibold text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] md:min-h-9"
             >
               <CreditCard className="mr-2 size-3.5 shrink-0 text-[#8B8D98]" />
               <span>{secondaryCheckout.buttonText}</span>
@@ -281,7 +281,7 @@ export function PaywallModal({
               <KeyRound className="size-3.5 shrink-0 text-amber-400" />
               <span>{t("paywall.codeLabel")}</span>
             </label>
-            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="paywall-access-code"
                 data-testid="input-access-code"
@@ -289,14 +289,14 @@ export function PaywallModal({
                 onChange={(e) => setAccessCode(e.target.value)}
                 placeholder={t("paywall.codePlaceholder")}
                 disabled={isVerifying}
-                className="h-9 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-xs text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-amber-500/50"
+                className="h-11 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-9 md:text-xs"
               />
               <Button
                 type="submit"
                 data-testid="btn-unlock-code"
                 variant="secondary"
                 disabled={isVerifying}
-                className="h-9 shrink-0 border border-white/[0.12] bg-[#13151D] px-4 text-xs font-semibold text-[#F4F4F5] hover:border-white/[0.2] hover:bg-[#191c26]"
+                className="h-11 shrink-0 border border-white/[0.12] bg-[#13151D] px-4 text-xs font-semibold text-[#F4F4F5] hover:border-white/[0.2] hover:bg-[#191c26] md:h-9"
               >
                 {isVerifying ? (
                   <Loader2 className="size-3.5 animate-spin" />

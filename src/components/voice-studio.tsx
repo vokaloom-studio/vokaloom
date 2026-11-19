@@ -645,7 +645,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     key={sample.labelKey}
                     type="button"
                     onClick={() => handleSampleClick(sample)}
-                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors md:min-h-0 md:py-1 md:text-[11px] ${
                       isSelected
                         ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                         : "border-white/[0.08] bg-[#13151D]/70 text-[#8B8D98] hover:border-white/[0.15] hover:text-zinc-200"
@@ -690,7 +690,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               onChange={(e) => setText(e.target.value.slice(0, 1500))}
               rows={5}
               placeholder={t("voice.scriptPlaceholder")}
-              className="min-h-36 resize-y border-white/[0.08] bg-[#050507] text-sm leading-relaxed text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-amber-500/50"
+              className="min-h-36 resize-y border-white/[0.08] bg-[#050507] text-base leading-relaxed text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:text-sm"
             />
           </div>
         </div>
@@ -708,7 +708,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   if (val) setSelectedVoiceId(String(val));
                 }}
               >
-                <SelectTrigger className="h-9 w-full border-white/[0.08] bg-[#050507] text-xs text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-amber-500/50">
+                <SelectTrigger className="h-11 w-full border-white/[0.08] bg-[#050507] text-sm text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs">
                   <SelectValue>
                     {(val: string | null) => {
                       const preset =
@@ -741,7 +741,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 data-testid="btn-clone-toggle"
                 onClick={() => setCloneMode((prev) => !prev)}
                 aria-expanded={cloneMode}
-                className={`flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                className={`flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-sm font-medium transition-colors md:h-9 md:text-xs ${
                   cloneMode
                     ? "border-white/[0.14] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                     : "border-white/[0.08] bg-[#050507] text-[#8B8D98] hover:border-white/[0.14] hover:text-zinc-200"
@@ -831,7 +831,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             data-testid="btn-synthesize"
             onClick={handleSynthesize}
             disabled={isGenerating}
-            className="h-9.5 w-full border border-amber-400/60 bg-amber-500 px-3 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:text-sm"
+            className="h-11 w-full border border-amber-400/60 bg-amber-500 px-3 text-sm font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9.5"
           >
             {isGenerating ? (
               <>
@@ -939,17 +939,17 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   </div>
 
                   {/* Unified Transport Row: -5s / Play / +5s + Speed / Mute / Timecode */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2.5 md:pt-2">
+                    <div className="flex items-center gap-2 md:gap-1.5">
                       <button
                         type="button"
                         data-testid="btn-skip-back"
                         onClick={() => handleSkipSeconds(-5)}
                         aria-label={t("voice.skipBackAria")}
                         title={t("voice.skipBackAria")}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2 font-mono text-[10px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5]"
+                        className="inline-flex h-9.5 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2 md:text-[10px]"
                       >
-                        <RotateCcw className="size-3" />
+                        <RotateCcw className="size-3.5 md:size-3" />
                         <span>{t("voice.skipBackLabel")}</span>
                       </button>
 
@@ -963,12 +963,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         title={
                           isPlaying ? t("voice.pauseAria") : t("voice.playAria")
                         }
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-amber-400/60 bg-amber-500 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] transition-colors hover:bg-amber-400"
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-amber-400/60 bg-amber-500 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] transition-colors hover:bg-amber-400 md:size-8"
                       >
                         {isPlaying ? (
-                          <Pause className="size-3.5 fill-current" />
+                          <Pause className="size-4 fill-current md:size-3.5" />
                         ) : (
-                          <Play className="size-3.5 fill-current" />
+                          <Play className="size-4 fill-current md:size-3.5" />
                         )}
                       </button>
 
@@ -978,14 +978,14 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         onClick={() => handleSkipSeconds(5)}
                         aria-label={t("voice.skipForwardAria")}
                         title={t("voice.skipForwardAria")}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2 font-mono text-[10px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5]"
+                        className="inline-flex h-9.5 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2 md:text-[10px]"
                       >
                         <span>{t("voice.skipForwardLabel")}</span>
-                        <RotateCw className="size-3" />
+                        <RotateCw className="size-3.5 md:size-3" />
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2 md:gap-1.5">
                       <button
                         type="button"
                         data-testid="btn-speed-toggle"
@@ -1002,7 +1002,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                             ""
                           ),
                         })}
-                        className={`inline-flex h-7 items-center justify-center rounded border px-2 font-mono text-[10px] font-semibold tabular-nums transition-colors ${
+                        className={`inline-flex h-9.5 items-center justify-center rounded border px-2.5 font-mono text-[11px] font-semibold tabular-nums transition-colors md:h-7 md:px-2 md:text-[10px] ${
                           playbackSpeed !== 1.0
                             ? "border-amber-500/45 bg-amber-500/15 text-amber-300"
                             : "border-white/[0.08] bg-[#13151D] text-zinc-200 hover:border-white/[0.18]"
@@ -1021,16 +1021,16 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         title={
                           isMuted ? t("voice.unmuteAria") : t("voice.muteAria")
                         }
-                        className={`inline-flex size-7 items-center justify-center rounded border transition-colors ${
+                        className={`inline-flex size-9.5 items-center justify-center rounded border transition-colors md:size-7 ${
                           isMuted
                             ? "border-amber-500/45 bg-amber-500/15 text-amber-300"
                             : "border-white/[0.08] bg-[#13151D] text-zinc-300 hover:border-white/[0.18] hover:text-[#F4F4F5]"
                         }`}
                       >
                         {isMuted ? (
-                          <VolumeX className="size-3.5" />
+                          <VolumeX className="size-4 md:size-3.5" />
                         ) : (
-                          <Volume2 className="size-3.5" />
+                          <Volume2 className="size-4 md:size-3.5" />
                         )}
                       </button>
 
@@ -1089,7 +1089,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   type="button"
                   data-testid="btn-download-audio"
                   onClick={() => handleDownloadAudio(activeOutput)}
-                  className="h-9 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
+                  className="h-11 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400 md:h-9"
                 >
                   <Download className="mr-1.5 size-3.5 shrink-0" />
                   <span className="truncate">
@@ -1131,7 +1131,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 variant="ghost"
                 size="xs"
                 onClick={handleClearHistory}
-                className="h-6 px-2 text-[11px] text-[#8B8D98] hover:bg-[#13151D] hover:text-[#F4F4F5]"
+                className="h-8 px-2.5 text-[11px] text-[#8B8D98] hover:bg-[#13151D] hover:text-[#F4F4F5] md:h-6 md:px-2"
               >
                 <Trash2 className="mr-1 size-3" />
                 {t("voice.clearHistory")}
@@ -1145,7 +1145,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 {t("voice.historyEmpty")}
               </p>
             ) : (
-              <div className="no-scrollbar max-h-56 space-y-2 overflow-y-auto">
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                 {history.map((item, idx) => {
                   const isCurrent = activeOutput?.id === item.id;
                   return (
@@ -1170,32 +1170,32 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                           {item.text}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-2 md:gap-1.5">
                         <Button
                           type="button"
                           data-testid={`btn-replay-${idx}`}
-                          size="icon-xs"
+                          size="icon"
                           variant="outline"
                           disabled={!item.audioUrl}
                           onClick={() => handleReplayItem(item)}
                           title={t("voice.replayClipTitle")}
                           aria-label={t("voice.replayClipTitle")}
-                          className="border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-amber-500/45 hover:bg-[#181b25] hover:text-amber-300"
+                          className="size-9 border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-amber-500/45 hover:bg-[#181b25] hover:text-amber-300 md:size-8"
                         >
-                          <Play className="size-3" />
+                          <Play className="size-3.5" />
                         </Button>
                         <Button
                           type="button"
                           data-testid={`btn-download-history-${idx}`}
-                          size="icon-xs"
+                          size="icon"
                           variant="outline"
                           disabled={!item.audioUrl}
                           onClick={() => handleDownloadAudio(item)}
                           title={t("voice.downloadClipTitle")}
                           aria-label={t("voice.downloadClipTitle")}
-                          className="border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-emerald-500/45 hover:bg-[#181b25] hover:text-emerald-300"
+                          className="size-9 border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-emerald-500/45 hover:bg-[#181b25] hover:text-emerald-300 md:size-8"
                         >
-                          <Download className="size-3" />
+                          <Download className="size-3.5" />
                         </Button>
                       </div>
                     </div>

@@ -428,24 +428,24 @@ export default function VokaloomAdminPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#070709] text-[#f4f4f6]">
+    <div className="min-h-screen flex flex-col bg-[#060608] text-[#F4F4F5]">
       {/* Top Admin Header */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-[#070709]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#060608]/92 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/35 bg-emerald-500/10 text-emerald-400">
               <ShieldCheck className="size-4" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base font-bold tracking-tight text-white sm:text-lg">
+                <h1 className="font-heading text-base font-semibold tracking-tight text-[#F4F4F5] sm:text-lg">
                   {t("admin.headerTitle")}
                 </h1>
-                <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-[10px] text-emerald-300">
+                <Badge className="rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10px] font-medium text-emerald-400">
                   {t("admin.operatorConsoleBadge")}
                 </Badge>
               </div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-[#8B8D98]">
                 {t("admin.headerSubtitle")}
               </p>
             </div>
@@ -454,7 +454,11 @@ export default function VokaloomAdminPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
-              className="border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300"
+              className={
+                localQuota.isOperator
+                  ? "h-9 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2.5 font-mono text-[11px] font-medium text-emerald-400 md:h-7"
+                  : "h-9 rounded-md border border-white/[0.08] bg-[#050507] px-2.5 font-mono text-[11px] font-medium text-zinc-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] md:h-7"
+              }
             >
               {localQuota.isOperator
                 ? t("admin.browserModeOperator")
@@ -466,7 +470,7 @@ export default function VokaloomAdminPage() {
             <LanguageSwitcher />
             <Link
               href="/"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] md:h-7 md:px-2.5"
             >
               <ArrowLeft className="size-3.5 shrink-0" />
               <span>{t("admin.returnToStudio")}</span>
@@ -478,22 +482,22 @@ export default function VokaloomAdminPage() {
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-8 sm:px-6">
         {isCheckingSession ? (
           <div className="flex flex-1 items-center justify-center py-20">
-            <Loader2 className="size-6 animate-spin text-violet-400" />
+            <Loader2 className="size-6 animate-spin text-amber-400" />
           </div>
         ) : !isAuthenticated ? (
           /* Admin Login Gate */
           <div className="mx-auto my-auto w-full max-w-md py-12">
-            <Card className="border-zinc-800 bg-zinc-900/60 text-zinc-100 shadow-2xl">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_64px_-12px_rgba(0,0,0,0.85)]">
               <CardHeader className="space-y-2 text-center">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-violet-500/30 bg-violet-500/15 text-violet-300">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/10 text-amber-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <Lock className="size-6" />
                 </div>
-                <CardTitle className="text-lg font-bold text-white">
+                <CardTitle className="font-heading text-lg font-semibold text-[#F4F4F5]">
                   {t("admin.loginTitle")}
                 </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.loginDescBefore")}{" "}
-                  <code className="text-zinc-300">ADMIN_MASTER_KEY</code>{" "}
+                  <code className="text-zinc-200">ADMIN_MASTER_KEY</code>{" "}
                   {t("admin.loginDescAfter")}
                 </CardDescription>
               </CardHeader>
@@ -512,13 +516,13 @@ export default function VokaloomAdminPage() {
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
                       placeholder={t("admin.passwordPlaceholder")}
-                      className="h-10 border-zinc-800 bg-zinc-950 font-mono text-sm text-white"
+                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-10 md:text-sm"
                     />
                   </div>
                   <Button
                     type="submit"
                     disabled={isLoggingIn}
-                    className="h-10 w-full bg-violet-600 text-sm font-semibold text-white hover:bg-violet-500"
+                    className="h-11 w-full border border-amber-400/60 bg-amber-500 text-sm font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-10"
                   >
                     {isLoggingIn ? (
                       <>
@@ -544,10 +548,10 @@ export default function VokaloomAdminPage() {
           /* 5 Administrative Control Cards */
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Card 1: API & AI Engine Health Status */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
+                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
                     <Activity className="size-4 shrink-0 text-emerald-400" />
                     <span>{t("admin.card1Title")}</span>
                   </CardTitle>
@@ -557,7 +561,7 @@ export default function VokaloomAdminPage() {
                     size="xs"
                     onClick={() => void fetchAdminStatus()}
                     disabled={isRefreshingHealth}
-                    className="border-zinc-700 bg-zinc-950 text-zinc-300 hover:bg-zinc-800"
+                    className="h-9 border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
                   >
                     <RefreshCw
                       className={`mr-1.5 size-3 ${
@@ -567,7 +571,7 @@ export default function VokaloomAdminPage() {
                     {t("admin.refreshHealth")}
                   </Button>
                 </div>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.card1Desc")}
                 </CardDescription>
               </CardHeader>
@@ -575,23 +579,23 @@ export default function VokaloomAdminPage() {
                 {engineList.map((eng) => (
                   <div
                     key={eng.key}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/80 px-3.5 py-2.5"
+                    className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3.5 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-zinc-100">
+                      <p className="text-xs font-semibold text-[#F4F4F5]">
                         {eng.name}
                       </p>
-                      <p className="font-mono text-[10px] text-zinc-500">
+                      <p className="font-mono text-[10px] text-[#8B8D98]">
                         {t("admin.envLabel", { envVar: eng.envVar })}
                       </p>
                     </div>
                     {eng.active ? (
-                      <Badge className="shrink-0 border border-emerald-500/30 bg-emerald-500/15 text-[11px] font-semibold text-emerald-300">
+                      <Badge className="shrink-0 rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10.5px] font-medium text-emerald-400">
                         <CheckCircle2 className="mr-1 size-3" />
                         {t("admin.statusActive")}
                       </Badge>
                     ) : (
-                      <Badge className="shrink-0 border border-amber-500/30 bg-amber-500/15 text-[11px] font-semibold text-amber-300">
+                      <Badge className="shrink-0 rounded-md border border-amber-500/35 bg-amber-500/10 font-mono text-[10.5px] font-medium text-amber-300">
                         <AlertTriangle className="mr-1 size-3" />
                         {t("admin.statusFallback")}
                       </Badge>
@@ -602,13 +606,13 @@ export default function VokaloomAdminPage() {
             </Card>
 
             {/* Card 2: Runtime API Keys Vault (AES-256-GCM HttpOnly Cookie + Local Dev .env.local) */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <KeyRound className="size-4 shrink-0 text-violet-400" />
+                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                  <KeyRound className="size-4 shrink-0 text-amber-400" />
                   <span>{t("admin.vault.title")}</span>
                 </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.vault.desc")}
                 </CardDescription>
               </CardHeader>
@@ -621,16 +625,16 @@ export default function VokaloomAdminPage() {
                         <div className="flex flex-wrap items-center justify-between gap-1.5">
                           <label
                             htmlFor={`vault-${keyName}`}
-                            className="font-mono text-[11px] font-semibold text-zinc-200"
+                            className="font-mono text-[11px] font-semibold text-[#F4F4F5]"
                           >
                             {keyName}{" "}
-                            <span className="font-sans font-normal text-zinc-500">
+                            <span className="font-sans font-normal text-[#8B8D98]">
                               · {serviceHint}
                             </span>
                           </label>
                           {masked ? (
-                            <div className="flex items-center gap-1">
-                              <Badge className="border border-emerald-500/30 bg-emerald-500/15 font-mono text-[10px] text-emerald-300">
+                            <div className="flex items-center gap-1.5">
+                              <Badge className="rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10px] text-emerald-400">
                                 {t("admin.vault.activeBadge", { masked })}
                               </Badge>
                               <button
@@ -645,15 +649,15 @@ export default function VokaloomAdminPage() {
                                 aria-label={t("admin.vault.clearSingleTitle", {
                                   keyName,
                                 })}
-                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                                className="inline-flex size-8 items-center justify-center rounded-md border border-white/[0.08] bg-[#13151D] text-[#8B8D98] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:size-7"
                               >
-                                <X className="size-3" />
+                                <X className="size-3.5" />
                               </button>
                             </div>
                           ) : (
                             <Badge
                               variant="outline"
-                              className="border-zinc-700 bg-zinc-950 font-mono text-[10px] text-zinc-400"
+                              className="rounded-md border-white/[0.08] bg-[#050507] font-mono text-[10px] text-[#8B8D98]"
                             >
                               {t("admin.vault.unsetBadge")}
                             </Badge>
@@ -671,7 +675,7 @@ export default function VokaloomAdminPage() {
                             }))
                           }
                           placeholder={t("admin.vault.placeholder")}
-                          className="h-8 border-zinc-800 bg-zinc-950 font-mono text-xs text-white placeholder:text-zinc-600"
+                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-8 md:text-xs"
                         />
                       </div>
                     );
@@ -681,7 +685,7 @@ export default function VokaloomAdminPage() {
                     <Button
                       type="submit"
                       disabled={isSavingVault}
-                      className="h-9 min-w-0 flex-1 bg-violet-600 text-xs font-semibold text-white hover:bg-violet-500"
+                      className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
                     >
                       {isSavingVault ? (
                         <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -699,12 +703,12 @@ export default function VokaloomAdminPage() {
                       variant="outline"
                       disabled={isClearingVault}
                       onClick={() => void handleClearVault()}
-                      className="h-9 shrink-0 border-zinc-700 bg-zinc-950 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                      className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-9"
                     >
                       {isClearingVault ? (
                         <Loader2 className="mr-1.5 size-3.5 animate-spin" />
                       ) : (
-                        <Trash2 className="mr-1.5 size-3.5 text-amber-400" />
+                        <Trash2 className="mr-1.5 size-3.5 text-[#8B8D98]" />
                       )}
                       {t("admin.vault.clearButton")}
                     </Button>
@@ -714,13 +718,13 @@ export default function VokaloomAdminPage() {
             </Card>
 
             {/* Card 3: Commercial & Paywall Configuration */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <DollarSign className="size-4 shrink-0 text-violet-400" />
+                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                  <DollarSign className="size-4 shrink-0 text-amber-400" />
                   <span>{t("admin.card2Title")}</span>
                 </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.card2Desc")}
                 </CardDescription>
               </CardHeader>
@@ -746,7 +750,7 @@ export default function VokaloomAdminPage() {
                             priceCop: e.target.value,
                           })
                         }
-                        className="h-9 border-zinc-800 bg-zinc-950 text-xs text-white"
+                        className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
                       />
                     </div>
                     <div className="space-y-1">
@@ -765,7 +769,7 @@ export default function VokaloomAdminPage() {
                             priceUsd: e.target.value,
                           })
                         }
-                        className="h-9 border-zinc-800 bg-zinc-950 text-xs text-white"
+                        className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
                       />
                     </div>
                     <div className="space-y-1">
@@ -790,7 +794,7 @@ export default function VokaloomAdminPage() {
                             ),
                           })
                         }
-                        className="h-9 border-zinc-800 bg-zinc-950 text-xs text-white"
+                        className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
                       />
                     </div>
                   </div>
@@ -811,7 +815,7 @@ export default function VokaloomAdminPage() {
                           checkoutUrlCop: e.target.value,
                         })
                       }
-                      className="h-9 border-zinc-800 bg-zinc-950 font-mono text-xs text-white"
+                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
                     />
                   </div>
 
@@ -831,13 +835,13 @@ export default function VokaloomAdminPage() {
                           checkoutUrlUsd: e.target.value,
                         })
                       }
-                      className="h-9 border-zinc-800 bg-zinc-950 font-mono text-xs text-white"
+                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
                     />
                   </div>
 
                   <Button
                     type="submit"
-                    className="h-9 w-full bg-violet-600 text-xs font-semibold text-white hover:bg-violet-500"
+                    className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
                   >
                     <span className="truncate">
                       {t("admin.saveSettingsButton")}
@@ -848,13 +852,13 @@ export default function VokaloomAdminPage() {
             </Card>
 
             {/* Card 4: Client Access Links & WhatsApp Invite Generator */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <Share2 className="size-4 shrink-0 text-violet-400" />
+                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                  <Share2 className="size-4 shrink-0 text-amber-400" />
                   <span>{t("admin.card3Title")}</span>
                 </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.card3Desc")}
                 </CardDescription>
               </CardHeader>
@@ -862,18 +866,18 @@ export default function VokaloomAdminPage() {
                 <div className="space-y-2">
                   <span className="text-xs font-medium text-zinc-300">
                     {t("admin.vipCodesLabelBefore")}
-                    <code className="text-zinc-400">VIP_CLIENT_CODES</code>
+                    <code className="text-[#8B8D98]">VIP_CLIENT_CODES</code>
                     {t("admin.vipCodesLabelAfter")}
                   </span>
                   <div className="space-y-2">
                     {vipCodes.map((code) => (
                       <div
                         key={code}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2"
+                        className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <Sparkles className="size-3.5 shrink-0 text-violet-400" />
-                          <code className="truncate text-xs font-semibold text-violet-200">
+                          <Sparkles className="size-3.5 shrink-0 text-amber-400" />
+                          <code className="truncate text-xs font-semibold text-[#F4F4F5]">
                             {code}
                           </code>
                         </div>
@@ -882,7 +886,7 @@ export default function VokaloomAdminPage() {
                           size="xs"
                           variant="secondary"
                           onClick={() => void handleCopyInviteLink(code)}
-                          className="shrink-0 border border-violet-500/30 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25"
+                          className="h-9 shrink-0 border border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
                         >
                           <Copy className="mr-1.5 size-3" />
                           {t("admin.copyInviteButton")}
@@ -892,20 +896,20 @@ export default function VokaloomAdminPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+                <div className="studio-well space-y-1.5 rounded-lg p-3">
                   <label
                     htmlFor="admin-custom-invite"
                     className="text-xs font-medium text-zinc-300"
                   >
                     {t("admin.customInviteLabel")}
                   </label>
-                  <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
                       id="admin-custom-invite"
                       value={customInviteCode}
                       onChange={(e) => setCustomInviteCode(e.target.value)}
                       placeholder={t("admin.customInvitePlaceholder")}
-                      className="h-8 min-w-0 flex-1 border-zinc-800 bg-zinc-900 font-mono text-xs text-white"
+                      className="h-11 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-8 md:text-xs"
                     />
                     <Button
                       type="button"
@@ -914,7 +918,7 @@ export default function VokaloomAdminPage() {
                       onClick={() =>
                         void handleCopyInviteLink(customInviteCode)
                       }
-                      className="h-8 shrink-0 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
+                      className="h-11 shrink-0 border border-white/[0.12] bg-[#13151D] px-3 text-xs font-semibold text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-white/[0.2] hover:bg-[#191c26] md:h-8"
                     >
                       <Copy className="mr-1.5 size-3.5" />
                       {t("admin.copyInviteButton")}
@@ -925,13 +929,13 @@ export default function VokaloomAdminPage() {
             </Card>
 
             {/* Card 5: Operator Sandbox & Device Controls */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100 lg:col-span-2">
+            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5] lg:col-span-2">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
+                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
                   <Sliders className="size-4 shrink-0 text-emerald-400" />
                   <span>{t("admin.card4Title")}</span>
                 </CardTitle>
-                <CardDescription className="text-xs text-zinc-400">
+                <CardDescription className="text-xs text-[#8B8D98]">
                   {t("admin.card4Desc")}
                 </CardDescription>
               </CardHeader>
@@ -939,7 +943,7 @@ export default function VokaloomAdminPage() {
                 <Button
                   type="button"
                   onClick={handleEnableOperatorBrowser}
-                  className="h-auto min-h-9 w-full justify-start whitespace-normal bg-emerald-600 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-500"
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border border-emerald-400/50 bg-emerald-500 py-2 text-left text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400 md:min-h-9"
                 >
                   <UserCheck className="mr-2 size-4 shrink-0" />
                   <span>{t("admin.enableOperatorButton")}</span>
@@ -949,9 +953,9 @@ export default function VokaloomAdminPage() {
                   type="button"
                   variant="outline"
                   onClick={handleSwitchToNormalClientView}
-                  className="h-auto min-h-9 w-full justify-start whitespace-normal border-zinc-700 bg-zinc-950 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] py-2 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-9"
                 >
-                  <Eye className="mr-2 size-4 shrink-0 text-amber-400" />
+                  <Eye className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
                   <span>{t("admin.switchClientButton")}</span>
                 </Button>
 
@@ -959,9 +963,9 @@ export default function VokaloomAdminPage() {
                   type="button"
                   variant="outline"
                   onClick={handleResetLocalTrial}
-                  className="h-auto min-h-9 w-full justify-start whitespace-normal border-zinc-700 bg-zinc-950 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] py-2 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-9"
                 >
-                  <RotateCcw className="mr-2 size-4 shrink-0 text-violet-400" />
+                  <RotateCcw className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
                   <span>
                     {t("admin.resetTrialButton", {
                       max: businessForm.maxTrialCredits,
@@ -971,7 +975,7 @@ export default function VokaloomAdminPage() {
 
                 <Link
                   href="/"
-                  className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/25 hover:text-white"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.12] bg-[#13151D] px-3 py-2 text-xs font-semibold text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.2] hover:bg-[#191c26] md:min-h-9"
                 >
                   <ArrowLeft className="size-4 shrink-0" />
                   <span>{t("admin.returnToStudio")}</span>

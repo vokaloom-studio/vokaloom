@@ -48,9 +48,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${inter.variable} ${jetbrainsMono.variable} dark h-full antialiased no-scrollbar`}
+      className={`${plusJakartaSans.variable} ${inter.variable} ${jetbrainsMono.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-chassis text-foreground font-sans antialiased tracking-tight no-scrollbar selection:bg-amber-500/25 selection:text-amber-100">
+      <body className="min-h-full flex flex-col bg-chassis text-foreground font-sans antialiased tracking-tight selection:bg-amber-500/25 selection:text-amber-100">
         <LocaleProvider>
           {children}
           <Toaster theme="dark" richColors position="bottom-right" />

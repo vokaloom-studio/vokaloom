@@ -12,7 +12,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       role="group"
       aria-label={t("switcher.ariaLabel")}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center rounded-md border border-zinc-800/80 bg-[#0c0c10] p-0.5 font-mono text-[11px]",
+        "inline-flex h-9 shrink-0 items-center rounded-md border border-white/[0.08] bg-[#050507] p-0.5 font-mono text-[11px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] md:h-7",
         className
       )}
     >
@@ -23,10 +23,10 @@ export function LanguageSwitcher({ className }: { className?: string }) {
         aria-pressed={locale === "en"}
         title={t("switcher.enTitle")}
         className={cn(
-          "inline-flex h-5.5 items-center justify-center rounded-[4px] px-1.5 font-medium tracking-tight transition-colors",
+          "inline-flex h-full min-w-8 items-center justify-center rounded-[4px] px-2 font-medium tracking-tight transition-colors md:min-w-0 md:px-1.5",
           locale === "en"
-            ? "bg-zinc-100 text-zinc-950"
-            : "text-zinc-400 hover:text-zinc-100"
+            ? "bg-[#F4F4F5] text-[#09090B]"
+            : "text-[#8B8D98] hover:text-[#F4F4F5]"
         )}
       >
         EN
@@ -38,10 +38,10 @@ export function LanguageSwitcher({ className }: { className?: string }) {
         aria-pressed={locale === "es"}
         title={t("switcher.esTitle")}
         className={cn(
-          "inline-flex h-5.5 items-center justify-center rounded-[4px] px-1.5 font-medium tracking-tight transition-colors",
+          "inline-flex h-full min-w-8 items-center justify-center rounded-[4px] px-2 font-medium tracking-tight transition-colors md:min-w-0 md:px-1.5",
           locale === "es"
-            ? "bg-zinc-100 text-zinc-950"
-            : "text-zinc-400 hover:text-zinc-100"
+            ? "bg-[#F4F4F5] text-[#09090B]"
+            : "text-[#8B8D98] hover:text-[#F4F4F5]"
         )}
       >
         ES

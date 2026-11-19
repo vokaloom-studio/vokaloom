@@ -1118,7 +1118,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     type="button"
                     onClick={() => handleVibeSelect(vibe.value)}
                     aria-pressed={isActive}
-                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                    className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors md:min-h-0 md:px-2 md:py-1 md:text-[11px] ${
                       isActive
                         ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                         : "border-white/[0.08] bg-[#13151D]/70 text-[#8B8D98] hover:border-white/[0.15] hover:text-zinc-200"
@@ -1139,7 +1139,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               {t("bg.sceneLabel")}
             </label>
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#8B8D98]" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8B8D98] md:left-2.5 md:size-3.5" />
               <Input
                 id="aesthetic-search-input"
                 data-testid="input-scene-query"
@@ -1152,7 +1152,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   }
                 }}
                 placeholder={t("bg.searchPlaceholder")}
-                className="h-8 border-white/[0.08] bg-[#050507] pl-8 pr-7 text-xs text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-amber-500/50"
+                className="h-11 border-white/[0.08] bg-[#050507] pl-9 pr-10 text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-8 md:pl-8 md:pr-7 md:text-xs"
               />
               {query && (
                 <button
@@ -1160,9 +1160,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   onClick={() => setQuery("")}
                   aria-label={t("bg.clearSearchAria")}
                   title={t("bg.clearSearchAria")}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-[#8B8D98] hover:text-[#F4F4F5]"
+                  className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded text-[#8B8D98] hover:text-[#F4F4F5] md:right-2 md:size-5"
                 >
-                  <X className="size-3" />
+                  <X className="size-3.5 md:size-3" />
                 </button>
               )}
             </div>
@@ -1175,7 +1175,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               data-testid="btn-generate"
               onClick={handleGenerateClick}
               disabled={isLoading}
-              className="h-8.5 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400"
+              className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-8.5"
             >
               {isLoading ? (
                 <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -1198,7 +1198,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 count: batchSize,
                 page: page + 1,
               })}
-              className="h-8.5 shrink-0 border-white/[0.1] bg-[#13151D] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/[0.2] hover:bg-[#191c26]"
+              className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.2] hover:bg-[#191c26] md:h-8.5 md:px-2.5"
             >
               <Shuffle className="mr-1.5 size-3.5 shrink-0 text-[#8B8D98]" />
               <span>{t("bg.shuffleButton", { page: page + 1 })}</span>
@@ -1260,11 +1260,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <button
                   type="button"
                   onClick={handleClearMyModel}
-                  className="shrink-0 rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
                   title={t("bg.model.removeTitle")}
                   aria-label={t("bg.model.removeTitle")}
                 >
-                  <X className="size-3" />
+                  <X className="size-3.5 md:size-3" />
                 </button>
               </div>
             )}
@@ -1318,11 +1318,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <button
                   type="button"
                   onClick={handleClearReference}
-                  className="shrink-0 rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
                   title={t("bg.removeReferenceTitle")}
                   aria-label={t("bg.removeReferenceTitle")}
                 >
-                  <X className="size-3" />
+                  <X className="size-3.5 md:size-3" />
                 </button>
               </div>
             )}
@@ -1387,7 +1387,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               <div
                 role="group"
                 aria-label={t("bg.batch.label")}
-                className="studio-well inline-flex h-6 items-center rounded p-0.5 font-mono text-[10px]"
+                className="studio-well inline-flex h-8 items-center rounded p-0.5 font-mono text-[11px] md:h-6 md:text-[10px]"
               >
                 <button
                   type="button"
@@ -1395,7 +1395,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   onClick={() => handleBatchSizeChange(5)}
                   aria-pressed={batchSize === 5}
                   aria-label={t("bg.batch.fast5")}
-                  className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
+                  className={`inline-flex h-full items-center rounded-[3px] px-2 font-medium transition-colors md:px-1.5 ${
                     batchSize === 5
                       ? "bg-[#F4F4F5] text-[#09090B]"
                       : "text-[#8B8D98] hover:text-[#F4F4F5]"
@@ -1409,7 +1409,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   onClick={() => handleBatchSizeChange(15)}
                   aria-pressed={batchSize === 15}
                   aria-label={t("bg.batch.full15")}
-                  className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
+                  className={`inline-flex h-full items-center rounded-[3px] px-2 font-medium transition-colors md:px-1.5 ${
                     batchSize === 15
                       ? "bg-[#F4F4F5] text-[#09090B]"
                       : "text-[#8B8D98] hover:text-[#F4F4F5]"
@@ -1428,7 +1428,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 onClick={() => setShowSafeZones((prev) => !prev)}
                 aria-pressed={showSafeZones}
                 title={t("bg.safeZonesTitle")}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px] font-medium transition-colors ${
+                className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[11px] font-medium transition-colors md:h-7 md:px-2 ${
                   showSafeZones
                     ? "border-amber-500/50 bg-amber-500/15 text-amber-300"
                     : "border-white/[0.09] bg-[#13151D] text-zinc-300 hover:border-white/[0.18] hover:text-[#F4F4F5]"
@@ -1443,7 +1443,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   type="button"
                   data-testid="btn-clear-selection"
                   onClick={handleClearSelection}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 font-mono text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/20"
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-amber-500/35 bg-amber-500/10 px-2.5 font-mono text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/20 md:h-7 md:px-2"
                 >
                   <span>
                     {t("bg.clearSelectionButton", { count: selectedCount })}
@@ -1458,7 +1458,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 data-testid="btn-export-zip"
                 onClick={handleDownloadAllZip}
                 disabled={isZipping || items.length === 0}
-                className={`h-7 max-w-full shrink-0 border px-2.5 text-xs font-semibold transition-colors ${
+                className={`h-9 max-w-full shrink-0 border px-3 text-xs font-semibold transition-colors md:h-7 md:px-2.5 ${
                   selectedCount > 0
                     ? "border-emerald-400/60 bg-emerald-500 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
                     : "border-emerald-500/35 bg-emerald-500/12 text-emerald-300 hover:bg-emerald-500/22 hover:text-emerald-200"
@@ -1573,7 +1573,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                         e.stopPropagation();
                         handleToggleSelectFrame(item.id);
                       }}
-                      className={`pointer-events-auto inline-flex size-6 items-center justify-center rounded-md border transition-all ${
+                      className={`pointer-events-auto inline-flex size-7 items-center justify-center rounded-md border transition-all sm:size-6 ${
                         isSelected
                           ? "border-amber-300 bg-amber-500 text-zinc-950 shadow-sm"
                           : "border-white/25 bg-black/60 text-zinc-200 opacity-85 hover:border-amber-400/75 hover:bg-black/80 hover:opacity-100 sm:opacity-70 sm:group-hover:opacity-100"
@@ -1659,7 +1659,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                             photographer: item.photographer,
                           })}
                           title={t("bg.placeModelTitle", { index: index + 1 })}
-                          className="inline-flex h-7 items-center gap-1 rounded bg-amber-500 px-2 text-[10px] font-semibold text-zinc-950 active:scale-95"
+                          className="inline-flex h-8 items-center gap-1 rounded bg-amber-500 px-2.5 text-[10px] font-semibold text-zinc-950 active:scale-95"
                         >
                           {swappingItemId === item.id ? (
                             <Loader2 className="size-3 animate-spin" />
@@ -1679,7 +1679,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                           title={t("bg.downloadSingleTitle", {
                             index: index + 1,
                           })}
-                          className="inline-flex size-7 shrink-0 items-center justify-center rounded border border-white/[0.16] bg-[#0B0C10]/90 text-[#F4F4F5] hover:bg-[#F4F4F5] hover:text-zinc-950"
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded border border-white/[0.16] bg-[#0B0C10]/90 text-[#F4F4F5] hover:bg-[#F4F4F5] hover:text-zinc-950"
                         >
                           {downloadingId === item.id ? (
                             <Loader2 className="size-3 animate-spin" />
@@ -1701,7 +1701,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
         <DialogContent
           data-testid="dialog-model-swap"
-          className="studio-deck border-white/[0.12] bg-[#0B0C10] p-5 text-[#F4F4F5] shadow-2xl sm:max-w-md"
+          className="studio-deck border-white/[0.12] bg-[#0B0C10] p-5 text-[#F4F4F5] sm:max-w-md"
         >
           <DialogHeader className="space-y-1 pr-6">
             <div className="flex flex-wrap items-center gap-2">
@@ -1806,7 +1806,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   type="button"
                   data-testid="btn-download-composite"
                   onClick={handleDownloadSwapResult}
-                  className="h-9 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
+                  className="h-11 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400 md:h-9"
                 >
                   <Download className="mr-1.5 size-4 shrink-0" />
                   <span>{t("bg.swapModal.downloadButton")}</span>

@@ -171,7 +171,7 @@ export default function VokaloomStudioPage() {
 
             {/* Zone 2 (Center): Crisp Segmented Mode Switcher */}
             <div className="order-3 w-full border-t border-white/[0.06] pt-2 lg:order-2 lg:w-auto lg:border-0 lg:pt-0">
-              <TabsList className="grid h-8.5 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-0.5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] lg:inline-flex lg:w-auto">
+              <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-0.5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] md:h-8.5 lg:inline-flex lg:w-auto">
                 <TabsTrigger
                   value="backgrounds"
                   data-testid="tab-backgrounds"
@@ -206,7 +206,7 @@ export default function VokaloomStudioPage() {
                   data-testid={
                     isAdminOperator ? "badge-operator" : "badge-pro-pass"
                   }
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-400"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-400 md:h-7"
                 >
                   <ShieldCheck className="size-3 shrink-0" />
                   <span>
@@ -222,7 +222,7 @@ export default function VokaloomStudioPage() {
                     remaining: quota.creditsRemaining,
                     max: quota.maxTrialCredits,
                   })}
-                  className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px] font-medium tabular-nums shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] ${
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px] font-medium tabular-nums shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] md:h-7 ${
                     quota.creditsRemaining > 0
                       ? "border-white/[0.08] bg-[#050507] text-zinc-200"
                       : "border-amber-500/40 bg-amber-500/10 text-amber-300"
@@ -255,7 +255,7 @@ export default function VokaloomStudioPage() {
                   data-testid="link-admin"
                   title={t("page.adminTitle")}
                   aria-label={t("page.adminTitle")}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-2.5 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26]"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-2.5 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] md:h-7"
                 >
                   <Settings className="size-3.5 text-amber-400" />
                   <span className="hidden sm:inline">{t("page.adminLink")}</span>
@@ -267,7 +267,7 @@ export default function VokaloomStudioPage() {
                   onClick={() => setIsPaywallOpen(true)}
                   title={t("page.upgradeButton")}
                   aria-label={t("page.upgradeButton")}
-                  className="h-7 rounded-md border border-amber-400/60 bg-amber-500 px-2 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:px-2.5"
+                  className="h-9 rounded-md border border-amber-400/60 bg-amber-500 px-2.5 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-7"
                 >
                   <Crown className="size-3.5 sm:mr-1" />
                   <span className="hidden sm:inline">
@@ -309,7 +309,7 @@ export default function VokaloomStudioPage() {
             onClick={handleInstallPwa}
             title={t("page.installAppButton")}
             aria-label={t("page.installAppButton")}
-            className="h-5.5 shrink-0 rounded border-white/[0.1] bg-[#13151D] px-2 font-mono text-[10px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200"
+            className="h-8 shrink-0 rounded border-white/[0.1] bg-[#13151D] px-2.5 font-mono text-[10px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200 md:h-5.5 md:px-2"
           >
             <Download className="size-3" />
             <span>{t("page.installAppButton")}</span>
