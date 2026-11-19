@@ -376,8 +376,24 @@ export function isValidSecretValue(
   return true;
 }
 
+const SECRET_KEY_SET = new Set<string>(SECRET_KEY_NAMES);
+
+export interface VaultState {
+  secrets: Partial<Record<SecretKeyName, string>>;
+  cleared: SecretKeyName[];
+}
+
+export interface PersistLocalEnvOptions {
+  /**
+   * Only delete cleared keys from `.env.local` when explicitly requested.
+   * Defaults to false so runtime browser-session CLEAR keeps on-disk keys intact.
+   */
+  allowClearFromDisk?: boolean;
+}
+
 export function encryptSecretsPayload(
-  secrets: Partial<Record<SecretKeyName, string>>
+  secrets: Partial<Record<SecretKeyName, string>>,
+  clearedKeys: readonly SecretKeyName[] = []
 ): string {
   const sanitized: Partial<Record<SecretKeyName, string>> = {};
   for (const name of SECRET_KEY_NAMES) {
@@ -387,33 +403,50 @@ export function encryptSecretsPayload(
     }
   }
 
+  const sanitizedCleared: SecretKeyName[] = [];
+  const seenCleared = new Set<string>();
+  for (const name of clearedKeys) {
+    if (
+      SECRET_KEY_SET.has(name) &&
+      !sanitized[name] &&
+      !seenCleared.has(name)
+    ) {
+      seenCleared.add(name);
+      sanitizedCleared.push(name);
+    }
+  }
+
+  const payloadObj: Record<string, unknown> = { ...sanitized };
+  if (sanitizedCleared.length > 0) {
+    payloadObj.__cleared = sanitizedCleared;
+  }
+
   const key = deriveAesKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const plaintext = Buffer.from(JSON.stringify(sanitized), "utf8");
+  const plaintext = Buffer.from(JSON.stringify(payloadObj), "utf8");
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   return `${iv.toString("base64url")}.${authTag.toString("base64url")}.${encrypted.toString("base64url")}`;
 }
 
-export function decryptSecretsPayload(
-  token: string
-): Partial<Record<SecretKeyName, string>> {
+export function decryptVaultStatePayload(token: string): VaultState {
+  const empty: VaultState = { secrets: {}, cleared: [] };
   if (!token || typeof token !== "string") {
-    return {};
+    return empty;
   }
 
   try {
     const parts = token.split(".");
-    if (parts.length !== 3) return {};
+    if (parts.length !== 3) return empty;
 
     const iv = Buffer.from(parts[0], "base64url");
     const authTag = Buffer.from(parts[1], "base64url");
     const ciphertext = Buffer.from(parts[2], "base64url");
 
     if (iv.length !== 12 || authTag.length !== 16) {
-      return {};
+      return empty;
     }
 
     const decipher = crypto.createDecipheriv("aes-256-gcm", deriveAesKey(), iv);
@@ -427,41 +460,72 @@ export function decryptSecretsPayload(
       string,
       unknown
     >;
-    if (!parsed || typeof parsed !== "object") return {};
+    if (!parsed || typeof parsed !== "object") return empty;
 
-    const result: Partial<Record<SecretKeyName, string>> = {};
+    const secrets: Partial<Record<SecretKeyName, string>> = {};
     for (const name of SECRET_KEY_NAMES) {
       const val = parsed[name];
       if (typeof val === "string" && isValidSecretValue(val, name)) {
-        result[name] = val.trim();
+        secrets[name] = val.trim();
       }
     }
-    return result;
+
+    const cleared: SecretKeyName[] = [];
+    const seenCleared = new Set<string>();
+    if (Array.isArray(parsed.__cleared)) {
+      for (const rawKey of parsed.__cleared) {
+        if (
+          typeof rawKey === "string" &&
+          SECRET_KEY_SET.has(rawKey) &&
+          !secrets[rawKey as SecretKeyName] &&
+          !seenCleared.has(rawKey)
+        ) {
+          seenCleared.add(rawKey);
+          cleared.push(rawKey as SecretKeyName);
+        }
+      }
+    }
+
+    return { secrets, cleared };
   } catch {
-    return {};
+    return empty;
+  }
+}
+
+export function decryptSecretsPayload(
+  token: string
+): Partial<Record<SecretKeyName, string>> {
+  return decryptVaultStatePayload(token).secrets;
+}
+
+export async function getVaultStateFromCookie(): Promise<VaultState> {
+  try {
+    const cookieStore = await cookies();
+    const rawToken = cookieStore.get(VAULT_COOKIE_NAME)?.value;
+    if (!rawToken) return { secrets: {}, cleared: [] };
+    return decryptVaultStatePayload(rawToken);
+  } catch {
+    return { secrets: {}, cleared: [] };
   }
 }
 
 export async function getVaultSecretsFromCookie(): Promise<
   Partial<Record<SecretKeyName, string>>
 > {
-  try {
-    const cookieStore = await cookies();
-    const rawToken = cookieStore.get(VAULT_COOKIE_NAME)?.value;
-    if (!rawToken) return {};
-    return decryptSecretsPayload(rawToken);
-  } catch {
-    return {};
-  }
+  return (await getVaultStateFromCookie()).secrets;
 }
 
-export async function resolveApiKey(
-  name: SecretKeyName
-): Promise<string | undefined> {
-  const vault = await getVaultSecretsFromCookie();
-  const vaultVal = vault[name];
+export function resolveSecretValueForState(
+  name: SecretKeyName,
+  vault: VaultState
+): string | undefined {
+  const vaultVal = vault.secrets[name];
   if (isValidSecretValue(vaultVal, name)) {
     return vaultVal.trim();
+  }
+
+  if (vault.cleared.includes(name)) {
+    return undefined;
   }
 
   const envVal = process.env[name]?.trim();
@@ -470,6 +534,13 @@ export async function resolveApiKey(
   }
 
   return undefined;
+}
+
+export async function resolveApiKey(
+  name: SecretKeyName
+): Promise<string | undefined> {
+  const vault = await getVaultStateFromCookie();
+  return resolveSecretValueForState(name, vault);
 }
 
 export function maskSecret(val: string | undefined): string | null {
@@ -496,9 +567,31 @@ function withEnvWriteLock<T>(fn: () => Promise<T>): Promise<T> {
 
 export async function persistLocalEnvIfDev(
   updates: Partial<Record<SecretKeyName, string>>,
-  keysToClear: SecretKeyName[] = []
+  keysToClear: SecretKeyName[] = [],
+  options: PersistLocalEnvOptions = {}
 ): Promise<boolean> {
   if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
+  const remainingKeys = new Set<SecretKeyName>();
+  for (const name of SECRET_KEY_NAMES) {
+    const val = updates[name]?.trim();
+    if (val && isValidSecretValue(val, name)) {
+      remainingKeys.add(name);
+    }
+  }
+
+  const clearSet = new Set<SecretKeyName>();
+  if (options.allowClearFromDisk === true) {
+    for (const rawKey of keysToClear) {
+      if (SECRET_KEY_SET.has(rawKey) && !remainingKeys.has(rawKey)) {
+        clearSet.add(rawKey);
+      }
+    }
+  }
+
+  if (remainingKeys.size === 0 && clearSet.size === 0) {
     return false;
   }
 
@@ -519,17 +612,9 @@ export async function persistLocalEnvIfDev(
       }
 
       const lines = existing ? existing.split(/\r?\n/) : [];
-      const remainingKeys = new Set<SecretKeyName>();
-      const clearSet = new Set<SecretKeyName>(keysToClear);
-
-      for (const name of SECRET_KEY_NAMES) {
-        const val = updates[name]?.trim();
-        if (val && isValidSecretValue(val, name)) {
-          remainingKeys.add(name);
-        }
-      }
-
+      const pendingAdds = new Set<SecretKeyName>(remainingKeys);
       const nextLines: string[] = [];
+
       for (const line of lines) {
         const trimmedLine = line.trim();
         if (!trimmedLine || trimmedLine.startsWith("#")) {
@@ -543,21 +628,27 @@ export async function persistLocalEnvIfDev(
           continue;
         }
 
-        const keyPart = line.slice(0, eqIndex).trim() as SecretKeyName;
+        const rawKey = line.slice(0, eqIndex).trim();
+        if (!SECRET_KEY_SET.has(rawKey)) {
+          nextLines.push(line);
+          continue;
+        }
+
+        const keyPart = rawKey as SecretKeyName;
         if (clearSet.has(keyPart)) {
           continue;
         }
 
-        if (remainingKeys.has(keyPart)) {
+        if (pendingAdds.has(keyPart)) {
           const cleanVal = updates[keyPart]!.trim().replace(/[\r\n]/g, "");
           nextLines.push(`${keyPart}=${cleanVal}`);
-          remainingKeys.delete(keyPart);
+          pendingAdds.delete(keyPart);
         } else {
           nextLines.push(line);
         }
       }
 
-      for (const keyToAdd of remainingKeys) {
+      for (const keyToAdd of pendingAdds) {
         const cleanVal = updates[keyToAdd]!.trim().replace(/[\r\n]/g, "");
         nextLines.push(`${keyToAdd}=${cleanVal}`);
       }

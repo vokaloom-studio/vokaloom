@@ -336,6 +336,8 @@ const en = {
     "Encrypted API keys saved to HttpOnly Vault and persisted to .env.local.",
   "admin.vault.toast.noInput":
     "Enter at least one API key (or CLEAR) before saving.",
+  "admin.vault.toast.clearedSingle":
+    "Removed {keyName} from the active HttpOnly Vault session.",
   "admin.vault.toast.cleared":
     "Cleared the HttpOnly API Keys Vault cookie.",
   "admin.vault.toast.saveError": "Could not update API Keys Vault.",
@@ -392,6 +394,7 @@ const en = {
   "api.admin.operatorGranted": "Operator access granted.",
   "api.admin.proGranted": "Pro Pass access granted.",
   "api.admin.invalidRequest": "Invalid admin verification request.",
+  "api.admin.payloadTooLarge": "Admin request body exceeds maximum size limit.",
   "api.admin.invalidKeyLength":
     "Key {keyName} must be longer than 5 characters (or CLEAR).",
   "api.admin.missingServerKey":
@@ -745,6 +748,8 @@ const es: Record<TranslationKey, string> = {
     "Claves API cifradas en la bóveda HttpOnly y guardadas en .env.local.",
   "admin.vault.toast.noInput":
     "Ingresa al menos una clave API (o CLEAR) antes de guardar.",
+  "admin.vault.toast.clearedSingle":
+    "Se quitó {keyName} de la sesión activa HttpOnly de la bóveda.",
   "admin.vault.toast.cleared":
     "Cookie cifrada de la bóveda API vaciada.",
   "admin.vault.toast.saveError":
@@ -807,6 +812,8 @@ const es: Record<TranslationKey, string> = {
   "api.admin.proGranted": "Acceso de Pase Pro concedido.",
   "api.admin.invalidRequest":
     "Solicitud de verificación de administrador inválida.",
+  "api.admin.payloadTooLarge":
+    "El cuerpo de la solicitud de administrador excede el límite permitido.",
   "api.admin.invalidKeyLength":
     "La clave {keyName} debe tener más de 5 caracteres (o CLEAR).",
   "api.admin.missingServerKey":

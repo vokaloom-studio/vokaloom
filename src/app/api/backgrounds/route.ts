@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import { createRateLimitStore } from "@/lib/rate-limit";
+import {
+  MalformedJsonBodyError,
+  PayloadTooLargeError,
+  readJsonBodyWithLimit,
+} from "@/lib/request-body";
 import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
@@ -22,6 +29,15 @@ export const maxDuration = 60;
 
 const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
 const MAX_PROXY_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
+const MAX_BACKGROUNDS_REQUEST_BYTES = 8 * 1024 * 1024; // 8 MB
+const GEMINI_VISION_TIMEOUT_MS = 15_000;
+
+const proxyRateLimitStore = createRateLimitStore({
+  maxAttempts: 60,
+  windowMs: 60 * 1000,
+  maxEntries: 5_000,
+  keyPrefix: "vokaloom:bg_proxy:",
+});
 
 export interface BackgroundItem {
   id: string;
@@ -237,7 +253,8 @@ const CURATED_VERTICAL_POOL: CuratedPhotoSeed[] = [
 async function analyzeReferenceImageWithGemini(
   base64Data: string,
   mimeType: string,
-  fallbackQuery: string
+  fallbackQuery: string,
+  signal?: AbortSignal
 ): Promise<{ resolvedQuery: string; visionUsed: boolean }> {
   const apiKey = await resolveApiKey("GEMINI_API_KEY");
   if (!apiKey) {
@@ -251,6 +268,11 @@ async function analyzeReferenceImageWithGemini(
     const cleanBase64 = base64Data.includes(",")
       ? base64Data.split(",")[1]
       : base64Data;
+
+    const timeoutSignal = AbortSignal.timeout(GEMINI_VISION_TIMEOUT_MS);
+    const abortSignal = signal
+      ? AbortSignal.any([signal, timeoutSignal])
+      : timeoutSignal;
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
@@ -271,6 +293,9 @@ async function analyzeReferenceImageWithGemini(
           ],
         },
       ],
+      config: {
+        abortSignal,
+      },
     });
 
     const extracted = response.text
@@ -476,6 +501,29 @@ export async function GET(request: Request) {
     reqUrl.searchParams.get("locale")
   );
   try {
+    const rateLimit = await proxyRateLimitStore.tryConsume(
+      getRateLimitClientKey(request).key
+    );
+    if (!rateLimit.allowed) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+      );
+      return NextResponse.json(
+        {
+          error: translate(locale, "api.bg.proxyBusy"),
+          retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(retryAfterSeconds),
+            "Cache-Control": "no-store",
+          },
+        }
+      );
+    }
+
     const proxyUrl = reqUrl.searchParams.get("proxyUrl");
     const parsedProxyUrl = parseAllowedBackgroundUrl(proxyUrl);
     if (!parsedProxyUrl) {
@@ -565,14 +613,23 @@ export async function POST(request: Request) {
   let locale = resolveRequestLocale(request);
   let body: BackgroundsRequest;
   try {
-    body = (await request.json()) as BackgroundsRequest;
-    if (!body || typeof body !== "object") {
+    body = (await readJsonBodyWithLimit(
+      request,
+      MAX_BACKGROUNDS_REQUEST_BYTES
+    )) as BackgroundsRequest;
+  } catch (err) {
+    if (err instanceof PayloadTooLargeError) {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.referenceImageTooLarge") },
+        { status: 413 }
+      );
+    }
+    if (err instanceof MalformedJsonBodyError) {
       return NextResponse.json(
         { error: translate(locale, "api.bg.invalidReferenceImage") },
         { status: 400 }
       );
     }
-  } catch {
     return NextResponse.json(
       { error: translate(locale, "api.bg.invalidReferenceImage") },
       { status: 400 }
@@ -583,12 +640,17 @@ export async function POST(request: Request) {
     locale = resolveRequestLocale(request, body.locale);
   }
 
-  const rawQuery = typeof body.query === "string" ? body.query.trim() : "";
-  const vibe =
-    typeof body.vibe === "string" && body.vibe.trim()
-      ? body.vibe.trim()
-      : "Luxury Travel";
-  const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
+  const rawQuery =
+    typeof body.query === "string" ? body.query.trim().slice(0, 200) : "";
+  const boundedVibe =
+    typeof body.vibe === "string" ? body.vibe.trim().slice(0, 80) : "";
+  const vibe = boundedVibe || "Luxury Travel";
+  const page =
+    typeof body.page === "number" &&
+    Number.isSafeInteger(body.page) &&
+    body.page >= 1
+      ? Math.min(100, body.page)
+      : 1;
   const targetCount = body.batchSize === 5 ? 5 : 15;
   const pexelsLimit = targetCount === 5 ? 3 : 8;
   const unsplashLimit = targetCount === 5 ? 2 : 7;
@@ -671,7 +733,8 @@ export async function POST(request: Request) {
       const visionResult = await analyzeReferenceImageWithGemini(
         validatedRefImage.data,
         validatedRefImage.mimeType,
-        baseSearchTerms
+        baseSearchTerms,
+        request.signal
       );
       resolvedQuery = visionResult.resolvedQuery;
       visionUsed = visionResult.visionUsed;

@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import {
+  MalformedJsonBodyError,
+  PayloadTooLargeError,
+  readJsonBodyWithLimit,
+} from "@/lib/request-body";
+import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
 } from "@/lib/server-quota";
 import { resolveApiKey } from "@/lib/server-secrets";
 import {
+  AsyncSemaphore,
   DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
   InvalidUpstreamContentTypeError,
@@ -22,6 +28,9 @@ export const maxDuration = 60;
 
 const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
 const MAX_BACKGROUND_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
+const MAX_MODEL_SWAP_REQUEST_BYTES = 8 * 1024 * 1024; // 8 MB
+const GEMINI_SWAP_TIMEOUT_MS = 25_000;
+const modelSwapFetchSemaphore = new AsyncSemaphore(4, 16, 10_000);
 
 interface ModelSwapRequestBody {
   modelImageBase64?: unknown;
@@ -57,7 +66,28 @@ function extractImagePart(response: {
 export async function POST(request: Request) {
   let locale = resolveRequestLocale(request);
   try {
-    const body = (await request.json()) as ModelSwapRequestBody;
+    let body: ModelSwapRequestBody;
+    try {
+      body = (await readJsonBodyWithLimit(
+        request,
+        MAX_MODEL_SWAP_REQUEST_BYTES
+      )) as ModelSwapRequestBody;
+    } catch (bodyErr) {
+      if (bodyErr instanceof PayloadTooLargeError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.modelSwap.modelImageTooLarge") },
+          { status: 413 }
+        );
+      }
+      if (bodyErr instanceof MalformedJsonBodyError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.modelSwap.invalidModelImage") },
+          { status: 400 }
+        );
+      }
+      throw bodyErr;
+    }
+
     if (body.locale !== undefined) {
       locale = resolveRequestLocale(request, body.locale);
     }
@@ -128,6 +158,7 @@ export async function POST(request: Request) {
         maxBytes: MAX_BACKGROUND_IMAGE_BYTES,
         timeoutMs: UPSTREAM_FETCH_TIMEOUT_MS,
         signal: request.signal,
+        semaphore: modelSwapFetchSemaphore,
       });
       bgBytes = fetched.bytes;
       bgContentType = fetched.contentType;
@@ -171,9 +202,20 @@ export async function POST(request: Request) {
     const bgMimeType = bgContentType.split(";")[0]?.trim() || "image/jpeg";
 
     const ai = new GoogleGenAI({ apiKey: geminiKey });
-    const promptWithScene = body.sceneTitle
-      ? `${COMPOSITE_PROMPT} Scene context: ${body.sceneTitle}.`
+    const safeSceneTitle =
+      typeof body.sceneTitle === "string"
+        ? body.sceneTitle.replace(/[\r\n]+/g, " ").trim().slice(0, 200)
+        : "";
+    const promptWithScene = safeSceneTitle
+      ? `${COMPOSITE_PROMPT} Scene context: ${safeSceneTitle}.`
       : COMPOSITE_PROMPT;
+    const createGeminiAbortSignal = () =>
+      request.signal
+        ? AbortSignal.any([
+            request.signal,
+            AbortSignal.timeout(GEMINI_SWAP_TIMEOUT_MS),
+          ])
+        : AbortSignal.timeout(GEMINI_SWAP_TIMEOUT_MS);
 
     const contents = [
       {
@@ -202,6 +244,7 @@ export async function POST(request: Request) {
         model: "gemini-2.5-flash-image",
         contents,
         config: {
+          abortSignal: createGeminiAbortSignal(),
           responseModalities: ["IMAGE", "TEXT"],
           imageConfig: {
             aspectRatio: "9:16",
@@ -220,6 +263,9 @@ export async function POST(request: Request) {
         );
       }
     } catch (primaryErr) {
+      if (request.signal?.aborted) {
+        throw primaryErr;
+      }
       console.warn(
         "gemini-2.5-flash-image failed, trying fallback model:",
         primaryErr
@@ -232,6 +278,7 @@ export async function POST(request: Request) {
         model: "gemini-2.0-flash-exp-image-generation",
         contents,
         config: {
+          abortSignal: createGeminiAbortSignal(),
           responseModalities: ["TEXT", "IMAGE"],
         },
       });

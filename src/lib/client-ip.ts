@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import net from "node:net";
 
 const DEFAULT_TRUSTED_PROXY_HOPS = 1;
@@ -202,4 +203,46 @@ export function getClientIp(request: Request): string {
   }
 
   return directIp ?? "unknown";
+}
+
+/**
+ * Returns a partitioned client bucket key for rate limiting and trial quotas.
+ * Preserves strict IP attribution when a trusted proxy/platform header exists,
+ * and falls back to non-loopback proxy headers or a request fingerprint so
+ * proxy-less/local deployments never collapse all users onto one `"unknown"` key.
+ */
+export function getRateLimitClientKey(request: Request): {
+  key: string;
+  trusted: boolean;
+} {
+  const verified = getClientIp(request);
+  if (verified !== "unknown") {
+    return { key: verified, trusted: true };
+  }
+
+  const realIp = normalizeIp(request.headers.get("x-real-ip"));
+  if (realIp && !isLoopbackIp(realIp)) {
+    return { key: `unverified:${realIp}`, trusted: false };
+  }
+
+  const forwardedIp = extractForwardedIp(
+    request.headers.get("x-forwarded-for"),
+    DEFAULT_TRUSTED_PROXY_HOPS
+  );
+  if (forwardedIp && !isLoopbackIp(forwardedIp)) {
+    return { key: `unverified:${forwardedIp}`, trusted: false };
+  }
+
+  const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 256);
+  const acceptLanguage = (request.headers.get("accept-language") ?? "").slice(
+    0,
+    64
+  );
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${userAgent}|${acceptLanguage}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  return { key: `unverified:fp:${digest}`, trusted: false };
 }

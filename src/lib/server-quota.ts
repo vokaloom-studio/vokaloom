@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getClientIp } from "@/lib/client-ip";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import { translate, type Locale } from "@/lib/i18n";
 import {
   InMemoryRateLimitStore,
@@ -99,8 +99,8 @@ export async function enforceServerGenerationQuota(
     };
   }
 
-  const clientIp = getClientIp(request);
-  const consumption = await getGuestTrialStore().tryConsume(clientIp, {
+  const clientKey = getRateLimitClientKey(request).key;
+  const consumption = await getGuestTrialStore().tryConsume(clientKey, {
     floorCount: cookieUsed,
   });
 

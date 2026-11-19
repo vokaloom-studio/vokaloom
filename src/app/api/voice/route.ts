@@ -3,6 +3,11 @@ import { createFalClient, type FalClient } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import {
+  MalformedJsonBodyError,
+  PayloadTooLargeError,
+  readJsonBodyWithLimit,
+} from "@/lib/request-body";
+import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
 } from "@/lib/server-quota";
@@ -11,6 +16,8 @@ import { resolveApiKey } from "@/lib/server-secrets";
 export const maxDuration = 60;
 
 const FAL_SUBSCRIBE_TIMEOUT_MS = 20_000;
+const GEMINI_TTS_TIMEOUT_MS = 25_000;
+const MAX_VOICE_REQUEST_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_REFERENCE_AUDIO_BYTES = 3 * 1024 * 1024; // 3 MB
 const MAX_REFERENCE_AUDIO_BASE64_CHARS =
   Math.ceil(MAX_REFERENCE_AUDIO_BYTES / 3) * 4;
@@ -293,7 +300,28 @@ export async function POST(request: Request) {
   const startTime = Date.now();
   let locale = resolveRequestLocale(request);
   try {
-    const body = (await request.json()) as VoiceRequestBody;
+    let body: VoiceRequestBody;
+    try {
+      body = (await readJsonBodyWithLimit(
+        request,
+        MAX_VOICE_REQUEST_BYTES
+      )) as VoiceRequestBody;
+    } catch (bodyErr) {
+      if (bodyErr instanceof PayloadTooLargeError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.voice.referenceAudioTooLarge") },
+          { status: 413 }
+        );
+      }
+      if (bodyErr instanceof MalformedJsonBodyError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.voice.invalidReferenceAudio") },
+          { status: 400 }
+        );
+      }
+      throw bodyErr;
+    }
+
     if (body.locale !== undefined) {
       locale = resolveRequestLocale(request, body.locale);
     }
@@ -450,6 +478,13 @@ export async function POST(request: Request) {
               ? "Puck"
               : "Charon";
 
+        const geminiAbortSignal = request.signal
+          ? AbortSignal.any([
+              request.signal,
+              AbortSignal.timeout(GEMINI_TTS_TIMEOUT_MS),
+            ])
+          : AbortSignal.timeout(GEMINI_TTS_TIMEOUT_MS);
+
         const response = await ai.models.generateContent({
           model: "gemini-2.5-flash-preview-tts",
           contents: [
@@ -465,6 +500,7 @@ export async function POST(request: Request) {
             },
           ],
           config: {
+            abortSignal: geminiAbortSignal,
             responseModalities: ["AUDIO"],
             speechConfig: {
               voiceConfig: {

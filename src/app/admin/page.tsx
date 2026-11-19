@@ -109,12 +109,8 @@ export default function VokaloomAdminPage() {
   const [isSavingVault, setIsSavingVault] = useState<boolean>(false);
   const [isClearingVault, setIsClearingVault] = useState<boolean>(false);
 
-  const [vipCodes, setVipCodes] = useState<string[]>([
-    "VOKALOOM-PRO-2026",
-    "CLIENT-VIP-01",
-  ]);
-  const [customInviteCode, setCustomInviteCode] =
-    useState<string>("VOKALOOM-PRO-2026");
+  const [vipCodes, setVipCodes] = useState<string[]>([]);
+  const [customInviteCode, setCustomInviteCode] = useState<string>("");
 
   const [businessForm, setBusinessForm] = useState<BusinessConfig>({
     priceCop: "$60,000 COP",
@@ -152,9 +148,9 @@ export default function VokaloomAdminPage() {
         if (data.maskedKeys) {
           setMaskedKeys(data.maskedKeys);
         }
-        if (data.vipClientCodes && data.vipClientCodes.length > 0) {
+        if (Array.isArray(data.vipClientCodes)) {
           setVipCodes(data.vipClientCodes);
-          setCustomInviteCode(data.vipClientCodes[0]);
+          setCustomInviteCode(data.vipClientCodes[0] ?? "");
         }
       }
     } catch {
@@ -308,7 +304,7 @@ export default function VokaloomAdminPage() {
       if (data.health) setHealth(data.health);
       if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
       setVaultInputs((prev) => ({ ...prev, [keyName]: "" }));
-      toast.info(t("admin.vault.toast.savedCookie"));
+      toast.info(t("admin.vault.toast.clearedSingle", { keyName }));
     } catch {
       toast.error(t("admin.vault.toast.saveError"));
     } finally {
@@ -914,6 +910,7 @@ export default function VokaloomAdminPage() {
                     <Button
                       type="button"
                       size="sm"
+                      disabled={!customInviteCode.trim()}
                       onClick={() =>
                         void handleCopyInviteLink(customInviteCode)
                       }

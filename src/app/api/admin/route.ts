@@ -1,8 +1,13 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getClientIp } from "@/lib/client-ip";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
+import {
+  MalformedJsonBodyError,
+  PayloadTooLargeError,
+  readJsonBodyWithLimit,
+} from "@/lib/request-body";
 import {
   InMemoryRateLimitStore,
   UpstashRestRateLimitStore,
@@ -15,18 +20,20 @@ import {
   SECRET_KEY_NAMES,
   VAULT_COOKIE_NAME,
   encryptSecretsPayload,
-  getVaultSecretsFromCookie,
+  getVaultStateFromCookie,
   isValidSecretValue,
   maskSecret,
   persistLocalEnvIfDev,
   resolveAdminMasterKey,
   resolveApiKey,
+  resolveSecretValueForState,
   resolveServerEntitlement,
   signAdminSessionToken,
   signEntitlementToken,
   verifyAdminSessionToken,
   type EntitlementRole,
   type SecretKeyName,
+  type VaultState,
 } from "@/lib/server-secrets";
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -67,12 +74,19 @@ function getRateLimitStore(): RateLimitStore {
 }
 
 function getVipClientCodes(): string[] {
-  const raw =
-    process.env.VIP_CLIENT_CODES || "VOKALOOM-PRO-2026,CLIENT-VIP-01";
-  return raw
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
+  const envRaw = process.env.VIP_CLIENT_CODES;
+  if (envRaw !== undefined) {
+    return envRaw
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return [];
+  }
+
+  return ["VOKALOOM-PRO-2026", "CLIENT-VIP-01"];
 }
 
 function timingSafeEqualIgnoreCase(a: string, b: string): boolean {
@@ -167,7 +181,7 @@ async function authorizeAdminRequest(
   }
 
   if (hasHeaderKey || hasBodyKey) {
-    const clientIp = getClientIp(request);
+    const clientIp = getRateLimitClientKey(request).key;
     if (await isRateLimited(clientIp)) {
       return { authorized: false, rateLimited: true };
     }
@@ -273,7 +287,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let locale = resolveRequestLocale(request);
   try {
-    const body = (await request.json()) as {
+    const rawBody = await readJsonBodyWithLimit(request, 16 * 1024);
+    const body = rawBody as {
       action?:
         | "verify-code"
         | "admin-login"
@@ -283,6 +298,7 @@ export async function POST(request: Request) {
       code?: string;
       adminKey?: string;
       keys?: Partial<Record<SecretKeyName, string>>;
+      removeFromDisk?: boolean;
       locale?: unknown;
     };
     if (body.locale !== undefined) {
@@ -319,10 +335,12 @@ export async function POST(request: Request) {
         );
       }
 
-      const existingVault = await getVaultSecretsFromCookie();
+      const existingVault = await getVaultStateFromCookie();
       const mergedKeys: Partial<Record<SecretKeyName, string>> = {
-        ...existingVault,
+        ...existingVault.secrets,
       };
+      const clearedSet = new Set<SecretKeyName>(existingVault.cleared);
+      const updatedKeysOnly: Partial<Record<SecretKeyName, string>> = {};
       const keysToClear: SecretKeyName[] = [];
       let hasChange = false;
 
@@ -335,6 +353,7 @@ export async function POST(request: Request) {
         hasChange = true;
         if (trimmed.toUpperCase() === "CLEAR") {
           delete mergedKeys[keyName];
+          clearedSet.add(keyName);
           keysToClear.push(keyName);
         } else {
           if (!isValidSecretValue(trimmed, keyName)) {
@@ -348,7 +367,9 @@ export async function POST(request: Request) {
               { status: 400 }
             );
           }
+          clearedSet.delete(keyName);
           mergedKeys[keyName] = trimmed;
+          updatedKeysOnly[keyName] = trimmed;
         }
       }
 
@@ -362,24 +383,28 @@ export async function POST(request: Request) {
         );
       }
 
+      const allowClearFromDisk = body.removeFromDisk === true;
       const persistedToDisk = await persistLocalEnvIfDev(
-        mergedKeys,
-        keysToClear
+        updatedKeysOnly,
+        keysToClear,
+        { allowClearFromDisk }
       );
-      const encryptedToken = encryptSecretsPayload(mergedKeys);
+
+      const nextVaultState: VaultState = {
+        secrets: mergedKeys,
+        cleared: Array.from(clearedSet).filter((name) => !mergedKeys[name]),
+      };
+      const encryptedToken = encryptSecretsPayload(
+        nextVaultState.secrets,
+        nextVaultState.cleared
+      );
 
       const effectiveValues = {} as Record<SecretKeyName, string | undefined>;
       for (const keyName of SECRET_KEY_NAMES) {
-        if (mergedKeys[keyName]) {
-          effectiveValues[keyName] = mergedKeys[keyName];
-        } else if (!keysToClear.includes(keyName)) {
-          const envVal = process.env[keyName]?.trim();
-          effectiveValues[keyName] = isValidSecretValue(envVal, keyName)
-            ? envVal
-            : undefined;
-        } else {
-          effectiveValues[keyName] = undefined;
-        }
+        effectiveValues[keyName] = resolveSecretValueForState(
+          keyName,
+          nextVaultState
+        );
       }
 
       const diagnostics = buildDiagnosticsFromValues(effectiveValues);
@@ -409,18 +434,27 @@ export async function POST(request: Request) {
       );
       if (authError) return authError;
 
+      const allowClearFromDisk = body.removeFromDisk === true;
+      const removedFromDisk = allowClearFromDisk
+        ? await persistLocalEnvIfDev({}, [...SECRET_KEY_NAMES], {
+            allowClearFromDisk: true,
+          })
+        : false;
+
+      const clearedVaultState: VaultState = { secrets: {}, cleared: [] };
       const envOnlyValues = {} as Record<SecretKeyName, string | undefined>;
       for (const keyName of SECRET_KEY_NAMES) {
-        const envVal = process.env[keyName]?.trim();
-        envOnlyValues[keyName] = isValidSecretValue(envVal, keyName)
-          ? envVal
-          : undefined;
+        envOnlyValues[keyName] = resolveSecretValueForState(
+          keyName,
+          clearedVaultState
+        );
       }
 
       const diagnostics = buildDiagnosticsFromValues(envOnlyValues);
       const res = NextResponse.json({
         success: true,
         cleared: true,
+        removedFromDisk,
         message: translate(locale, "api.admin.vaultCleared"),
         ...diagnostics,
       });
@@ -440,7 +474,7 @@ export async function POST(request: Request) {
     }
 
     const isAdminLogin = body.action === "admin-login";
-    const clientIp = getClientIp(request);
+    const clientIp = getRateLimitClientKey(request).key;
     if (await isRateLimited(clientIp)) {
       return NextResponse.json(
         {
@@ -532,7 +566,19 @@ export async function POST(request: Request) {
     }
 
     return response;
-  } catch {
+  } catch (error) {
+    if (error instanceof PayloadTooLargeError) {
+      return NextResponse.json(
+        { valid: false, error: translate(locale, "api.admin.payloadTooLarge") },
+        { status: 413 }
+      );
+    }
+    if (error instanceof MalformedJsonBodyError) {
+      return NextResponse.json(
+        { valid: false, error: translate(locale, "api.admin.invalidRequest") },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       { valid: false, error: translate(locale, "api.admin.invalidRequest") },
       { status: 400 }
