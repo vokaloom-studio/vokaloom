@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import { resolveApiKey } from "@/lib/server-secrets";
 
 export const maxDuration = 60;
 
@@ -18,6 +19,7 @@ interface BackgroundsRequest {
   query?: string;
   vibe?: string;
   page?: number;
+  batchSize?: 5 | 15;
   referenceImageBase64?: string;
   mimeType?: string;
   locale?: unknown;
@@ -213,17 +215,13 @@ const CURATED_VERTICAL_POOL: CuratedPhotoSeed[] = [
   },
 ];
 
-function isValidApiKey(val: string | undefined, placeholder: string): boolean {
-  return Boolean(val && val.trim().length > 5 && val.trim() !== placeholder);
-}
-
 async function analyzeReferenceImageWithGemini(
   base64Data: string,
   mimeType: string,
   fallbackQuery: string
 ): Promise<{ resolvedQuery: string; visionUsed: boolean }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!isValidApiKey(apiKey, "your_google_ai_studio_key")) {
+  const apiKey = await resolveApiKey("GEMINI_API_KEY");
+  if (!apiKey) {
     return {
       resolvedQuery: `${fallbackQuery} candid vertical sunlight`,
       visionUsed: false,
@@ -288,28 +286,29 @@ interface PexelsPhoto {
 
 async function fetchFromPexels(
   query: string,
-  page: number
+  page: number,
+  limit: number
 ): Promise<BackgroundItem[]> {
-  const apiKey = process.env.PEXELS_API_KEY;
-  if (!isValidApiKey(apiKey, "your_pexels_api_key")) {
+  const apiKey = await resolveApiKey("PEXELS_API_KEY");
+  if (!apiKey) {
     return [];
   }
 
   try {
     const url = new URL("https://api.pexels.com/v1/search");
     url.searchParams.set("query", query);
-    url.searchParams.set("per_page", "8");
+    url.searchParams.set("per_page", String(limit));
     url.searchParams.set("page", String(page));
     url.searchParams.set("orientation", "portrait");
 
     const res = await fetch(url.toString(), {
-      headers: { Authorization: apiKey!.trim() },
+      headers: { Authorization: apiKey.trim() },
       next: { revalidate: 300 },
     });
     if (!res.ok) return [];
 
     const data = (await res.json()) as { photos?: PexelsPhoto[] };
-    return (data.photos || []).slice(0, 8).map((p, idx) => ({
+    return (data.photos || []).slice(0, limit).map((p, idx) => ({
       id: `pexels-${p.id}-${page}-${idx}`,
       title: p.alt || `${query} vertical aesthetic #${idx + 1}`,
       photographer: p.photographer || "Pexels Creator",
@@ -339,28 +338,29 @@ interface UnsplashPhoto {
 
 async function fetchFromUnsplash(
   query: string,
-  page: number
+  page: number,
+  limit: number
 ): Promise<BackgroundItem[]> {
-  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
-  if (!isValidApiKey(accessKey, "your_unsplash_access_key")) {
+  const accessKey = await resolveApiKey("UNSPLASH_ACCESS_KEY");
+  if (!accessKey) {
     return [];
   }
 
   try {
     const url = new URL("https://api.unsplash.com/search/photos");
     url.searchParams.set("query", query);
-    url.searchParams.set("per_page", "7");
+    url.searchParams.set("per_page", String(limit));
     url.searchParams.set("page", String(page));
     url.searchParams.set("orientation", "portrait");
 
     const res = await fetch(url.toString(), {
-      headers: { Authorization: `Client-ID ${accessKey!.trim()}` },
+      headers: { Authorization: `Client-ID ${accessKey.trim()}` },
       next: { revalidate: 300 },
     });
     if (!res.ok) return [];
 
     const data = (await res.json()) as { results?: UnsplashPhoto[] };
-    return (data.results || []).slice(0, 7).map((u, idx) => ({
+    return (data.results || []).slice(0, limit).map((u, idx) => ({
       id: `unsplash-${u.id}-${page}-${idx}`,
       title:
         u.alt_description ||
@@ -507,6 +507,9 @@ export async function POST(request: Request) {
     const rawQuery = (body.query || "").trim();
     const vibe = (body.vibe || "Luxury Travel").trim();
     const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
+    const targetCount = body.batchSize === 5 ? 5 : 15;
+    const pexelsLimit = targetCount === 5 ? 3 : 8;
+    const unsplashLimit = targetCount === 5 ? 2 : 7;
 
     const baseSearchTerms =
       [vibe, rawQuery].filter(Boolean).join(" ").trim() ||
@@ -526,10 +529,10 @@ export async function POST(request: Request) {
       visionUsed = visionResult.visionUsed;
     }
 
-    // Step B: Parallel 15-Image Fetch (Pexels 8 + Unsplash 7)
+    // Step B: Parallel Batch Fetch (Pexels 8/3 + Unsplash 7/2)
     const [pexelsResult, unsplashResult] = await Promise.allSettled([
-      fetchFromPexels(resolvedQuery, page),
-      fetchFromUnsplash(resolvedQuery, page),
+      fetchFromPexels(resolvedQuery, page, pexelsLimit),
+      fetchFromUnsplash(resolvedQuery, page, unsplashLimit),
     ]);
 
     const pexelsItems =
@@ -539,8 +542,8 @@ export async function POST(request: Request) {
 
     const combined: BackgroundItem[] = [...pexelsItems, ...unsplashItems];
 
-    // Step C: Zero-Key Curated Fallback (top up to exactly 15 vertical photos)
-    const remainingNeeded = Math.max(0, 15 - combined.length);
+    // Step C: Zero-Key Curated Fallback (top up to targetCount vertical photos)
+    const remainingNeeded = Math.max(0, targetCount - combined.length);
     const curatedTopUp =
       remainingNeeded > 0
         ? buildCuratedBatch(
@@ -551,7 +554,7 @@ export async function POST(request: Request) {
           )
         : [];
 
-    const final15 = [...combined, ...curatedTopUp].slice(0, 15);
+    const finalBatch = [...combined, ...curatedTopUp].slice(0, targetCount);
 
     const extractedTags = resolvedQuery
       .split(/\s+/)
@@ -560,8 +563,8 @@ export async function POST(request: Request) {
       .slice(0, 6);
 
     return NextResponse.json({
-      items: final15,
-      count: final15.length,
+      items: finalBatch,
+      count: finalBatch.length,
       resolvedQuery,
       extractedTags,
       visionUsed,

@@ -44,7 +44,12 @@ const en = {
 
   // Background Finder (src/components/background-finder.tsx)
   "bg.inspectorTitle": "Aesthetic Inspector",
-  "bg.inspectorBadge": "15x · 9:16 HD",
+  "bg.inspectorBadge": "{count}x · 9:16 HD",
+  "bg.batch.label": "Batch Mode",
+  "bg.batch.fast5": "5x Mobile Fast",
+  "bg.batch.full15": "15x Full Pack",
+  "bg.batch.short5": "5x",
+  "bg.batch.short15": "15x",
   "bg.vibePresets": "Vibe Presets",
   "bg.vibe.luxuryTravel": "Luxury Travel",
   "bg.vibe.candidLifestyle": "Candid Lifestyle",
@@ -54,23 +59,45 @@ const en = {
   "bg.sceneLabel": "Scene / Keyword Modifier",
   "bg.searchPlaceholder": "Mediterranean balcony morning sunlight...",
   "bg.clearSearchAria": "Clear search query",
-  "bg.generateButton": "Generate 15 Backgrounds",
+  "bg.generateButton": "Generate {count} Backgrounds",
   "bg.shuffleButton": "Shuffle #{page}",
-  "bg.shuffleTitle": "Load 15 more photos (Page #{page})",
+  "bg.shuffleTitle": "Load {count} more photos (Page #{page})",
   "bg.referenceTitle": "Boss Reference Matcher",
   "bg.uploadReference": "Upload reference image",
-  "bg.uploadReferenceHint": "JPG, PNG, WEBP · auto-matches 15 photos",
+  "bg.uploadReferenceHint": "JPG, PNG, WEBP · auto-matches {count} photos",
   "bg.referencePreviewAlt": "Boss Reference Preview",
   "bg.referenceFallbackName": "Reference Image",
   "bg.removeReferenceTitle": "Remove reference image",
   "bg.visionDna": "Gemini 2.5 Vision DNA:",
   "bg.extractedDna": "Extracted Search DNA:",
+  "bg.model.title": "My Model Reference",
+  "bg.model.badge": "9:16 Swap",
+  "bg.model.uploadTitle": "Upload your model photo",
+  "bg.model.uploadHint": "Saved locally · used by \"Place Model\"",
+  "bg.model.previewAlt": "Saved Model Reference Preview",
+  "bg.model.fallbackName": "Model Photo",
+  "bg.model.savedStatus": "Saved locally for 1-tap scene placement",
+  "bg.model.removeTitle": "Remove saved model photo",
+  "bg.placeModelButton": "Place Model",
+  "bg.placeModelShort": "Model",
+  "bg.placeModelTitle": "Place my model into #{index}",
+  "bg.placeModelAria": "Place my model into scene #{index} by {photographer}",
+  "bg.swapModal.title": "Model Scene Compositor",
+  "bg.swapModal.subtitle":
+    "9:16 vertical composite ready for Instagram Reels & Stories.",
+  "bg.swapModal.generating": "Compositing model into 9:16 scene...",
+  "bg.swapModal.generatingHint":
+    "Matching lighting, shadows & candid smartphone realism",
+  "bg.swapModal.fallbackNote":
+    "Local canvas preview generated. Add GEMINI_API_KEY in /admin for full neural relighting.",
+  "bg.swapModal.downloadButton": "Download 9:16 Composite",
+  "bg.swapModal.previewAlt": "Composited 9:16 scene preview",
   "bg.resolvedLabel": "Resolved:",
   "bg.canvasTitle": "Aesthetic Canvas:",
   "bg.pageBadge": "Page #{page}",
   "bg.downloadZipButton": "Download All (.ZIP)",
   "bg.zipPackaging": "Packaging {count} vertical HD photos into",
-  "bg.loadingOverlay": "Curating 15 vertical backgrounds...",
+  "bg.loadingOverlay": "Curating {count} vertical backgrounds...",
   "bg.sourceCurated": "curated",
   "bg.downloadSingleTitle": "Download #{index} HD",
   "bg.hdButton": "HD",
@@ -85,17 +112,26 @@ const en = {
     "Please upload a .JPG, .PNG, or .WEBP reference image.",
   "bg.toast.imageTooLarge": "Reference image must be 5 MB or smaller.",
   "bg.toast.analyzingReference":
-    "Analyzing Boss Reference Image aesthetic & matching 15 backgrounds...",
+    "Analyzing Boss Reference Image aesthetic & matching {count} backgrounds...",
   "bg.toast.processImageError": "Could not process reference image.",
   "bg.toast.clearedReference": "Cleared reference image filter.",
+  "bg.toast.savedModel":
+    "Saved My Model photo locally for 1-tap scene placement.",
+  "bg.toast.clearedModel": "Removed saved model photo.",
+  "bg.toast.uploadModelFirst":
+    "Upload a \"My Model Reference\" photo in the left panel first.",
+  "bg.toast.modelSwapReady": "Scene composite ready via {engine}!",
+  "bg.toast.modelSwapError":
+    "Could not generate scene composite. Please try again.",
+  "bg.toast.downloadedComposite": "Downloaded 9:16 model composite!",
   "bg.toast.downloadedSingle": "Downloaded #{index} ({photographer})",
   "bg.toast.downloadSingleError": "Could not download photo.",
-  "bg.toast.generateFirst": "Generate a batch of 15 backgrounds first.",
+  "bg.toast.generateFirst": "Generate a batch of backgrounds first.",
   "bg.toast.downloadedZip":
-    "Downloaded vokaloom-15-backgrounds.zip ({count} HD photos)!",
+    "Downloaded vokaloom-backgrounds.zip ({count} HD photos)!",
   "bg.toast.zipError":
     "Failed to package ZIP archive. Try individual downloads.",
-  "bg.readme.header": "VOKALOOM STUDIO — 15x AESTHETIC BACKGROUND BATCH",
+  "bg.readme.header": "VOKALOOM STUDIO — {count}x AESTHETIC BACKGROUND BATCH",
   "bg.readme.query": "Generated Query: {query}",
   "bg.readme.vibe": "Vibe Preset: {vibe}",
   "bg.readme.aspect":
@@ -132,7 +168,8 @@ const en = {
   "voice.cloneToggleLabel": "Clone Custom Voice",
   "voice.toggleOn": "ON",
   "voice.toggleOff": "OFF",
-  "voice.dropzoneTitle": "Drop or upload 10–30s voice sample (.MP3 / .WAV)",
+  "voice.dropzoneTitle":
+    "Drop or select WhatsApp voice note (.OGG, .MP3, .WAV · 10–20s)",
   "voice.dropzoneHint":
     "Powered by MIT F5-TTS · 100% commercial-safe zero-shot cloning",
   "voice.sampleReady": "Ready for zero-shot F5-TTS synthesis",
@@ -162,15 +199,15 @@ const en = {
   "voice.downloadClipTitle": "Download clip",
   "voice.toast.loadedSample": "Loaded sample script: {label}",
   "voice.toast.invalidAudioType":
-    "Please upload an .MP3 or .WAV voice reference file.",
+    "Please upload a .OGG (WhatsApp), .MP3, .WAV, or .M4A voice reference file.",
   "voice.toast.audioTooLarge":
-    "Reference voice sample must be under 3 MB. Tip: upload a 10-to-20 second .MP3 or .WAV clip under 3 MB.",
+    "Reference voice sample must be under 3 MB. Tip: upload a 10-to-20 second .OGG, .MP3, or .WAV clip under 3 MB.",
   "voice.toast.loadedAudioSample":
     "Loaded voice sample \"{name}\" for MIT F5-TTS zero-shot cloning.",
   "voice.toast.emptyScript": "Please enter a voiceover script first.",
   "voice.toast.scriptTooLong": "Script cannot exceed 1,500 characters.",
   "voice.toast.missingCloneAudio":
-    "Please upload a 10–30s reference audio clip for Zero-Shot Voice Cloning, or disable Clone Mode.",
+    "Please upload a WhatsApp .OGG, .MP3, or .WAV reference clip for Zero-Shot Voice Cloning, or disable Clone Mode.",
   "voice.toast.synthFailed": "Could not synthesize voiceover.",
   "voice.toast.ready": "Voiceover ready via {engine}!",
   "voice.toast.downloaded": "Downloaded voiceover audio file!",
@@ -245,7 +282,7 @@ const en = {
   "admin.envLabel": "Env: {envVar}",
   "admin.statusActive": "Live Neural / API Active",
   "admin.statusFallback": "Zero-Key Fallback Active",
-  "admin.card2Title": "2. Commercial & Paywall Configuration",
+  "admin.card2Title": "3. Commercial & Paywall Configuration",
   "admin.card2Desc":
     "Customize the Pro Pass pricing, Wompi/Stripe checkout links, and guest trial credit limit.",
   "admin.priceCopLabel": "Price (COP)",
@@ -254,7 +291,7 @@ const en = {
   "admin.checkoutCopLabel": "Wompi / Nequi / PSE Checkout URL (COP)",
   "admin.checkoutUsdLabel": "Stripe Global Checkout URL (USD)",
   "admin.saveSettingsButton": "Save Paywall & Pricing Settings",
-  "admin.card3Title": "3. Client Access Links & WhatsApp Invite Generator",
+  "admin.card3Title": "4. Client Access Links & WhatsApp Invite Generator",
   "admin.card3Desc":
     "Generate 1-click auto-unlock links (/?key=...) for paying clients or VIP testers on WhatsApp.",
   "admin.vipCodesLabelBefore": "Active Server-Side VIP Client Codes (",
@@ -262,7 +299,7 @@ const en = {
   "admin.copyInviteButton": "Copy VIP Invite Link",
   "admin.customInviteLabel": "Custom Invite Code Link Builder",
   "admin.customInvitePlaceholder": "Enter access code...",
-  "admin.card4Title": "4. Operator Sandbox & Device Controls",
+  "admin.card4Title": "5. Operator Sandbox & Device Controls",
   "admin.card4Desc":
     "Switch this browser between Unlimited Operator Mode and Normal Client View to test the trial counter and paywall experience.",
   "admin.enableOperatorButton":
@@ -284,6 +321,26 @@ const en = {
     "Switched to Normal Client View. You can now test the trial counter and paywall.",
   "admin.toast.trialReset":
     "Reset local trial credits to {remaining}/{max}.",
+  "admin.vault.title": "2. Runtime API Keys Vault (AES-256-GCM)",
+  "admin.vault.desc":
+    "Paste API keys directly from this browser. Secrets are encrypted in an HttpOnly cookie (and persisted to .env.local in local dev) and never exposed to client JS or localStorage.",
+  "admin.vault.activeBadge": "Active: {masked}",
+  "admin.vault.unsetBadge": "Not configured",
+  "admin.vault.placeholder": "Paste new key to update (or CLEAR to remove)...",
+  "admin.vault.saveButton": "Save & Encrypt Keys",
+  "admin.vault.savingButton": "Encrypting Keys...",
+  "admin.vault.clearButton": "Clear Vault",
+  "admin.vault.clearSingleTitle": "Remove {keyName} from vault",
+  "admin.vault.toast.savedCookie":
+    "Encrypted API keys saved to HttpOnly Vault cookie.",
+  "admin.vault.toast.savedDisk":
+    "Encrypted API keys saved to HttpOnly Vault and persisted to .env.local.",
+  "admin.vault.toast.noInput":
+    "Enter at least one API key (or CLEAR) before saving.",
+  "admin.vault.toast.cleared":
+    "Cleared the HttpOnly API Keys Vault cookie.",
+  "admin.vault.toast.saveError": "Could not update API Keys Vault.",
+  "admin.vault.toast.clearError": "Could not clear API Keys Vault.",
 
   // API Route Messages
   "api.bg.invalidProxyOrigin": "Invalid or disallowed proxyUrl origin.",
@@ -291,6 +348,12 @@ const en = {
   "api.bg.proxyFailed": "Failed to proxy image download.",
   "api.bg.fallbackNotice":
     "Curated fallback batch served because live search encountered an issue.",
+  "api.modelSwap.missingInputs":
+    "Both model reference image and background URL are required.",
+  "api.modelSwap.invalidBackgroundOrigin":
+    "Invalid or disallowed backgroundUrl origin.",
+  "api.modelSwap.fallbackEngine": "Client Canvas Compositor",
+  "api.modelSwap.processError": "Unable to process model scene placement.",
   "api.voice.invalidLength":
     "Script text must be between 1 and 1,500 characters in length.",
   "api.voice.demoFallbackEngine":
@@ -302,9 +365,16 @@ const en = {
   "api.admin.missingCode": "Please provide an access code.",
   "api.admin.invalidAdminKey": "Invalid Master Admin Password.",
   "api.admin.invalidAccessCode": "Invalid Pro Pass or Operator access code.",
+  "api.admin.tooManyAttempts":
+    "Too many attempts. Try again in 10 minutes.",
   "api.admin.operatorGranted": "Operator access granted.",
   "api.admin.proGranted": "Pro Pass access granted.",
   "api.admin.invalidRequest": "Invalid admin verification request.",
+  "api.admin.invalidKeyLength":
+    "Key {keyName} must be longer than 5 characters (or CLEAR).",
+  "api.admin.noKeysProvided": "No key updates were provided.",
+  "api.admin.vaultUpdated": "API Key Vault encrypted and updated.",
+  "api.admin.vaultCleared": "API Key Vault cookie cleared.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -347,7 +417,12 @@ const es: Record<TranslationKey, string> = {
 
   // Background Finder (src/components/background-finder.tsx)
   "bg.inspectorTitle": "Inspector Estético",
-  "bg.inspectorBadge": "15x · 9:16 HD",
+  "bg.inspectorBadge": "{count}x · 9:16 HD",
+  "bg.batch.label": "Modo de Lote",
+  "bg.batch.fast5": "5x Móvil Rápido",
+  "bg.batch.full15": "15x Pack Completo",
+  "bg.batch.short5": "5x",
+  "bg.batch.short15": "15x",
   "bg.vibePresets": "Estilos Predefinidos",
   "bg.vibe.luxuryTravel": "Viajes de Lujo",
   "bg.vibe.candidLifestyle": "Estilo de Vida Real",
@@ -357,23 +432,45 @@ const es: Record<TranslationKey, string> = {
   "bg.sceneLabel": "Escena / Palabra Clave",
   "bg.searchPlaceholder": "Balcón mediterráneo luz de mañana...",
   "bg.clearSearchAria": "Limpiar consulta de búsqueda",
-  "bg.generateButton": "Generar 15 Fondos",
+  "bg.generateButton": "Generar {count} Fondos",
   "bg.shuffleButton": "Mezclar #{page}",
-  "bg.shuffleTitle": "Cargar 15 fotos más (Página #{page})",
+  "bg.shuffleTitle": "Cargar {count} fotos más (Página #{page})",
   "bg.referenceTitle": "Coincidencia por Referencia",
   "bg.uploadReference": "Subir imagen de referencia",
-  "bg.uploadReferenceHint": "JPG, PNG, WEBP · empareja 15 fotos al instante",
+  "bg.uploadReferenceHint": "JPG, PNG, WEBP · empareja {count} fotos al instante",
   "bg.referencePreviewAlt": "Vista previa de imagen de referencia",
   "bg.referenceFallbackName": "Imagen de referencia",
   "bg.removeReferenceTitle": "Quitar imagen de referencia",
   "bg.visionDna": "ADN Gemini 2.5 Vision:",
   "bg.extractedDna": "ADN de Búsqueda Extraído:",
+  "bg.model.title": "Mi Modelo de Referencia",
+  "bg.model.badge": "Swap 9:16",
+  "bg.model.uploadTitle": "Sube foto de tu modelo",
+  "bg.model.uploadHint": "Guardada localmente · para \"Colocar Modelo\"",
+  "bg.model.previewAlt": "Vista previa del modelo guardado",
+  "bg.model.fallbackName": "Foto de Modelo",
+  "bg.model.savedStatus": "Guardada localmente para colocar en 1 toque",
+  "bg.model.removeTitle": "Quitar foto de modelo guardada",
+  "bg.placeModelButton": "Colocar Modelo",
+  "bg.placeModelShort": "Modelo",
+  "bg.placeModelTitle": "Colocar mi modelo en #{index}",
+  "bg.placeModelAria": "Colocar mi modelo en escena #{index} de {photographer}",
+  "bg.swapModal.title": "Compositor de Modelo en Escena",
+  "bg.swapModal.subtitle":
+    "Composición vertical 9:16 lista para Instagram Reels e Historias.",
+  "bg.swapModal.generating": "Integrando modelo en escena 9:16...",
+  "bg.swapModal.generatingHint":
+    "Igualando iluminación, sombras y realismo fotográfico",
+  "bg.swapModal.fallbackNote":
+    "Vista previa local generada en Canvas. Agrega GEMINI_API_KEY en /admin para reiluminación neural completa.",
+  "bg.swapModal.downloadButton": "Descargar Composición 9:16",
+  "bg.swapModal.previewAlt": "Vista previa compuesta 9:16",
   "bg.resolvedLabel": "Consulta:",
   "bg.canvasTitle": "Lienzo Estético:",
   "bg.pageBadge": "Página #{page}",
   "bg.downloadZipButton": "Descargar Todo (.ZIP)",
   "bg.zipPackaging": "Empaquetando {count} fotos verticales HD en",
-  "bg.loadingOverlay": "Curando 15 fondos verticales...",
+  "bg.loadingOverlay": "Curando {count} fondos verticales...",
   "bg.sourceCurated": "curado",
   "bg.downloadSingleTitle": "Descargar #{index} HD",
   "bg.hdButton": "HD",
@@ -389,18 +486,27 @@ const es: Record<TranslationKey, string> = {
   "bg.toast.imageTooLarge":
     "La imagen de referencia debe pesar 5 MB o menos.",
   "bg.toast.analyzingReference":
-    "Analizando estética de referencia y emparejando 15 fondos...",
+    "Analizando estética de referencia y emparejando {count} fondos...",
   "bg.toast.processImageError":
     "No se pudo procesar la imagen de referencia.",
   "bg.toast.clearedReference": "Filtro de imagen de referencia eliminado.",
+  "bg.toast.savedModel":
+    "Foto de Mi Modelo guardada localmente para colocar en 1 toque.",
+  "bg.toast.clearedModel": "Foto de modelo guardada eliminada.",
+  "bg.toast.uploadModelFirst":
+    "Sube primero una foto en \"Mi Modelo de Referencia\" en el panel izquierdo.",
+  "bg.toast.modelSwapReady": "¡Composición lista con {engine}!",
+  "bg.toast.modelSwapError":
+    "No se pudo generar la composición de escena. Intenta de nuevo.",
+  "bg.toast.downloadedComposite": "¡Composición 9:16 descargada!",
   "bg.toast.downloadedSingle": "Descargada #{index} ({photographer})",
   "bg.toast.downloadSingleError": "No se pudo descargar la foto.",
-  "bg.toast.generateFirst": "Genera primero un lote de 15 fondos.",
+  "bg.toast.generateFirst": "Genera primero un lote de fondos.",
   "bg.toast.downloadedZip":
-    "¡Descargado vokaloom-15-backgrounds.zip ({count} fotos HD)!",
+    "¡Descargado vokaloom-backgrounds.zip ({count} fotos HD)!",
   "bg.toast.zipError":
     "Error al empaquetar el archivo ZIP. Prueba las descargas individuales.",
-  "bg.readme.header": "VOKALOOM STUDIO — LOTE DE 15 FONDOS ESTÉTICOS",
+  "bg.readme.header": "VOKALOOM STUDIO — LOTE DE {count} FONDOS ESTÉTICOS",
   "bg.readme.query": "Consulta Generada: {query}",
   "bg.readme.vibe": "Estilo Predefinido: {vibe}",
   "bg.readme.aspect":
@@ -439,7 +545,7 @@ const es: Record<TranslationKey, string> = {
   "voice.toggleOn": "ACTIVO",
   "voice.toggleOff": "INACTIVO",
   "voice.dropzoneTitle":
-    "Arrastra o sube una muestra de voz de 10–30s (.MP3 / .WAV)",
+    "Sube o arrastra nota de voz de WhatsApp (.OGG, .MP3, .WAV · 10–20s)",
   "voice.dropzoneHint":
     "Impulsado por MIT F5-TTS · clonación zero-shot 100% apta para uso comercial",
   "voice.sampleReady": "Lista para síntesis zero-shot con F5-TTS",
@@ -470,15 +576,15 @@ const es: Record<TranslationKey, string> = {
   "voice.downloadClipTitle": "Descargar clip",
   "voice.toast.loadedSample": "Guion de ejemplo cargado: {label}",
   "voice.toast.invalidAudioType":
-    "Sube un archivo de referencia de voz .MP3 o .WAV.",
+    "Sube un archivo de voz .OGG (WhatsApp), .MP3, .WAV o .M4A.",
   "voice.toast.audioTooLarge":
-    "La muestra de voz debe pesar menos de 3 MB. Consejo: sube un clip .MP3 o .WAV de 10 a 20 segundos.",
+    "La muestra de voz debe pesar menos de 3 MB. Consejo: sube un clip .OGG, .MP3 o .WAV de 10 a 20 segundos.",
   "voice.toast.loadedAudioSample":
     "Muestra de voz \"{name}\" cargada para clonación zero-shot con MIT F5-TTS.",
   "voice.toast.emptyScript": "Ingresa primero un guion para la locución.",
   "voice.toast.scriptTooLong": "El guion no puede superar los 1,500 caracteres.",
   "voice.toast.missingCloneAudio":
-    "Sube un clip de audio de referencia de 10–30s para clonación zero-shot o desactiva el modo clonación.",
+    "Sube una nota de voz .OGG de WhatsApp, .MP3 o .WAV para clonación zero-shot o desactiva el modo clonación.",
   "voice.toast.synthFailed": "No se pudo sintetizar la locución.",
   "voice.toast.ready": "¡Locución lista con {engine}!",
   "voice.toast.downloaded": "¡Archivo de audio de locución descargado!",
@@ -555,7 +661,7 @@ const es: Record<TranslationKey, string> = {
   "admin.envLabel": "Var: {envVar}",
   "admin.statusActive": "API / Neural Activa",
   "admin.statusFallback": "Respaldo Sin Clave Activo",
-  "admin.card2Title": "2. Configuración Comercial y de Paywall",
+  "admin.card2Title": "3. Configuración Comercial y de Paywall",
   "admin.card2Desc":
     "Personaliza los precios del Pase Pro, enlaces de pago Wompi/Stripe y el límite de créditos de prueba.",
   "admin.priceCopLabel": "Precio (COP)",
@@ -565,7 +671,7 @@ const es: Record<TranslationKey, string> = {
   "admin.checkoutUsdLabel": "URL de Pago Stripe Global (USD)",
   "admin.saveSettingsButton": "Guardar Ajustes de Paywall y Precios",
   "admin.card3Title":
-    "3. Enlaces de Acceso y Generador de Invitaciones WhatsApp",
+    "4. Enlaces de Acceso y Generador de Invitaciones WhatsApp",
   "admin.card3Desc":
     "Genera enlaces de autodesbloqueo en 1 clic (/?key=...) para clientes de pago o testers VIP por WhatsApp.",
   "admin.vipCodesLabelBefore": "Códigos VIP Activos en el Servidor (",
@@ -573,7 +679,7 @@ const es: Record<TranslationKey, string> = {
   "admin.copyInviteButton": "Copiar Enlace VIP",
   "admin.customInviteLabel": "Constructor de Enlace con Código Personalizado",
   "admin.customInvitePlaceholder": "Ingresa un código de acceso...",
-  "admin.card4Title": "4. Sandbox de Operador y Controles del Dispositivo",
+  "admin.card4Title": "5. Sandbox de Operador y Controles del Dispositivo",
   "admin.card4Desc":
     "Alterna este navegador entre Modo Operador Ilimitado y Vista de Cliente Normal para probar los créditos gratuitos y el paywall.",
   "admin.enableOperatorButton":
@@ -598,6 +704,29 @@ const es: Record<TranslationKey, string> = {
     "Cambiado a Vista de Cliente Normal. Ya puedes probar el contador de prueba y el paywall.",
   "admin.toast.trialReset":
     "Créditos locales de prueba reiniciados a {remaining}/{max}.",
+  "admin.vault.title": "2. Bóveda de Claves API en Tiempo Real (AES-256-GCM)",
+  "admin.vault.desc":
+    "Pega tus claves API directamente desde este navegador. Se cifran en una cookie HttpOnly (y se guardan en .env.local en desarrollo local) sin exponerse al JS del cliente ni a localStorage.",
+  "admin.vault.activeBadge": "Activa: {masked}",
+  "admin.vault.unsetBadge": "Sin configurar",
+  "admin.vault.placeholder":
+    "Pega una clave nueva para actualizar (o CLEAR para quitar)...",
+  "admin.vault.saveButton": "Guardar y Cifrar Claves",
+  "admin.vault.savingButton": "Cifrando Claves...",
+  "admin.vault.clearButton": "Vaciar Bóveda",
+  "admin.vault.clearSingleTitle": "Quitar {keyName} de la bóveda",
+  "admin.vault.toast.savedCookie":
+    "Claves API cifradas y guardadas en la cookie HttpOnly de la bóveda.",
+  "admin.vault.toast.savedDisk":
+    "Claves API cifradas en la bóveda HttpOnly y guardadas en .env.local.",
+  "admin.vault.toast.noInput":
+    "Ingresa al menos una clave API (o CLEAR) antes de guardar.",
+  "admin.vault.toast.cleared":
+    "Cookie cifrada de la bóveda API vaciada.",
+  "admin.vault.toast.saveError":
+    "No se pudo actualizar la bóveda de claves API.",
+  "admin.vault.toast.clearError":
+    "No se pudo vaciar la bóveda de claves API.",
 
   // API Route Messages
   "api.bg.invalidProxyOrigin": "Origen de proxyUrl no válido o no permitido.",
@@ -605,6 +734,13 @@ const es: Record<TranslationKey, string> = {
   "api.bg.proxyFailed": "No se pudo obtener la imagen a través del proxy.",
   "api.bg.fallbackNotice":
     "Se sirvió el lote curado de respaldo porque la búsqueda en vivo tuvo un problema.",
+  "api.modelSwap.missingInputs":
+    "Se requieren tanto la foto del modelo como la URL de fondo.",
+  "api.modelSwap.invalidBackgroundOrigin":
+    "Origen de backgroundUrl no válido o no permitido.",
+  "api.modelSwap.fallbackEngine": "Compositor Canvas Local",
+  "api.modelSwap.processError":
+    "No se pudo procesar la colocación del modelo en escena.",
   "api.voice.invalidLength":
     "El texto del guion debe tener entre 1 y 1,500 caracteres.",
   "api.voice.demoFallbackEngine":
@@ -617,10 +753,17 @@ const es: Record<TranslationKey, string> = {
   "api.admin.missingCode": "Por favor proporciona un código de acceso.",
   "api.admin.invalidAdminKey": "Contraseña maestra de administrador inválida.",
   "api.admin.invalidAccessCode": "Código de Pase Pro u Operador inválido.",
+  "api.admin.tooManyAttempts":
+    "Demasiados intentos. Intenta de nuevo en 10 minutos.",
   "api.admin.operatorGranted": "Acceso de operador concedido.",
   "api.admin.proGranted": "Acceso de Pase Pro concedido.",
   "api.admin.invalidRequest":
     "Solicitud de verificación de administrador inválida.",
+  "api.admin.invalidKeyLength":
+    "La clave {keyName} debe tener más de 5 caracteres (o CLEAR).",
+  "api.admin.noKeysProvided": "No se enviaron actualizaciones de claves.",
+  "api.admin.vaultUpdated": "Bóveda de claves API cifrada y actualizada.",
+  "api.admin.vaultCleared": "Cookie de bóveda de claves API eliminada.",
 };
 
 export const TRANSLATIONS: Record<Locale, Record<TranslationKey, string>> = {

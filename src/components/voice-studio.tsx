@@ -173,7 +173,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const { locale, t } = useLocale();
   const [text, setText] = useState<string>(SAMPLE_SCRIPTS[0].text);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("sofia-es");
-  const [cloneMode, setCloneMode] = useState<boolean>(false);
+  const [cloneMode, setCloneMode] = useState<boolean>(true);
   const [referenceAudioBase64, setReferenceAudioBase64] = useState<
     string | null
   >(null);
@@ -266,10 +266,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   };
 
   const processAudioFile = (file: File) => {
-    const validExtensions = [".mp3", ".wav", ".m4a", ".ogg"];
+    const validExtensions = [".ogg", ".opus", ".mp3", ".wav", ".m4a"];
     const lowerName = file.name.toLowerCase();
     const isAudio =
       file.type.startsWith("audio/") ||
+      file.type === "application/ogg" ||
       validExtensions.some((ext) => lowerName.endsWith(ext));
 
     if (!isAudio) {
@@ -644,7 +645,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="audio/mpeg,audio/wav,audio/mp3,.mp3,.wav"
+              accept=".ogg,.mp3,.wav,.m4a,audio/ogg,audio/opus,audio/mpeg,audio/wav"
               onChange={handleAudioUpload}
               className="hidden"
               id="reference-voice-upload"

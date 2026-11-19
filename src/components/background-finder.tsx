@@ -14,10 +14,21 @@ import {
   Search,
   Loader2,
   CheckCircle2,
+  UserPlus,
+  Smartphone,
+  Layers,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useLocale } from "@/components/locale-provider";
@@ -33,6 +44,8 @@ import type { BackgroundItem } from "@/app/api/backgrounds/route";
 export interface BackgroundFinderProps {
   onRequirePaywall: () => void;
 }
+
+const MY_MODEL_STORAGE_KEY = "vokaloom_my_model_v1";
 
 const VIBE_PRESETS: ReadonlyArray<{
   value: string;
@@ -56,9 +69,22 @@ interface BackgroundsApiResponse {
   page: number;
 }
 
+interface ModelSwapApiResponse {
+  resultImageUrl: string | null;
+  fallbackComposite?: boolean;
+  engine?: string;
+  isFallback?: boolean;
+  error?: string;
+}
+
+interface SavedModelData {
+  base64: string;
+  name: string;
+}
+
 /**
- * Compresses any uploaded reference photo (up to 5 MB) down to ~120 KB JPEG
- * using an HTML5 Canvas so Vercel's 4.5 MB serverless body limit is never exceeded.
+ * Compresses any uploaded photo (up to 5 MB) down to ~120 KB JPEG
+ * using an HTML5 Canvas so Vercel's 4.5 MB body limit and localStorage limits are respected.
  */
 async function compressImageFileToBase64(
   file: File,
@@ -99,6 +125,15 @@ async function compressImageFileToBase64(
       img.src = dataUrl;
     };
     reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
   });
 }
 
@@ -177,8 +212,93 @@ async function fetchImageBlobWithCorsProxy(
   return generateOfflineVerticalFallbackBlob(item, index, locale);
 }
 
+async function generateClientCanvasComposite(
+  modelBase64: string,
+  item: BackgroundItem,
+  index: number,
+  locale: Locale
+): Promise<string> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return modelBase64;
+
+  // 1. Draw same-origin proxied 9:16 background cover
+  const bgBlob = await fetchImageBlobWithCorsProxy(item, index, locale);
+  const bgObjectUrl = URL.createObjectURL(bgBlob);
+  try {
+    const bgImg = await loadImageElement(bgObjectUrl);
+    const scale = Math.max(
+      canvas.width / bgImg.width,
+      canvas.height / bgImg.height
+    );
+    const drawW = bgImg.width * scale;
+    const drawH = bgImg.height * scale;
+    const drawX = (canvas.width - drawW) / 2;
+    const drawY = (canvas.height - drawH) / 2;
+    ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+  } finally {
+    URL.revokeObjectURL(bgObjectUrl);
+  }
+
+  // Subtle ambient grounding shadow near lower half
+  const bottomGrad = ctx.createLinearGradient(0, 1000, 0, 1920);
+  bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
+  bottomGrad.addColorStop(1, "rgba(5,5,7,0.45)");
+  ctx.fillStyle = bottomGrad;
+  ctx.fillRect(0, 1000, 1080, 920);
+
+  // 2. Draw Model Reference cleanly integrated into lower-center portrait stage
+  const modelImg = await loadImageElement(modelBase64);
+  const targetH = 980;
+  const targetW = Math.min(
+    780,
+    Math.round((modelImg.width / modelImg.height) * targetH)
+  );
+  const x = Math.round((canvas.width - targetW) / 2);
+  const y = canvas.height - targetH - 90;
+  const radius = 36;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+  ctx.shadowBlur = 48;
+  ctx.shadowOffsetY = 18;
+  ctx.beginPath();
+  ctx.roundRect(x, y, targetW, targetH, radius);
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, targetW, targetH, radius);
+  ctx.clip();
+  ctx.drawImage(modelImg, x, y, targetW, targetH);
+
+  // Soft edge shading for scene integration
+  const edgeShade = ctx.createLinearGradient(0, y + targetH - 220, 0, y + targetH);
+  edgeShade.addColorStop(0, "rgba(0,0,0,0)");
+  edgeShade.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = edgeShade;
+  ctx.fillRect(x, y, targetW, targetH);
+  ctx.restore();
+
+  // Subtle border highlight
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, targetW, targetH, radius);
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  return canvas.toDataURL("image/png");
+}
+
 export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const { locale, t } = useLocale();
+  const [batchSize, setBatchSize] = useState<5 | 15>(15);
   const [selectedVibe, setSelectedVibe] = useState<string>("Luxury Travel");
   const [query, setQuery] = useState<string>("");
   const [page, setPage] = useState<number>(1);
@@ -196,12 +316,28 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const [visionUsed, setVisionUsed] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Reference Image State
+  // Reference Image State (Boss Reference Matcher)
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
   const [referenceMimeType, setReferenceMimeType] =
     useState<string>("image/jpeg");
   const [referenceFileName, setReferenceFileName] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // My Model Reference State (Persisted in localStorage)
+  const [myModelPreview, setMyModelPreview] = useState<string | null>(null);
+  const [myModelName, setMyModelName] = useState<string>("");
+  const myModelInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Model-in-Scene Swap Modal State
+  const [swapModalOpen, setSwapModalOpen] = useState<boolean>(false);
+  const [isSwapping, setIsSwapping] = useState<boolean>(false);
+  const [swappingItemId, setSwappingItemId] = useState<string | null>(null);
+  const [swapTargetItem, setSwapTargetItem] = useState<BackgroundItem | null>(
+    null
+  );
+  const [swapResultUrl, setSwapResultUrl] = useState<string | null>(null);
+  const [swapEngine, setSwapEngine] = useState<string>("");
+  const [swapIsFallback, setSwapIsFallback] = useState<boolean>(false);
 
   // ZIP Export State
   const [isZipping, setIsZipping] = useState<boolean>(false);
@@ -213,6 +349,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
   const fetchBatch = async (opts: {
     targetPage: number;
+    batchSizeOverride?: 5 | 15;
     vibeOverride?: string;
     queryOverride?: string;
     refBase64?: string | null;
@@ -233,6 +370,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       }
     }
 
+    const activeBatchSize = opts.batchSizeOverride ?? batchSize;
     setIsLoading(true);
     try {
       const response = await fetch("/api/backgrounds", {
@@ -245,6 +383,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           query: opts.queryOverride ?? query,
           vibe: opts.vibeOverride ?? selectedVibe,
           page: opts.targetPage,
+          batchSize: activeBatchSize,
           referenceImageBase64:
             opts.refBase64 !== undefined
               ? opts.refBase64 || undefined
@@ -283,8 +422,23 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     }
   };
 
-  // Load initial showcase batch on mount without deducting a trial credit
+  // Load saved My Model reference + initial showcase batch on mount
   useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const raw = window.localStorage.getItem(MY_MODEL_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<SavedModelData>;
+          if (parsed.base64) {
+            setMyModelPreview(parsed.base64);
+            setMyModelName(parsed.name || "");
+          }
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    });
+
     let active = true;
     fetch("/api/backgrounds", {
       method: "POST",
@@ -293,6 +447,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         query: "",
         vibe: "Luxury Travel",
         page: 1,
+        batchSize: 15,
       }),
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -317,6 +472,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const handleGenerateClick = () => {
     void fetchBatch({
       targetPage: 1,
+      batchSizeOverride: batchSize,
       consumeQuota: true,
     });
   };
@@ -325,8 +481,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     const nextPage = page + 1;
     void fetchBatch({
       targetPage: nextPage,
+      batchSizeOverride: batchSize,
       consumeQuota: true,
     });
+  };
+
+  const handleBatchSizeChange = (nextSize: 5 | 15) => {
+    setBatchSize(nextSize);
   };
 
   const handleVibeSelect = (vibe: string) => {
@@ -359,9 +520,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       setReferencePreview(base64);
       setReferenceMimeType(mimeType);
       setReferenceFileName(file.name);
-      toast.info(t("bg.toast.analyzingReference"));
+      toast.info(t("bg.toast.analyzingReference", { count: batchSize }));
       void fetchBatch({
         targetPage: 1,
+        batchSizeOverride: batchSize,
         refBase64: base64,
         refMime: mimeType,
         consumeQuota: true,
@@ -379,6 +541,150 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       fileInputRef.current.value = "";
     }
     toast.info(t("bg.toast.clearedReference"));
+  };
+
+  const handleMyModelFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error(t("bg.toast.invalidImageType"));
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(t("bg.toast.imageTooLarge"));
+      return;
+    }
+
+    try {
+      const { base64 } = await compressImageFileToBase64(file, 900, 0.78);
+      setMyModelPreview(base64);
+      setMyModelName(file.name);
+      try {
+        window.localStorage.setItem(
+          MY_MODEL_STORAGE_KEY,
+          JSON.stringify({ base64, name: file.name })
+        );
+      } catch {
+        // Ignore storage quota errors
+      }
+      toast.success(t("bg.toast.savedModel"));
+    } catch {
+      toast.error(t("bg.toast.processImageError"));
+    }
+  };
+
+  const handleClearMyModel = () => {
+    setMyModelPreview(null);
+    setMyModelName("");
+    if (myModelInputRef.current) {
+      myModelInputRef.current.value = "";
+    }
+    try {
+      window.localStorage.removeItem(MY_MODEL_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+    toast.info(t("bg.toast.clearedModel"));
+  };
+
+  const handlePlaceModel = async (item: BackgroundItem, index: number) => {
+    if (!myModelPreview) {
+      toast.warning(t("bg.toast.uploadModelFirst"));
+      myModelInputRef.current?.click();
+      return;
+    }
+
+    const creditCheck = consumeCredit();
+    if (!creditCheck.allowed) {
+      toast.warning(
+        t("quota.exhaustedToast", {
+          remaining: creditCheck.state.creditsRemaining,
+          max: creditCheck.state.maxTrialCredits,
+        })
+      );
+      onRequirePaywall();
+      return;
+    }
+
+    setSwapTargetItem(item);
+    setSwapResultUrl(null);
+    setSwapEngine("");
+    setSwapIsFallback(false);
+    setSwappingItemId(item.id);
+    setIsSwapping(true);
+    setSwapModalOpen(true);
+
+    try {
+      const res = await fetch("/api/model-swap", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          modelImageBase64: myModelPreview,
+          backgroundUrl: item.downloadUrl || item.previewUrl,
+          sceneTitle: item.title,
+          locale,
+        }),
+      });
+
+      const data = (await res.json()) as ModelSwapApiResponse;
+      if (!res.ok) {
+        throw new Error(data.error || t("bg.toast.modelSwapError"));
+      }
+
+      if (data.resultImageUrl) {
+        setSwapResultUrl(data.resultImageUrl);
+        setSwapEngine(data.engine || "Gemini 2.5 Visual Compositor");
+        setSwapIsFallback(Boolean(data.isFallback));
+        toast.success(
+          t("bg.toast.modelSwapReady", {
+            engine: data.engine || "Gemini 2.5 Visual Compositor",
+          })
+        );
+      } else {
+        const localCompositeUrl = await generateClientCanvasComposite(
+          myModelPreview,
+          item,
+          index,
+          locale
+        );
+        const engineLabel =
+          data.engine || t("api.modelSwap.fallbackEngine");
+        setSwapResultUrl(localCompositeUrl);
+        setSwapEngine(engineLabel);
+        setSwapIsFallback(true);
+        toast.success(t("bg.toast.modelSwapReady", { engine: engineLabel }));
+      }
+    } catch (error) {
+      console.error("Model swap error:", error);
+      toast.error(
+        error instanceof Error ? error.message : t("bg.toast.modelSwapError")
+      );
+      setSwapModalOpen(false);
+    } finally {
+      setIsSwapping(false);
+      setSwappingItemId(null);
+    }
+  };
+
+  const handleDownloadSwapResult = () => {
+    if (!swapResultUrl) return;
+    const isPng = swapResultUrl.startsWith("data:image/png");
+    const ext = isPng ? "png" : "jpg";
+    const link = document.createElement("a");
+    link.href = swapResultUrl;
+    link.download = `vokaloom-model-scene-9x16.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(t("bg.toast.downloadedComposite"));
   };
 
   const handleDownloadSingle = async (item: BackgroundItem, index: number) => {
@@ -421,7 +727,8 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
     try {
       const zip = new JSZip();
-      const folder = zip.folder("vokaloom-15-backgrounds");
+      const folderName = `vokaloom-${items.length}-backgrounds`;
+      const folder = zip.folder(folderName);
       let completedCount = 0;
 
       await Promise.all(
@@ -445,7 +752,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       // Include commercial attribution & query metadata inside the ZIP archive
       const attributionLines = [
-        t("bg.readme.header"),
+        t("bg.readme.header", { count: items.length }),
         t("bg.readme.query", { query: resolvedQuery }),
         t("bg.readme.vibe", { vibe: selectedVibe }),
         t("bg.readme.aspect"),
@@ -468,7 +775,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "vokaloom-15-backgrounds.zip";
+      a.download = `${folderName}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -504,38 +811,78 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             variant="outline"
             className="shrink-0 border-white/10 bg-white/[0.04] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300"
           >
-            {t("bg.inspectorBadge")}
+            {t("bg.inspectorBadge", { count: batchSize })}
           </Badge>
         </div>
 
-        {/* Section 1: Vibe Presets */}
-        <div className="space-y-2 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              {t("bg.vibePresets")}
+        {/* Section 1: Batch Size Toggle (5x Mobile Fast vs 15x Full Pack) & Vibe Presets */}
+        <div className="space-y-3 p-4">
+          <div className="space-y-1.5">
+            <span className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              {t("bg.batch.label")}
             </span>
-            <span className="truncate font-mono text-[10px] text-zinc-500">
-              {t(selectedVibeMeta.labelKey)}
-            </span>
+            <div
+              role="group"
+              aria-label={t("bg.batch.label")}
+              className="grid grid-cols-2 gap-1.5 rounded-lg border border-white/[0.08] bg-zinc-950/70 p-1"
+            >
+              <button
+                type="button"
+                onClick={() => handleBatchSizeChange(5)}
+                aria-pressed={batchSize === 5}
+                className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all ${
+                  batchSize === 5
+                    ? "bg-violet-600 text-white shadow-xs"
+                    : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                }`}
+              >
+                <Smartphone className="size-3 shrink-0" />
+                <span className="truncate">{t("bg.batch.fast5")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchSizeChange(15)}
+                aria-pressed={batchSize === 15}
+                className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all ${
+                  batchSize === 15
+                    ? "bg-violet-600 text-white shadow-xs"
+                    : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                }`}
+              >
+                <Layers className="size-3 shrink-0" />
+                <span className="truncate">{t("bg.batch.full15")}</span>
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {VIBE_PRESETS.map((vibe) => {
-              const isActive = selectedVibe === vibe.value;
-              return (
-                <button
-                  key={vibe.value}
-                  type="button"
-                  onClick={() => handleVibeSelect(vibe.value)}
-                  className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    isActive
-                      ? "border-violet-500/60 bg-violet-500/20 text-white shadow-xs"
-                      : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:bg-white/[0.05] hover:text-zinc-200"
-                  }`}
-                >
-                  {t(vibe.labelKey)}
-                </button>
-              );
-            })}
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                {t("bg.vibePresets")}
+              </span>
+              <span className="truncate font-mono text-[10px] text-zinc-500">
+                {t(selectedVibeMeta.labelKey)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {VIBE_PRESETS.map((vibe) => {
+                const isActive = selectedVibe === vibe.value;
+                return (
+                  <button
+                    key={vibe.value}
+                    type="button"
+                    onClick={() => handleVibeSelect(vibe.value)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                      isActive
+                        ? "border-violet-500/60 bg-violet-500/20 text-white shadow-xs"
+                        : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:bg-white/[0.05] hover:text-zinc-200"
+                    }`}
+                  >
+                    {t(vibe.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -590,7 +937,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               ) : (
                 <Sparkles className="mr-1.5 size-3.5 shrink-0" />
               )}
-              <span className="truncate">{t("bg.generateButton")}</span>
+              <span className="truncate">
+                {t("bg.generateButton", { count: batchSize })}
+              </span>
             </Button>
 
             <Button
@@ -599,7 +948,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               variant="outline"
               onClick={handleShuffleMore}
               disabled={isLoading}
-              title={t("bg.shuffleTitle", { page: page + 1 })}
+              title={t("bg.shuffleTitle", {
+                count: batchSize,
+                page: page + 1,
+              })}
               className="h-8 shrink-0 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
             >
               <Shuffle className="mr-1.5 size-3.5 shrink-0 text-zinc-400" />
@@ -608,7 +960,80 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           </div>
         </div>
 
-        {/* Section 3: Compact Boss Reference Matcher (Gemini 2.5 Flash Vision) */}
+        {/* Section 3: My Model Reference (Saved once in localStorage for 1-tap scene placement) */}
+        <div className="space-y-2.5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <UserPlus className="size-3.5 shrink-0 text-emerald-400" />
+              <span className="truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                {t("bg.model.title")}
+              </span>
+            </div>
+            <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
+              {t("bg.model.badge")}
+            </span>
+          </div>
+
+          <input
+            ref={myModelInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleMyModelFileChange}
+            className="hidden"
+            id="my-model-upload"
+          />
+
+          {!myModelPreview ? (
+            <label
+              htmlFor="my-model-upload"
+              className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/[0.12] bg-zinc-950/60 p-2.5 transition-colors hover:border-emerald-500/50 hover:bg-zinc-950/90"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 transition-colors group-hover:bg-emerald-500/20">
+                <UserPlus className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-zinc-200">
+                  {t("bg.model.uploadTitle")}
+                </p>
+                <p className="text-[10px] text-zinc-500">
+                  {t("bg.model.uploadHint")}
+                </p>
+              </div>
+            </label>
+          ) : (
+            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-2.5">
+              <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={myModelPreview}
+                  alt={t("bg.model.previewAlt")}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="truncate text-xs font-medium text-white">
+                    {myModelName || t("bg.model.fallbackName")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearMyModel}
+                    className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                    title={t("bg.model.removeTitle")}
+                    aria-label={t("bg.model.removeTitle")}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-emerald-400">
+                  {t("bg.model.savedStatus")}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 4: Compact Boss Reference Matcher (Gemini 2.5 Flash Vision) */}
         <div className="space-y-2.5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -644,7 +1069,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   {t("bg.uploadReference")}
                 </p>
                 <p className="text-[10px] text-zinc-500">
-                  {t("bg.uploadReferenceHint")}
+                  {t("bg.uploadReferenceHint", { count: batchSize })}
                 </p>
               </div>
             </label>
@@ -691,7 +1116,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           )}
         </div>
 
-        {/* Section 4: Active Aesthetic DNA Telemetry */}
+        {/* Section 5: Active Aesthetic DNA Telemetry */}
         <div className="space-y-2 bg-zinc-950/40 px-4 py-3">
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
             <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
@@ -725,11 +1150,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         {/* Floating Canvas Header */}
         <div className="glass-panel rounded-xl px-4 py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="text-sm font-semibold tracking-tight text-white">
                 {t("bg.canvasTitle")}{" "}
                 <span className="font-mono tabular-nums text-zinc-300">
-                  {items.length} / 15
+                  {items.length} / {batchSize}
                 </span>
               </h2>
 
@@ -740,9 +1165,41 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 {t("bg.pageBadge", { page })}
               </Badge>
 
+              {/* Quick 5x / 15x Canvas Header Switcher */}
+              <div
+                role="group"
+                aria-label={t("bg.batch.label")}
+                className="inline-flex h-6 items-center rounded-md border border-white/10 bg-zinc-950/70 p-0.5 font-mono text-[10px]"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleBatchSizeChange(5)}
+                  aria-pressed={batchSize === 5}
+                  className={`rounded px-1.5 py-0.5 font-semibold transition-colors ${
+                    batchSize === 5
+                      ? "bg-violet-600 text-white"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {t("bg.batch.short5")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBatchSizeChange(15)}
+                  aria-pressed={batchSize === 15}
+                  className={`rounded px-1.5 py-0.5 font-semibold transition-colors ${
+                    batchSize === 15
+                      ? "bg-violet-600 text-white"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {t("bg.batch.short15")}
+                </button>
+              </div>
+
               <div className="hidden items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[11px] text-zinc-400 sm:inline-flex">
                 <span className="size-1.5 rounded-full bg-emerald-400" />
-                <span className="max-w-[240px] truncate" title={resolvedQuery}>
+                <span className="max-w-[200px] truncate" title={resolvedQuery}>
                   {resolvedQuery}
                 </span>
               </div>
@@ -772,7 +1229,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <span>
                   {t("bg.zipPackaging", { count: items.length })}{" "}
                   <code className="text-violet-300">
-                    vokaloom-15-backgrounds.zip
+                    vokaloom-{items.length}-backgrounds.zip
                   </code>
                 </span>
                 <span className="font-mono font-semibold tabular-nums text-emerald-400">
@@ -784,13 +1241,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           )}
         </div>
 
-        {/* 15-Photo Frameless 9:16 Grid */}
+        {/* 9:16 Photo Grid */}
         <div className="relative">
           {isLoading && items.length > 0 && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-black/40 pt-16 backdrop-blur-[2px]">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/75 px-3.5 py-1.5 text-xs font-medium text-zinc-200 backdrop-blur-md">
                 <Loader2 className="size-3.5 animate-spin text-violet-400" />
-                {t("bg.loadingOverlay")}
+                {t("bg.loadingOverlay", { count: batchSize })}
               </div>
             </div>
           )}
@@ -821,14 +1278,34 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   </span>
                 </div>
 
-                {/* Hover Quick Download Pill (Top/Center-Right Action on Hover, Always Accessible on Focus/Loading) */}
+                {/* Desktop Hover/Focus Action Pills (Place Model + HD Download) */}
                 <div
-                  className={`absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ${
-                    downloadingId === item.id
+                  className={`absolute top-1/2 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 transition-all duration-200 sm:flex ${
+                    downloadingId === item.id || swappingItemId === item.id
                       ? "opacity-100 scale-100"
                       : "opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
                   }`}
                 >
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handlePlaceModel(item, index)}
+                    disabled={swappingItemId === item.id}
+                    title={t("bg.placeModelTitle", { index: index + 1 })}
+                    aria-label={t("bg.placeModelAria", {
+                      index: index + 1,
+                      photographer: item.photographer,
+                    })}
+                    className="h-8 rounded-full border border-violet-400/40 bg-violet-600/90 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-violet-500"
+                  >
+                    {swappingItemId === item.id ? (
+                      <Loader2 className="mr-1.5 size-3 animate-spin" />
+                    ) : (
+                      <Wand2 className="mr-1.5 size-3" />
+                    )}
+                    {t("bg.placeModelButton")}
+                  </Button>
+
                   <Button
                     type="button"
                     size="sm"
@@ -840,7 +1317,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       index: index + 1,
                       photographer: item.photographer,
                     })}
-                    className="h-8 rounded-full border border-white/15 bg-black/70 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-white hover:text-zinc-950"
+                    className="h-8 rounded-full border border-white/15 bg-black/75 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-white hover:text-zinc-950"
                   >
                     {downloadingId === item.id ? (
                       <Loader2 className="mr-1.5 size-3 animate-spin" />
@@ -851,8 +1328,8 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   </Button>
                 </div>
 
-                {/* Bottom Attribution & Mobile-Accessible Quick Download */}
-                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 pt-10">
+                {/* Bottom Attribution & Mobile-First Touch Actions */}
+                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-2.5 pt-10">
                   <p className="line-clamp-1 text-[11px] font-medium tracking-tight text-white/95">
                     {item.title}
                   </p>
@@ -861,23 +1338,45 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       <Camera className="size-3 shrink-0 text-violet-400" />
                       <span className="truncate">{item.photographer}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadSingle(item, index)}
-                      disabled={downloadingId === item.id}
-                      aria-label={t("bg.downloadSingleAria", {
-                        index: index + 1,
-                        photographer: item.photographer,
-                      })}
-                      title={t("bg.downloadSingleTitle", { index: index + 1 })}
-                      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/60 text-zinc-200 backdrop-blur-md transition-colors hover:bg-white hover:text-zinc-950 sm:hidden"
-                    >
-                      {downloadingId === item.id ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Download className="size-3" />
-                      )}
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1 sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => void handlePlaceModel(item, index)}
+                        disabled={swappingItemId === item.id}
+                        aria-label={t("bg.placeModelAria", {
+                          index: index + 1,
+                          photographer: item.photographer,
+                        })}
+                        title={t("bg.placeModelTitle", { index: index + 1 })}
+                        className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-400/40 bg-violet-600/85 px-2 text-[10px] font-semibold text-white backdrop-blur-md active:scale-95"
+                      >
+                        {swappingItemId === item.id ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Wand2 className="size-3" />
+                        )}
+                        <span>{t("bg.placeModelShort")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadSingle(item, index)}
+                        disabled={downloadingId === item.id}
+                        aria-label={t("bg.downloadSingleAria", {
+                          index: index + 1,
+                          photographer: item.photographer,
+                        })}
+                        title={t("bg.downloadSingleTitle", {
+                          index: index + 1,
+                        })}
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-white/15 bg-black/70 text-zinc-100 backdrop-blur-md transition-colors hover:bg-white hover:text-zinc-950"
+                      >
+                        {downloadingId === item.id ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Download className="size-3" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -885,6 +1384,69 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           </div>
         </div>
       </section>
+
+      {/* Model-in-Scene Compositor Preview Dialog */}
+      <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
+        <DialogContent className="border border-white/[0.09] bg-[#08080c]/95 p-5 text-zinc-100 backdrop-blur-2xl sm:max-w-md">
+          <DialogHeader className="space-y-1.5 pr-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-white">
+                <Wand2 className="size-4 shrink-0 text-violet-400" />
+                <span>{t("bg.swapModal.title")}</span>
+              </DialogTitle>
+              {swapEngine && (
+                <Badge
+                  variant="outline"
+                  className="border-violet-500/35 bg-violet-500/15 font-mono text-[10px] text-violet-200"
+                >
+                  {swapEngine}
+                </Badge>
+              )}
+            </div>
+            <DialogDescription className="text-xs text-zinc-400">
+              {swapTargetItem?.title || t("bg.swapModal.subtitle")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {isSwapping ? (
+              <div className="flex aspect-[9/16] max-h-[58vh] w-full flex-col items-center justify-center gap-3 rounded-xl border border-white/10 bg-zinc-950/80 p-6 text-center">
+                <Loader2 className="size-8 animate-spin text-violet-400" />
+                <p className="text-xs font-semibold text-white">
+                  {t("bg.swapModal.generating")}
+                </p>
+                <p className="text-[11px] text-zinc-400">
+                  {t("bg.swapModal.generatingHint")}
+                </p>
+              </div>
+            ) : swapResultUrl ? (
+              <div className="space-y-3">
+                <div className="mx-auto aspect-[9/16] max-h-[58vh] overflow-hidden rounded-xl border border-white/15 bg-zinc-950 shadow-2xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={swapResultUrl}
+                    alt={t("bg.swapModal.previewAlt")}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                {swapIsFallback && (
+                  <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                    {t("bg.swapModal.fallbackNote")}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  onClick={handleDownloadSwapResult}
+                  className="h-9 w-full bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  <Download className="mr-1.5 size-4 shrink-0" />
+                  <span>{t("bg.swapModal.downloadButton")}</span>
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

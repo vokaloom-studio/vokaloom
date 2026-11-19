@@ -19,6 +19,9 @@ import {
   UserCheck,
   Eye,
   Loader2,
+  KeyRound,
+  Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 import { LOCALE_HEADER } from "@/lib/i18n";
+import type { SecretKeyName } from "@/lib/server-secrets";
 import {
   getQuotaState,
   getBusinessConfig,
@@ -52,12 +56,32 @@ interface EngineHealth {
   falConfigured: boolean;
 }
 
+type MaskedKeysMap = Partial<Record<SecretKeyName, string | null>>;
+
 interface AdminApiGetResponse {
   authenticated: boolean;
   config?: BusinessConfig;
   health?: EngineHealth;
+  maskedKeys?: MaskedKeysMap;
   vipClientCodes?: string[];
 }
+
+const VAULT_KEY_FIELDS: ReadonlyArray<{
+  keyName: SecretKeyName;
+  serviceHint: string;
+}> = [
+  { keyName: "GEMINI_API_KEY", serviceHint: "Gemini 2.5 Vision / Swap / TTS" },
+  { keyName: "PEXELS_API_KEY", serviceHint: "Pexels Portrait Stock" },
+  { keyName: "UNSPLASH_ACCESS_KEY", serviceHint: "Unsplash Portrait Stock" },
+  { keyName: "FAL_KEY", serviceHint: "Fal.ai Kokoro-82M & F5-TTS" },
+];
+
+const EMPTY_VAULT_INPUTS: Record<SecretKeyName, string> = {
+  GEMINI_API_KEY: "",
+  PEXELS_API_KEY: "",
+  UNSPLASH_ACCESS_KEY: "",
+  FAL_KEY: "",
+};
 
 export default function VokaloomAdminPage() {
   const { locale, t } = useLocale();
@@ -65,6 +89,7 @@ export default function VokaloomAdminPage() {
   useEffect(() => {
     localeRef.current = locale;
   }, [locale]);
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingSession, setIsCheckingSession] = useState<boolean>(true);
   const [passwordInput, setPasswordInput] = useState<string>("");
@@ -77,6 +102,13 @@ export default function VokaloomAdminPage() {
     unsplashConfigured: false,
     falConfigured: false,
   });
+  const [maskedKeys, setMaskedKeys] = useState<MaskedKeysMap>({});
+  const [vaultInputs, setVaultInputs] = useState<Record<SecretKeyName, string>>(
+    { ...EMPTY_VAULT_INPUTS }
+  );
+  const [isSavingVault, setIsSavingVault] = useState<boolean>(false);
+  const [isClearingVault, setIsClearingVault] = useState<boolean>(false);
+
   const [vipCodes, setVipCodes] = useState<string[]>([
     "VOKALOOM-PRO-2026",
     "CLIENT-VIP-01",
@@ -116,6 +148,9 @@ export default function VokaloomAdminPage() {
         setIsAuthenticated(true);
         if (data.health) {
           setHealth(data.health);
+        }
+        if (data.maskedKeys) {
+          setMaskedKeys(data.maskedKeys);
         }
         if (data.vipClientCodes && data.vipClientCodes.length > 0) {
           setVipCodes(data.vipClientCodes);
@@ -181,6 +216,141 @@ export default function VokaloomAdminPage() {
       toast.error(t("admin.toast.verifyFailed"));
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleSaveVaultKeys = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload: Partial<Record<SecretKeyName, string>> = {};
+    for (const field of VAULT_KEY_FIELDS) {
+      const val = vaultInputs[field.keyName].trim();
+      if (val) {
+        payload[field.keyName] = val;
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      toast.error(t("admin.vault.toast.noInput"));
+      return;
+    }
+
+    setIsSavingVault(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          action: "update-keys",
+          keys: payload,
+          locale,
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        persistedToDisk?: boolean;
+        health?: EngineHealth;
+        maskedKeys?: MaskedKeysMap;
+        error?: string;
+      };
+
+      if (!res.ok || !data.success) {
+        toast.error(data.error || t("admin.vault.toast.saveError"));
+        return;
+      }
+
+      if (data.health) setHealth(data.health);
+      if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
+      setVaultInputs({ ...EMPTY_VAULT_INPUTS });
+      toast.success(
+        data.persistedToDisk
+          ? t("admin.vault.toast.savedDisk")
+          : t("admin.vault.toast.savedCookie")
+      );
+    } catch {
+      toast.error(t("admin.vault.toast.saveError"));
+    } finally {
+      setIsSavingVault(false);
+    }
+  };
+
+  const handleClearSingleVaultKey = async (keyName: SecretKeyName) => {
+    setIsSavingVault(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          action: "update-keys",
+          keys: { [keyName]: "CLEAR" },
+          locale,
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        health?: EngineHealth;
+        maskedKeys?: MaskedKeysMap;
+        error?: string;
+      };
+
+      if (!res.ok || !data.success) {
+        toast.error(data.error || t("admin.vault.toast.saveError"));
+        return;
+      }
+
+      if (data.health) setHealth(data.health);
+      if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
+      setVaultInputs((prev) => ({ ...prev, [keyName]: "" }));
+      toast.info(t("admin.vault.toast.savedCookie"));
+    } catch {
+      toast.error(t("admin.vault.toast.saveError"));
+    } finally {
+      setIsSavingVault(false);
+    }
+  };
+
+  const handleClearVault = async () => {
+    setIsClearingVault(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          action: "clear-vault",
+          locale,
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        health?: EngineHealth;
+        maskedKeys?: MaskedKeysMap;
+        error?: string;
+      };
+
+      if (!res.ok || !data.success) {
+        toast.error(data.error || t("admin.vault.toast.clearError"));
+        return;
+      }
+
+      if (data.health) setHealth(data.health);
+      if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
+      setVaultInputs({ ...EMPTY_VAULT_INPUTS });
+      toast.info(t("admin.vault.toast.cleared"));
+    } catch {
+      toast.error(t("admin.vault.toast.clearError"));
+    } finally {
+      setIsClearingVault(false);
     }
   };
 
@@ -375,7 +545,7 @@ export default function VokaloomAdminPage() {
             </Card>
           </div>
         ) : (
-          /* 4 Administrative Control Cards */
+          /* 5 Administrative Control Cards */
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Card 1: API & AI Engine Health Status */}
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
@@ -435,7 +605,119 @@ export default function VokaloomAdminPage() {
               </CardContent>
             </Card>
 
-            {/* Card 2: Commercial & Paywall Configuration */}
+            {/* Card 2: Runtime API Keys Vault (AES-256-GCM HttpOnly Cookie + Local Dev .env.local) */}
+            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
+                  <KeyRound className="size-4 shrink-0 text-violet-400" />
+                  <span>{t("admin.vault.title")}</span>
+                </CardTitle>
+                <CardDescription className="text-xs text-zinc-400">
+                  {t("admin.vault.desc")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveVaultKeys} className="space-y-3">
+                  {VAULT_KEY_FIELDS.map(({ keyName, serviceHint }) => {
+                    const masked = maskedKeys[keyName];
+                    return (
+                      <div key={keyName} className="space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <label
+                            htmlFor={`vault-${keyName}`}
+                            className="font-mono text-[11px] font-semibold text-zinc-200"
+                          >
+                            {keyName}{" "}
+                            <span className="font-sans font-normal text-zinc-500">
+                              · {serviceHint}
+                            </span>
+                          </label>
+                          {masked ? (
+                            <div className="flex items-center gap-1">
+                              <Badge className="border border-emerald-500/30 bg-emerald-500/15 font-mono text-[10px] text-emerald-300">
+                                {t("admin.vault.activeBadge", { masked })}
+                              </Badge>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleClearSingleVaultKey(keyName)
+                                }
+                                disabled={isSavingVault}
+                                title={t("admin.vault.clearSingleTitle", {
+                                  keyName,
+                                })}
+                                aria-label={t("admin.vault.clearSingleTitle", {
+                                  keyName,
+                                })}
+                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950 font-mono text-[10px] text-zinc-400"
+                            >
+                              {t("admin.vault.unsetBadge")}
+                            </Badge>
+                          )}
+                        </div>
+                        <Input
+                          id={`vault-${keyName}`}
+                          type="password"
+                          autoComplete="off"
+                          value={vaultInputs[keyName]}
+                          onChange={(e) =>
+                            setVaultInputs((prev) => ({
+                              ...prev,
+                              [keyName]: e.target.value,
+                            }))
+                          }
+                          placeholder={t("admin.vault.placeholder")}
+                          className="h-8 border-zinc-800 bg-zinc-950 font-mono text-xs text-white placeholder:text-zinc-600"
+                        />
+                      </div>
+                    );
+                  })}
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="submit"
+                      disabled={isSavingVault}
+                      className="h-9 min-w-0 flex-1 bg-violet-600 text-xs font-semibold text-white hover:bg-violet-500"
+                    >
+                      {isSavingVault ? (
+                        <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
+                      ) : (
+                        <Lock className="mr-1.5 size-3.5 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {isSavingVault
+                          ? t("admin.vault.savingButton")
+                          : t("admin.vault.saveButton")}
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isClearingVault}
+                      onClick={() => void handleClearVault()}
+                      className="h-9 shrink-0 border-zinc-700 bg-zinc-950 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                    >
+                      {isClearingVault ? (
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-1.5 size-3.5 text-amber-400" />
+                      )}
+                      {t("admin.vault.clearButton")}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Card 3: Commercial & Paywall Configuration */}
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
@@ -569,7 +851,7 @@ export default function VokaloomAdminPage() {
               </CardContent>
             </Card>
 
-            {/* Card 3: Client Access Links & WhatsApp Invite Generator */}
+            {/* Card 4: Client Access Links & WhatsApp Invite Generator */}
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
@@ -645,8 +927,8 @@ export default function VokaloomAdminPage() {
               </CardContent>
             </Card>
 
-            {/* Card 4: Operator Sandbox & Device Controls */}
-            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
+            {/* Card 5: Operator Sandbox & Device Controls */}
+            <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100 lg:col-span-2">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
                   <Sliders className="size-4 shrink-0 text-emerald-400" />
@@ -656,7 +938,7 @@ export default function VokaloomAdminPage() {
                   {t("admin.card4Desc")}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Button
                   type="button"
                   onClick={handleEnableOperatorBrowser}
@@ -692,7 +974,7 @@ export default function VokaloomAdminPage() {
 
                 <Link
                   href="/"
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/25 hover:text-white"
+                  className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/25 hover:text-white"
                 >
                   <ArrowLeft className="size-4 shrink-0" />
                   <span>{t("admin.returnToStudio")}</span>

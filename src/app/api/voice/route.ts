@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import { resolveApiKey } from "@/lib/server-secrets";
 
 export const maxDuration = 60;
 
@@ -11,16 +12,6 @@ interface VoiceRequestBody {
   language?: "es" | "en";
   referenceAudioBase64?: string;
   locale?: unknown;
-}
-
-function isValidFalKey(val: string | undefined): boolean {
-  return Boolean(val && val.trim().length > 5 && val.trim() !== "your_fal_ai_key");
-}
-
-function isValidGeminiKey(val: string | undefined): boolean {
-  return Boolean(
-    val && val.trim().length > 5 && val.trim() !== "your_google_ai_studio_key"
-  );
 }
 
 /**
@@ -168,13 +159,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const falKey = process.env.FAL_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const [falKey, geminiKey] = await Promise.all([
+      resolveApiKey("FAL_KEY"),
+      resolveApiKey("GEMINI_API_KEY"),
+    ]);
 
     // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
-    if (referenceAudioBase64 && isValidFalKey(falKey)) {
+    if (referenceAudioBase64 && falKey) {
       try {
-        fal.config({ credentials: falKey!.trim() });
+        fal.config({ credentials: falKey });
         const result = await fal.subscribe("fal-ai/f5-tts", {
           input: {
             gen_text: text,
@@ -199,9 +192,9 @@ export async function POST(request: Request) {
     }
 
     // Mode B: Standard Realistic TTS via Apache-2.0 Kokoro-82M
-    if (!referenceAudioBase64 && isValidFalKey(falKey)) {
+    if (!referenceAudioBase64 && falKey) {
       try {
-        fal.config({ credentials: falKey!.trim() });
+        fal.config({ credentials: falKey });
         const result =
           language === "es"
             ? await fal.subscribe("fal-ai/kokoro/spanish", {
@@ -239,9 +232,9 @@ export async function POST(request: Request) {
     }
 
     // Mode B2: Gemini 2.5 Flash Native Neural TTS via GEMINI_API_KEY
-    if (isValidGeminiKey(geminiKey)) {
+    if (geminiKey) {
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey!.trim() });
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
         const voiceName =
           voiceId.includes("sofia") || voiceId.includes("abella")
             ? "Aoede"
