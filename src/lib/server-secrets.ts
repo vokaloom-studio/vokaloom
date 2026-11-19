@@ -17,6 +17,20 @@ export const SECRET_KEY_NAMES: readonly SecretKeyName[] = [
 ];
 
 export const VAULT_COOKIE_NAME = "vokaloom_vault_v1";
+export const ADMIN_SESSION_COOKIE_NAME = "vokaloom_admin_session";
+export const ENTITLEMENT_COOKIE_NAME = "vokaloom_entitlement_v1";
+
+export const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const ENTITLEMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export type EntitlementRole = "operator" | "pro_client";
+
+export class MissingAdminKeyError extends Error {
+  constructor() {
+    super("ADMIN_MASTER_KEY is required when NODE_ENV is production.");
+    this.name = "MissingAdminKeyError";
+  }
+}
 
 const PLACEHOLDERS: Record<SecretKeyName, string> = {
   GEMINI_API_KEY: "your_google_ai_studio_key",
@@ -27,9 +41,202 @@ const PLACEHOLDERS: Record<SecretKeyName, string> = {
 
 const ALL_PLACEHOLDERS = new Set<string>(Object.values(PLACEHOLDERS));
 
+export function resolveAdminMasterKey(): string | null {
+  const envKey = process.env.ADMIN_MASTER_KEY?.trim();
+  if (envKey && envKey.length > 0) {
+    return envKey;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
+  return "VOKALOOM-ADMIN-2026";
+}
+
 function deriveAesKey(): Buffer {
-  const master = process.env.ADMIN_MASTER_KEY || "VOKALOOM-ADMIN-2026";
+  const master = resolveAdminMasterKey();
+  if (!master) {
+    throw new MissingAdminKeyError();
+  }
   return crypto.createHash("sha256").update(master).digest();
+}
+
+function deriveHmacKey(purpose: string): Buffer | null {
+  const master = resolveAdminMasterKey();
+  if (!master) {
+    return null;
+  }
+  return crypto
+    .createHmac("sha256", master)
+    .update(`vokaloom-hmac:${purpose}`)
+    .digest();
+}
+
+export function signAdminSessionToken(nowMs = Date.now()): string | null {
+  const hmacKey = deriveHmacKey("admin-session");
+  if (!hmacKey) return null;
+  const tsStr = String(nowMs);
+  const sig = crypto
+    .createHmac("sha256", hmacKey)
+    .update(tsStr)
+    .digest("base64url");
+  return `${tsStr}.${sig}`;
+}
+
+export function verifyAdminSessionToken(
+  token: string | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (!token || typeof token !== "string") return false;
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+
+  const [tsStr, sigStr] = parts;
+  if (!tsStr || !sigStr || !/^\d+$/.test(tsStr)) return false;
+
+  const issuedAt = Number(tsStr);
+  if (
+    !Number.isFinite(issuedAt) ||
+    issuedAt <= 0 ||
+    nowMs - issuedAt > ADMIN_SESSION_TTL_MS ||
+    issuedAt > nowMs + 60_000
+  ) {
+    return false;
+  }
+
+  const hmacKey = deriveHmacKey("admin-session");
+  if (!hmacKey) return false;
+
+  const expected = crypto
+    .createHmac("sha256", hmacKey)
+    .update(tsStr)
+    .digest();
+  const provided = Buffer.from(sigStr, "base64url");
+  return (
+    provided.length === expected.length &&
+    crypto.timingSafeEqual(provided, expected)
+  );
+}
+
+export function signEntitlementToken(
+  role: EntitlementRole,
+  nowMs = Date.now()
+): string | null {
+  const hmacKey = deriveHmacKey("entitlement");
+  if (!hmacKey) return null;
+  const payload = Buffer.from(
+    JSON.stringify({ role, iat: nowMs }),
+    "utf8"
+  ).toString("base64url");
+  const sig = crypto
+    .createHmac("sha256", hmacKey)
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+export function verifyEntitlementToken(
+  token: string | undefined,
+  nowMs = Date.now()
+): {
+  valid: boolean;
+  role: EntitlementRole | "guest";
+  isPro: boolean;
+  isOperator: boolean;
+} {
+  const guestResult = {
+    valid: false,
+    role: "guest" as const,
+    isPro: false,
+    isOperator: false,
+  };
+
+  if (!token || typeof token !== "string") return guestResult;
+  const parts = token.split(".");
+  if (parts.length !== 2) return guestResult;
+
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return guestResult;
+
+  const hmacKey = deriveHmacKey("entitlement");
+  if (!hmacKey) return guestResult;
+
+  const expected = crypto
+    .createHmac("sha256", hmacKey)
+    .update(payloadB64)
+    .digest();
+  const provided = Buffer.from(sigB64, "base64url");
+  if (
+    provided.length !== expected.length ||
+    !crypto.timingSafeEqual(provided, expected)
+  ) {
+    return guestResult;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payloadB64, "base64url").toString("utf8")
+    ) as { role?: unknown; iat?: unknown };
+
+    const iat = Number(parsed.iat);
+    if (
+      !Number.isFinite(iat) ||
+      iat <= 0 ||
+      nowMs - iat > ENTITLEMENT_TTL_MS ||
+      iat > nowMs + 60_000
+    ) {
+      return guestResult;
+    }
+
+    if (parsed.role === "operator") {
+      return {
+        valid: true,
+        role: "operator",
+        isPro: true,
+        isOperator: true,
+      };
+    }
+
+    if (parsed.role === "pro_client") {
+      return {
+        valid: true,
+        role: "pro_client",
+        isPro: true,
+        isOperator: false,
+      };
+    }
+
+    return guestResult;
+  } catch {
+    return guestResult;
+  }
+}
+
+export async function resolveServerEntitlement(): Promise<{
+  role: EntitlementRole | "guest";
+  isPro: boolean;
+  isOperator: boolean;
+}> {
+  try {
+    const cookieStore = await cookies();
+    const adminToken = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+    if (verifyAdminSessionToken(adminToken)) {
+      return { role: "operator", isPro: true, isOperator: true };
+    }
+
+    const entitlementToken = cookieStore.get(ENTITLEMENT_COOKIE_NAME)?.value;
+    const verified = verifyEntitlementToken(entitlementToken);
+    if (verified.valid) {
+      return {
+        role: verified.role,
+        isPro: verified.isPro,
+        isOperator: verified.isOperator,
+      };
+    }
+  } catch {
+    // Ignore cookie read issues outside request context
+  }
+
+  return { role: "guest", isPro: false, isOperator: false };
 }
 
 export function isValidSecretValue(

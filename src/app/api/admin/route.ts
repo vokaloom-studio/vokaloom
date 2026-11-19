@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import {
+  ADMIN_SESSION_COOKIE_NAME,
+  ENTITLEMENT_COOKIE_NAME,
   SECRET_KEY_NAMES,
   VAULT_COOKIE_NAME,
   encryptSecretsPayload,
@@ -10,20 +12,19 @@ import {
   isValidSecretValue,
   maskSecret,
   persistLocalEnvIfDev,
+  resolveAdminMasterKey,
   resolveApiKey,
+  resolveServerEntitlement,
+  signAdminSessionToken,
+  signEntitlementToken,
+  verifyAdminSessionToken,
+  type EntitlementRole,
   type SecretKeyName,
 } from "@/lib/server-secrets";
-
-const ADMIN_SESSION_COOKIE = "vokaloom_admin_session";
-const ADMIN_SESSION_TOKEN = "operator_authenticated_v1";
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
-
-function getAdminMasterKey(): string {
-  return (process.env.ADMIN_MASTER_KEY || "VOKALOOM-ADMIN-2026").trim();
-}
 
 function getVipClientCodes(): string[] {
   const raw =
@@ -125,10 +126,14 @@ async function isAdminAuthorized(
   request: Request,
   bodyAdminKey?: string
 ): Promise<boolean> {
-  const masterKey = getAdminMasterKey();
+  const masterKey = resolveAdminMasterKey();
+  if (!masterKey) {
+    return false;
+  }
+
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
-  if (sessionCookie === ADMIN_SESSION_TOKEN) {
+  const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+  if (verifyAdminSessionToken(sessionCookie)) {
     return true;
   }
 
@@ -150,7 +155,10 @@ async function isAdminAuthorized(
 
 export async function GET(request: Request) {
   const locale = resolveRequestLocale(request);
-  const isAdminAuthenticated = await isAdminAuthorized(request);
+  const [isAdminAuthenticated, entitlement] = await Promise.all([
+    isAdminAuthorized(request),
+    resolveServerEntitlement(),
+  ]);
 
   const publicDefaults = {
     priceCop: "$60,000 COP",
@@ -167,6 +175,7 @@ export async function GET(request: Request) {
   if (!isAdminAuthenticated) {
     return NextResponse.json({
       authenticated: false,
+      entitlement,
       config: publicDefaults,
       message: translate(locale, "api.admin.unauthenticated"),
     });
@@ -175,6 +184,7 @@ export async function GET(request: Request) {
   const diagnostics = await resolveAllDiagnostics();
   return NextResponse.json({
     authenticated: true,
+    entitlement,
     config: publicDefaults,
     message: translate(locale, "api.admin.authenticated"),
     ...diagnostics,
@@ -206,11 +216,22 @@ export async function POST(request: Request) {
         loggedOut: true,
         message: translate(locale, "api.admin.loggedOut"),
       });
-      res.cookies.delete(ADMIN_SESSION_COOKIE);
+      res.cookies.delete(ADMIN_SESSION_COOKIE_NAME);
+      res.cookies.delete(ENTITLEMENT_COOKIE_NAME);
       return res;
     }
 
     if (body.action === "update-keys") {
+      if (!resolveAdminMasterKey()) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, "api.admin.missingServerKey"),
+          },
+          { status: 503 }
+        );
+      }
+
       const authorized = await isAdminAuthorized(request, body.adminKey);
       if (!authorized) {
         return NextResponse.json(
@@ -316,6 +337,16 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "clear-vault") {
+      if (!resolveAdminMasterKey()) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, "api.admin.missingServerKey"),
+          },
+          { status: 503 }
+        );
+      }
+
       const authorized = await isAdminAuthorized(request, body.adminKey);
       if (!authorized) {
         return NextResponse.json(
@@ -346,6 +377,17 @@ export async function POST(request: Request) {
       return res;
     }
 
+    const masterKey = resolveAdminMasterKey();
+    if (!masterKey) {
+      return NextResponse.json(
+        {
+          valid: false,
+          error: translate(locale, "api.admin.missingServerKey"),
+        },
+        { status: 503 }
+      );
+    }
+
     const clientIp = getClientIp(request);
     if (body.action === "admin-login" && isRateLimited(clientIp)) {
       return NextResponse.json(
@@ -368,7 +410,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const masterKey = getAdminMasterKey();
     const vipCodes = getVipClientCodes();
 
     const isOperator = timingSafeEqualIgnoreCase(submitted, masterKey);
@@ -401,26 +442,44 @@ export async function POST(request: Request) {
       clearFailedLogins(clientIp);
     }
 
-    const role: "operator" | "pro_client" = isOperator
-      ? "operator"
-      : "pro_client";
-
+    const role: EntitlementRole = isOperator ? "operator" : "pro_client";
     const response = NextResponse.json({
       valid: true,
       role,
+      isOperator,
+      isPro: true,
       message: translate(
         locale,
         isOperator ? "api.admin.operatorGranted" : "api.admin.proGranted"
       ),
     });
 
-    if (isOperator) {
-      response.cookies.set(ADMIN_SESSION_COOKIE, ADMIN_SESSION_TOKEN, {
+    const isProd = process.env.NODE_ENV === "production";
+    const entitlementToken = signEntitlementToken(role);
+    if (entitlementToken) {
+      response.cookies.set(ENTITLEMENT_COOKIE_NAME, entitlementToken, {
         httpOnly: true,
         sameSite: "lax",
+        secure: isProd,
         path: "/",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: 60 * 60 * 24 * 30, // 30 days
       });
+    }
+
+    if (isOperator) {
+      const sessionToken = signAdminSessionToken();
+      if (sessionToken) {
+        response.cookies.set(ADMIN_SESSION_COOKIE_NAME, sessionToken, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: isProd,
+          path: "/",
+          maxAge: 60 * 60 * 24 * 7, // 7 days
+        });
+      }
+    } else {
+      // Strictly ensure pro_client never inherits or keeps an operator session
+      response.cookies.delete(ADMIN_SESSION_COOKIE_NAME);
     }
 
     return response;

@@ -5,6 +5,9 @@ import { resolveApiKey } from "@/lib/server-secrets";
 
 export const maxDuration = 60;
 
+const UPSTREAM_FETCH_TIMEOUT_MS = 10_000;
+const MAX_PROXY_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+
 export interface BackgroundItem {
   id: string;
   title: string;
@@ -94,33 +97,33 @@ const CURATED_VERTICAL_POOL: CuratedPhotoSeed[] = [
     vibeCategory: "Minimalist Cafe",
   },
   {
-    photoId: "1515886657613-9f3515b0c78f",
-    title: "Candid Editorial Street Fashion Walk",
-    photographer: "Dom Hill",
+    photoId: "1600585154340-be6161a56a0c",
+    title: "Sunlit Modern Villa Courtyard Terrace",
+    photographer: "R Architecture",
     vibeCategory: "Candid Lifestyle",
   },
   {
-    photoId: "1529139574466-a303027c1d8b",
-    title: "Golden Hour Rooftop Lifestyle Portrait",
-    photographer: "freestocks",
+    photoId: "1600607687939-ce8a6c25118c",
+    title: "Open Architectural Villa Living Space",
+    photographer: "R Architecture",
     vibeCategory: "Candid Lifestyle",
   },
   {
-    photoId: "1534528741775-53994a69daeb",
-    title: "Natural Light Studio Candid Aesthetic",
-    photographer: "Aiony Haust",
+    photoId: "1618221195710-dd6b41faaea6",
+    title: "Minimalist Sunlit Loft Interior",
+    photographer: "Sidekix Media",
     vibeCategory: "Candid Lifestyle",
   },
   {
-    photoId: "1483985988355-763728e1935b",
-    title: "Milan Boutique Shopping Afternoon POV",
-    photographer: "freestocks",
+    photoId: "1600210492486-724fe5c67fb0",
+    title: "Contemporary Limestone Lounge & Gallery",
+    photographer: "Sidekix Media",
     vibeCategory: "Candid Lifestyle",
   },
   {
-    photoId: "1524504388940-b1c1722653e1",
-    title: "Sunlit Linen Interior Lifestyle Moment",
-    photographer: "averie woodard",
+    photoId: "1502672260266-1c1ef2d93688",
+    title: "Bright Parisian Apartment Terrace Lounge",
+    photographer: "Patrick Perkins",
     vibeCategory: "Candid Lifestyle",
   },
   {
@@ -304,6 +307,7 @@ async function fetchFromPexels(
     const res = await fetch(url.toString(), {
       headers: { Authorization: apiKey.trim() },
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
 
@@ -356,6 +360,7 @@ async function fetchFromUnsplash(
     const res = await fetch(url.toString(), {
       headers: { Authorization: `Client-ID ${accessKey.trim()}` },
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
 
@@ -467,7 +472,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const upstream = await fetch(proxyUrl);
+    const upstream = await fetch(proxyUrl, {
+      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
+    });
     if (!upstream.ok) {
       return NextResponse.json(
         {
@@ -479,8 +486,62 @@ export async function GET(request: Request) {
       );
     }
 
-    const arrayBuffer = await upstream.arrayBuffer();
-    return new Response(arrayBuffer, {
+    const declaredLength = upstream.headers.get("content-length");
+    if (declaredLength) {
+      const parsedLength = Number(declaredLength);
+      if (
+        Number.isFinite(parsedLength) &&
+        parsedLength > MAX_PROXY_IMAGE_BYTES
+      ) {
+        await upstream.body?.cancel().catch(() => {});
+        return NextResponse.json(
+          { error: translate(locale, "api.bg.proxyTooLarge") },
+          { status: 413 }
+        );
+      }
+    }
+
+    let bodyBytes: Uint8Array;
+    if (upstream.body) {
+      const reader = upstream.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalBytes = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          totalBytes += value.byteLength;
+          if (totalBytes > MAX_PROXY_IMAGE_BYTES) {
+            await reader.cancel().catch(() => {});
+            return NextResponse.json(
+              { error: translate(locale, "api.bg.proxyTooLarge") },
+              { status: 413 }
+            );
+          }
+          chunks.push(value);
+        }
+      }
+
+      const merged = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      bodyBytes = merged;
+    } else {
+      const arrayBuffer = await upstream.arrayBuffer();
+      if (arrayBuffer.byteLength > MAX_PROXY_IMAGE_BYTES) {
+        return NextResponse.json(
+          { error: translate(locale, "api.bg.proxyTooLarge") },
+          { status: 413 }
+        );
+      }
+      bodyBytes = new Uint8Array(arrayBuffer);
+    }
+
+    return new Response(bodyBytes.buffer as ArrayBuffer, {
       status: 200,
       headers: {
         "Content-Type":

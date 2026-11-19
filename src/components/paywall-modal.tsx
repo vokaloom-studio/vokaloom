@@ -24,6 +24,7 @@ import { useLocale } from "@/components/locale-provider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
   getBusinessConfig,
+  hasProAccess,
   verifyAndActivateAccessCode,
   type BusinessConfig,
   type QuotaState,
@@ -51,6 +52,7 @@ export function PaywallModal({
   onQuotaChange,
 }: PaywallModalProps) {
   const { locale, t } = useLocale();
+  const [currency, setCurrency] = useState<"cop" | "usd">("cop");
   const [accessCode, setAccessCode] = useState<string>("");
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [businessConfig, setBusinessConfig] = useState<BusinessConfig>({
@@ -105,21 +107,39 @@ export function PaywallModal({
     }
   };
 
+  const proActive = hasProAccess(quota);
+  const copCheckout = {
+    url: businessConfig.checkoutUrlCop,
+    label: t("paywall.checkoutCopLabel", { priceCop: businessConfig.priceCop }),
+    buttonText: t("paywall.checkoutCopButton", {
+      priceCop: businessConfig.priceCop,
+    }),
+  };
+  const usdCheckout = {
+    url: businessConfig.checkoutUrlUsd,
+    label: t("paywall.checkoutUsdLabel", { priceUsd: businessConfig.priceUsd }),
+    buttonText: t("paywall.checkoutUsdButton", {
+      priceUsd: businessConfig.priceUsd,
+    }),
+  };
+  const primaryCheckout = currency === "cop" ? copCheckout : usdCheckout;
+  const secondaryCheckout = currency === "cop" ? usdCheckout : copCheckout;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="relative overflow-hidden border border-zinc-800/90 border-t-2 border-t-violet-500/60 bg-[#0c0c10] p-0 text-[#f4f4f6] shadow-2xl sm:max-w-lg">
-        <div className="space-y-4 p-5 sm:p-6">
-          <DialogHeader className="space-y-2">
+      <DialogContent className="studio-deck relative max-h-[94vh] overflow-y-auto no-scrollbar border-white/[0.12] border-t-2 border-t-amber-500/80 bg-[#0B0C10] p-0 text-[#F4F4F5] shadow-2xl sm:max-w-xl">
+        <div className="space-y-3.5 p-4 sm:p-5">
+          <DialogHeader className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 pr-8 font-mono text-[11px]">
-              <span className="text-violet-400">{t("paywall.badgeTitle")}</span>
+              <span className="text-amber-400">{t("paywall.badgeTitle")}</span>
               <span className="text-zinc-600">·</span>
-              {quota.isOperator ? (
+              {proActive ? (
                 <span className="inline-flex items-center gap-1 text-emerald-400">
                   <ShieldCheck className="size-3" />
                   {t("paywall.badgeActive")}
                 </span>
               ) : (
-                <span className="tabular-nums text-amber-400">
+                <span className="tabular-nums text-amber-300">
                   {t("paywall.badgeTrial", {
                     remaining: quota.creditsRemaining,
                     max: quota.maxTrialCredits,
@@ -128,44 +148,104 @@ export function PaywallModal({
               )}
             </div>
 
-            <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-100 sm:text-lg">
-              <Crown className="size-4 shrink-0 text-violet-400" />
+            <DialogTitle className="flex items-center gap-2 font-heading text-base font-semibold tracking-tight text-[#F4F4F5] sm:text-lg">
+              <Crown className="size-4 shrink-0 text-amber-400" />
               <span>{t("paywall.title")}</span>
             </DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed text-[#8a8a95]">
+            <DialogDescription className="text-xs leading-relaxed text-[#8B8D98]">
               {t("paywall.description")}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Pricing & Benefit Summary */}
-          <div className="rounded-lg border border-zinc-800/80 bg-[#131318] p-4">
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-800/80 pb-3">
-              <div className="space-y-0.5">
-                <span className="block text-xs font-semibold text-zinc-100">
+          {/* Crisp 2-Tier Comparison Strip */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="studio-well rounded-md px-3 py-2">
+              <span className="block font-mono text-[10px] uppercase tracking-wider text-[#8B8D98]">
+                {t("paywall.compare.freeLabel")}
+              </span>
+              <span className="mt-0.5 block font-mono text-xs font-medium tabular-nums text-zinc-300">
+                {t("paywall.compare.freeValue", {
+                  max: businessConfig.maxTrialCredits,
+                })}
+              </span>
+            </div>
+            <div className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
+              <span className="block font-mono text-[10px] uppercase tracking-wider text-emerald-400">
+                {t("paywall.compare.proLabel")}
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold leading-snug text-emerald-200">
+                {t("paywall.compare.proValue")}
+              </span>
+            </div>
+          </div>
+
+          {/* Currency Selector Switch */}
+          <div
+            role="group"
+            aria-label={t("paywall.currencyAria")}
+            className="studio-well grid grid-cols-1 gap-1 rounded-lg p-1 sm:grid-cols-2"
+          >
+            <button
+              type="button"
+              onClick={() => setCurrency("cop")}
+              aria-pressed={currency === "cop"}
+              className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
+                currency === "cop"
+                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                  : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
+              }`}
+            >
+              {t("paywall.currency.cop")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrency("usd")}
+              aria-pressed={currency === "usd"}
+              className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
+                currency === "usd"
+                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                  : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
+              }`}
+            >
+              {t("paywall.currency.usd")}
+            </button>
+          </div>
+
+          {/* Pricing & Benefit Summary Deck */}
+          <div className="studio-elevated rounded-lg p-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.08] pb-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <span className="block text-xs font-semibold text-[#F4F4F5]">
                   {t("paywall.planName")}
                 </span>
-                <span className="block font-mono text-[11px] text-[#8a8a95]">
+                <span className="block font-mono text-[11px] text-[#8B8D98]">
                   {t("paywall.planSubtitle")}
                 </span>
               </div>
               <div className="shrink-0 text-right">
                 <div className="flex items-baseline justify-end gap-1">
-                  <span className="text-xl font-semibold tracking-tight tabular-nums text-zinc-100">
-                    {businessConfig.priceUsd}
+                  <span className="font-heading text-xl font-semibold tracking-tight tabular-nums text-[#F4F4F5]">
+                    {currency === "cop"
+                      ? businessConfig.priceCop
+                      : businessConfig.priceUsd}
                   </span>
-                  <span className="text-xs text-[#8a8a95]">
+                  <span className="text-xs text-[#8B8D98]">
                     {t("paywall.perMonthShort")}
                   </span>
                 </div>
-                <span className="block font-mono text-[11px] tabular-nums text-[#8a8a95]">
-                  {t("paywall.approxCopPerMonth", {
-                    priceCop: businessConfig.priceCop,
-                  })}
+                <span className="block font-mono text-[11px] tabular-nums text-[#8B8D98]">
+                  {currency === "cop"
+                    ? t("paywall.approxUsdPerMonth", {
+                        priceUsd: businessConfig.priceUsd,
+                      })
+                    : t("paywall.approxCopPerMonth", {
+                        priceCop: businessConfig.priceCop,
+                      })}
                 </span>
               </div>
             </div>
 
-            <ul className="space-y-2 pt-3">
+            <ul className="space-y-1.5 pt-2.5">
               {PRO_BENEFIT_KEYS.map((benefitKey) => (
                 <li
                   key={benefitKey}
@@ -178,26 +258,17 @@ export function PaywallModal({
             </ul>
           </div>
 
-          {/* Local (COP) & Global (USD) Checkout Actions */}
+          {/* Highlighted Selected-Currency Primary Checkout + Secondary Accessible Option */}
           <div className="space-y-2">
             <Button
               type="button"
               onClick={() =>
-                handleOpenCheckout(
-                  businessConfig.checkoutUrlCop,
-                  t("paywall.checkoutCopLabel", {
-                    priceCop: businessConfig.priceCop,
-                  })
-                )
+                handleOpenCheckout(primaryCheckout.url, primaryCheckout.label)
               }
-              className="h-auto min-h-9 w-full whitespace-normal bg-violet-600 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-violet-500"
+              className="h-auto min-h-9.5 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400"
             >
               <CreditCard className="mr-2 size-3.5 shrink-0" />
-              <span>
-                {t("paywall.checkoutCopButton", {
-                  priceCop: businessConfig.priceCop,
-                })}
-              </span>
+              <span>{primaryCheckout.buttonText}</span>
               <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
             </Button>
 
@@ -206,30 +277,24 @@ export function PaywallModal({
               variant="outline"
               onClick={() =>
                 handleOpenCheckout(
-                  businessConfig.checkoutUrlUsd,
-                  t("paywall.checkoutUsdLabel", {
-                    priceUsd: businessConfig.priceUsd,
-                  })
+                  secondaryCheckout.url,
+                  secondaryCheckout.label
                 )
               }
-              className="h-auto min-h-9 w-full whitespace-normal border-zinc-800 bg-[#131318] px-3 py-2 text-center text-xs font-semibold text-zinc-100 hover:border-zinc-700 hover:bg-zinc-800"
+              className="h-auto min-h-9 w-full whitespace-normal border-white/[0.1] bg-[#13151D] px-3 py-2 text-center text-xs font-semibold text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26]"
             >
-              <CreditCard className="mr-2 size-3.5 shrink-0 text-zinc-400" />
-              <span>
-                {t("paywall.checkoutUsdButton", {
-                  priceUsd: businessConfig.priceUsd,
-                })}
-              </span>
+              <CreditCard className="mr-2 size-3.5 shrink-0 text-[#8B8D98]" />
+              <span>{secondaryCheckout.buttonText}</span>
               <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
             </Button>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-zinc-800/80" />
-            <span className="text-center font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <div className="h-px flex-1 bg-white/[0.08]" />
+            <span className="text-center font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
               {t("paywall.dividerLabel")}
             </span>
-            <div className="h-px flex-1 bg-zinc-800/80" />
+            <div className="h-px flex-1 bg-white/[0.08]" />
           </div>
 
           {/* Pro Pass / Client Access Code Form */}
@@ -238,7 +303,7 @@ export function PaywallModal({
               htmlFor="paywall-access-code"
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
             >
-              <KeyRound className="size-3.5 shrink-0 text-zinc-400" />
+              <KeyRound className="size-3.5 shrink-0 text-amber-400" />
               <span>{t("paywall.codeLabel")}</span>
             </label>
             <div className="flex flex-wrap gap-2 sm:flex-nowrap">
@@ -248,13 +313,13 @@ export function PaywallModal({
                 onChange={(e) => setAccessCode(e.target.value)}
                 placeholder={t("paywall.codePlaceholder")}
                 disabled={isVerifying}
-                className="h-9 min-w-0 flex-1 border-zinc-800 bg-[#070709] font-mono text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-zinc-600"
+                className="h-9 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-xs text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-amber-500/50"
               />
               <Button
                 type="submit"
                 variant="secondary"
                 disabled={isVerifying}
-                className="h-9 shrink-0 border border-zinc-700 bg-[#131318] px-4 text-xs font-semibold text-zinc-100 hover:bg-zinc-800"
+                className="h-9 shrink-0 border border-white/[0.12] bg-[#13151D] px-4 text-xs font-semibold text-[#F4F4F5] hover:border-white/[0.2] hover:bg-[#191c26]"
               >
                 {isVerifying ? (
                   <Loader2 className="size-3.5 animate-spin" />

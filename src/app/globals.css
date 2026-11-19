@@ -70,20 +70,40 @@
   }
 }
 
+@utility studio-deck {
+  background-color: var(--surface-deck);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+@utility studio-well {
+  background-color: var(--surface-well);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.65);
+}
+
+@utility studio-elevated {
+  background-color: var(--surface-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
 @utility glass-panel {
-  @apply bg-[#0c0c10] border border-zinc-800/80;
+  background-color: var(--surface-deck);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 @utility glass-panel-hover {
-  @apply transition-colors duration-150 hover:bg-[#131318] hover:border-zinc-700/80;
+  @apply transition-colors duration-150 hover:bg-[#13151D] hover:border-zinc-700/80;
 }
 
 @utility glass-header {
-  @apply bg-[#070709]/90 backdrop-blur-md border-b border-zinc-800/80;
+  @apply bg-[#060608]/92 backdrop-blur-md border-b border-zinc-800/85;
 }
 
 @utility glass-subtle {
-  @apply bg-[#0c0c10]/85 border border-zinc-800/80;
+  @apply bg-[#0B0C10]/90 border border-zinc-800/85;
 }
 
 @utility cn-toast {
@@ -96,11 +116,17 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
+  --color-chassis: var(--bg-chassis);
+  --color-deck: var(--surface-deck);
+  --color-well: var(--surface-well);
+  --color-surface: var(--surface-deck);
   --color-surface-elevated: var(--surface-elevated);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --color-signal-amber: var(--signal-amber);
+  --color-signal-emerald: var(--signal-emerald);
+  --color-signal-violet: var(--signal-violet);
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-jakarta), var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --tracking-tighter: -0.04em;
   --tracking-tight: -0.02em;
   --tracking-normal: -0.005em;
@@ -146,56 +172,67 @@
 
 :root,
 .dark {
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-geist-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-inter: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-jakarta: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-jetbrains-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* Crisp Obsidian Workbench Palette */
-  --background: #070709;
-  --foreground: #f4f4f6;
-  --surface: #0c0c10;
-  --surface-elevated: #131318;
+  /* 4-Layer Tactile Cinema & Mastering Hardware Surfaces */
+  --bg-chassis: #060608;
+  --surface-deck: #0B0C10;
+  --surface-well: #050507;
+  --surface-elevated: #13151D;
+
+  /* Calibrated Signal Palette */
+  --signal-amber: #F59E0B;
+  --signal-emerald: #10B981;
+  --signal-violet: #8B5CF6;
+
+  /* Semantic Mappings */
+  --background: var(--bg-chassis);
+  --foreground: #F4F4F5;
+  --surface: var(--surface-deck);
 
   /* Card & Overlay Surfaces */
-  --card: #0c0c10;
-  --card-foreground: #f4f4f6;
-  --popover: #0e0e13;
-  --popover-foreground: #f4f4f6;
+  --card: var(--surface-deck);
+  --card-foreground: #F4F4F5;
+  --popover: var(--surface-elevated);
+  --popover-foreground: #F4F4F5;
 
-  /* High-Craft Neutral Hierarchy */
-  --primary: #f4f4f6;
-  --primary-foreground: #070709;
-  --secondary: #131318;
-  --secondary-foreground: #e4e4e7;
-  --muted: #131318;
-  --muted-foreground: #8a8a95;
-  --accent: #18181f;
-  --accent-foreground: #f4f4f6;
+  /* High-Contrast Alabaster Hierarchy */
+  --primary: #F4F4F5;
+  --primary-foreground: #09090B;
+  --secondary: var(--surface-elevated);
+  --secondary-foreground: #E4E4E7;
+  --muted: var(--surface-elevated);
+  --muted-foreground: #8B8D98;
+  --accent: #181B25;
+  --accent-foreground: #F4F4F5;
   --destructive: oklch(0.64 0.21 25);
 
-  /* Crisp Structural Hairline Borders */
-  --border: rgba(39, 39, 42, 0.8);
-  --border-subtle: rgba(39, 39, 42, 0.6);
-  --border-strong: rgba(63, 63, 70, 0.9);
-  --input: rgba(39, 39, 42, 0.85);
-  --ring: #71717a;
+  /* Crisp Anodized Structural Hairlines */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.09);
+  --ring: #71717A;
 
   /* Precision Radii & Charts */
   --radius: 0.5rem;
-  --chart-1: oklch(0.75 0.16 285);
-  --chart-2: oklch(0.68 0.14 250);
-  --chart-3: oklch(0.72 0.15 165);
-  --chart-4: oklch(0.6 0.12 285);
-  --chart-5: oklch(0.48 0.08 265);
+  --chart-1: #F59E0B;
+  --chart-2: #10B981;
+  --chart-3: #8B5CF6;
+  --chart-4: #E4E4E7;
+  --chart-5: #52525B;
 
   /* Sidebar Tokens */
-  --sidebar: #09090d;
-  --sidebar-foreground: #f4f4f6;
-  --sidebar-primary: #f4f4f6;
-  --sidebar-primary-foreground: #070709;
-  --sidebar-accent: #18181f;
-  --sidebar-accent-foreground: #f4f4f6;
-  --sidebar-border: rgba(39, 39, 42, 0.8);
-  --sidebar-ring: #71717a;
+  --sidebar: var(--surface-deck);
+  --sidebar-foreground: #F4F4F5;
+  --sidebar-primary: #F4F4F5;
+  --sidebar-primary-foreground: #09090B;
+  --sidebar-accent: var(--surface-elevated);
+  --sidebar-accent-foreground: #F4F4F5;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #71717A;
 }
 
 @layer base {
@@ -219,7 +256,8 @@
   h4,
   h5,
   h6 {
-    @apply font-medium tracking-tight;
+    font-family: var(--font-heading);
+    @apply font-semibold tracking-tight;
   }
   code,
   kbd,

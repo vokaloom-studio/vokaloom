@@ -5,6 +5,9 @@ import { resolveApiKey } from "@/lib/server-secrets";
 
 export const maxDuration = 60;
 
+const UPSTREAM_FETCH_TIMEOUT_MS = 10_000;
+const MAX_BACKGROUND_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+
 interface ModelSwapRequestBody {
   modelImageBase64?: string;
   backgroundUrl?: string;
@@ -94,7 +97,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const bgResponse = await fetch(backgroundUrl);
+    const bgResponse = await fetch(backgroundUrl, {
+      signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
+    });
     if (!bgResponse.ok) {
       return NextResponse.json({
         resultImageUrl: null,
@@ -104,7 +109,22 @@ export async function POST(request: Request) {
       });
     }
 
+    const declaredLength = bgResponse.headers.get("content-length");
+    if (declaredLength && Number(declaredLength) > MAX_BACKGROUND_IMAGE_BYTES) {
+      await bgResponse.body?.cancel().catch(() => {});
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.proxyTooLarge") },
+        { status: 413 }
+      );
+    }
+
     const bgBuffer = Buffer.from(await bgResponse.arrayBuffer());
+    if (bgBuffer.byteLength > MAX_BACKGROUND_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.proxyTooLarge") },
+        { status: 413 }
+      );
+    }
     const bgBase64 = bgBuffer.toString("base64");
     const bgMimeType =
       bgResponse.headers.get("Content-Type")?.split(";")[0]?.trim() ||
@@ -154,7 +174,7 @@ export async function POST(request: Request) {
       if (generated) {
         return NextResponse.json({
           resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-          engine: "Gemini 2.5 Visual Compositor",
+          engine: translate(locale, "api.modelSwap.geminiEngine"),
           isFallback: false,
         });
       }
@@ -179,7 +199,7 @@ export async function POST(request: Request) {
       if (generated) {
         return NextResponse.json({
           resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-          engine: "Gemini 2.5 Visual Compositor",
+          engine: translate(locale, "api.modelSwap.geminiEngine"),
           isFallback: false,
         });
       }

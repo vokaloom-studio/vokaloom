@@ -33,7 +33,10 @@ const en = {
   "page.vipUnlockedToast":
     "VIP Access unlocked via invite link! Unlimited generations active.",
   "page.tabBackgrounds": "Aesthetic Backgrounds",
+  "page.tabBackgroundsSub": "Scene Lightbox",
   "page.tabVoice": "Realistic Voice Studio",
+  "page.tabVoiceSub": "Voice Mastering",
+  "page.proPassManage": "Pro Active",
   "page.engineStrip":
     "Pexels · Unsplash · Gemini 2.5 · Kokoro-82M · F5-TTS",
   "page.footerNotice":
@@ -88,13 +91,26 @@ const en = {
     "Local canvas preview generated. Add GEMINI_API_KEY in /admin for neural relighting.",
   "bg.swapModal.downloadButton": "Download 9:16 Composite",
   "bg.swapModal.previewAlt": "Composited 9:16 scene preview",
+  "bg.swapModal.beforeLabel": "Before",
+  "bg.swapModal.afterLabel": "After",
+  "bg.swapModal.compareAria": "Before and after scene comparison slider",
   "bg.resolvedLabel": "Query:",
   "bg.canvasTitle": "Canvas",
   "bg.pageBadge": "Page #{page}",
+  "bg.source.liveStock": "LIVE STOCK",
+  "bg.source.curatedArchive": "CURATED ARCHIVE",
+  "bg.safeZonesButton": "Safe Zones",
+  "bg.safeZonesTitle":
+    "Toggle TikTok & Instagram Reels 9:16 UI safe-zone guides",
+  "bg.selectFrameTitle": "Select frame for custom .ZIP pack",
+  "bg.selectFrameRemoveTitle": "Deselect frame",
+  "bg.selectFrameAria": "Select frame #{index}",
+  "bg.selectFrameRemoveAria": "Deselect frame #{index}",
+  "bg.clearSelectionButton": "Clear selection ({count})",
   "bg.downloadZipButton": "Download .ZIP",
+  "bg.downloadSelectedZipButton": "Download Selected ({count}) .ZIP",
   "bg.zipPackaging": "Packaging {count} vertical HD photos into",
   "bg.loadingOverlay": "Curating {count} vertical backgrounds...",
-  "bg.sourceCurated": "curated",
   "bg.downloadSingleTitle": "Download #{index} HD",
   "bg.hdButton": "HD",
   "bg.downloadSingleAria": "Download photo #{index} by {photographer}",
@@ -152,14 +168,24 @@ const en = {
   "voice.presetLabel": "Neural Voice Preset (Kokoro-82M)",
   "voice.preset.mateo.label": "Mateo — LatAm Narrator",
   "voice.preset.mateo.badge": "ES · LatAm",
+  "voice.preset.mateo.timbre":
+    "Warm neutral Latin American baritone · balanced articulation",
   "voice.preset.sofia.label": "Sofía — Lifestyle & Travel",
   "voice.preset.sofia.badge": "ES · Natural",
+  "voice.preset.sofia.timbre":
+    "Natural expressive lifestyle timbre · social-first cadence",
   "voice.preset.lucas.label": "Lucas — Dynamic Commercial",
   "voice.preset.lucas.badge": "ES · Reels",
+  "voice.preset.lucas.timbre":
+    "Crisp energetic commercial delivery · high hook retention",
   "voice.preset.abella.label": "Abella — English Creator",
   "voice.preset.abella.badge": "EN · Creator",
+  "voice.preset.abella.timbre":
+    "Bright conversational US English creator timbre · clear diction",
   "voice.preset.adam.label": "Adam — Documentary & Tech",
   "voice.preset.adam.badge": "EN · Deep",
+  "voice.preset.adam.timbre":
+    "Grounded documentary & tech narrator · steady low end",
   "voice.cloneSectionLabel": "Zero-Shot Voice Cloning (MIT F5-TTS)",
   "voice.cloneToggleLabel": "Clone Custom Voice",
   "voice.toggleOn": "ON",
@@ -180,9 +206,34 @@ const en = {
   "voice.licenseMitSafe": "MIT Safe",
   "voice.playAria": "Play voiceover",
   "voice.pauseAria": "Pause voiceover",
+  "voice.skipBackAria": "Rewind 5 seconds",
+  "voice.skipBackLabel": "-5s",
+  "voice.skipForwardAria": "Forward 5 seconds",
+  "voice.skipForwardLabel": "+5s",
+  "voice.speedTitle": "Playback speed: {speed}x (click to cycle)",
+  "voice.muteAria": "Mute audio output",
+  "voice.unmuteAria": "Unmute audio output",
+  "voice.deckStatusReady": "READY",
+  "voice.deckStatusPlaying": "ON AIR",
+  "voice.scriptExcerptLabel": "Script Excerpt",
   "voice.waveformAria": "Interactive audio waveform scrubber",
   "voice.seekAria": "Seek to {percent}%",
   "voice.downloadAudioButton": "Download Broadcast Audio",
+  "voice.profileTitle": "Active Voice Profile & Telemetry",
+  "voice.profileModeClone": "Zero-Shot Clone",
+  "voice.profileModePreset": "Neural Preset",
+  "voice.profilePipelineLabel": "Engine",
+  "voice.profilePipelineClone": "MIT F5-TTS",
+  "voice.profilePipelinePreset": "Kokoro-82M",
+  "voice.profileLanguageLabel": "Region",
+  "voice.profilePacingLabel": "Read Pacing",
+  "voice.profileSpecLabel": "Master Spec",
+  "voice.profileSpecValue": "24kHz · 16-bit PCM",
+  "voice.profilePacingValue": "{words}w · ~{seconds}s · 150 wpm",
+  "voice.profileAwaitingSample":
+    "Awaiting WhatsApp .OGG / .MP3 / .WAV reference clip to enable cloning.",
+  "voice.profileCloneLoadedDesc":
+    "Custom voice sample loaded ({format} · {size}).",
   "voice.emptyTitle": "No active voiceover output",
   "voice.emptyDescBefore": "Configure your script and click",
   "voice.emptyDescAction": "Generate Voiceover",
@@ -220,6 +271,14 @@ const en = {
   "paywall.planSubtitle": "Commercial & Agency License",
   "paywall.perMonthShort": "/ mo",
   "paywall.approxCopPerMonth": "~{priceCop} · mo",
+  "paywall.approxUsdPerMonth": "~{priceUsd} · mo",
+  "paywall.compare.freeLabel": "Free Trial",
+  "paywall.compare.freeValue": "{max} Credits",
+  "paywall.compare.proLabel": "Pro Pass",
+  "paywall.compare.proValue": "Unlimited · Commercial MIT/Apache-2.0 License",
+  "paywall.currencyAria": "Select checkout currency",
+  "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
+  "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.benefit1":
     "Unlimited 15-Image Aesthetic Batches (9:16 Vertical HD + ZIP Export)",
   "paywall.benefit2":
@@ -342,16 +401,21 @@ const en = {
   "api.bg.invalidProxyOrigin": "Invalid or disallowed proxyUrl origin.",
   "api.bg.upstreamStatus": "Upstream image returned {status}",
   "api.bg.proxyFailed": "Failed to proxy image download.",
+  "api.bg.proxyTooLarge": "Upstream image exceeds 15 MB proxy limit.",
   "api.bg.fallbackNotice":
     "Curated fallback batch served because live search encountered an issue.",
   "api.modelSwap.missingInputs":
     "Both model reference image and background URL are required.",
   "api.modelSwap.invalidBackgroundOrigin":
     "Invalid or disallowed backgroundUrl origin.",
+  "api.modelSwap.geminiEngine": "Gemini 2.5 Visual Compositor",
   "api.modelSwap.fallbackEngine": "Client Canvas Compositor",
   "api.modelSwap.processError": "Unable to process model scene placement.",
   "api.voice.invalidLength":
     "Script text must be between 1 and 1,500 characters in length.",
+  "api.voice.engine.f5tts": "F5-TTS (MIT Clone)",
+  "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
+  "api.voice.engine.geminiTts": "Gemini 2.5 Neural TTS",
   "api.voice.demoFallbackEngine":
     "Demo Fallback (Add FAL_KEY or GEMINI_API_KEY for Live Neural TTS)",
   "api.voice.processError": "Unable to process voice synthesis request.",
@@ -368,6 +432,8 @@ const en = {
   "api.admin.invalidRequest": "Invalid admin verification request.",
   "api.admin.invalidKeyLength":
     "Key {keyName} must be longer than 5 characters (or CLEAR).",
+  "api.admin.missingServerKey":
+    "Server configuration error: ADMIN_MASTER_KEY is required in production.",
   "api.admin.noKeysProvided": "No key updates were provided.",
   "api.admin.vaultUpdated": "API Key Vault encrypted and updated.",
   "api.admin.vaultCleared": "API Key Vault cookie cleared.",
@@ -402,7 +468,10 @@ const es: Record<TranslationKey, string> = {
   "page.vipUnlockedToast":
     "¡Acceso VIP desbloqueado mediante enlace de invitación! Generaciones ilimitadas activas.",
   "page.tabBackgrounds": "Fondos Estéticos",
+  "page.tabBackgroundsSub": "Mesa de Escenas",
   "page.tabVoice": "Estudio de Voz Realista",
+  "page.tabVoiceSub": "Masterización Vocal",
+  "page.proPassManage": "Pro Activo",
   "page.engineStrip":
     "Pexels · Unsplash · Gemini 2.5 · Kokoro-82M · F5-TTS",
   "page.footerNotice":
@@ -457,13 +526,27 @@ const es: Record<TranslationKey, string> = {
     "Vista previa local generada en Canvas. Agrega GEMINI_API_KEY en /admin para reiluminación neural.",
   "bg.swapModal.downloadButton": "Descargar Composición 9:16",
   "bg.swapModal.previewAlt": "Vista previa compuesta 9:16",
+  "bg.swapModal.beforeLabel": "Antes",
+  "bg.swapModal.afterLabel": "Después",
+  "bg.swapModal.compareAria":
+    "Control deslizable de comparación antes y después",
   "bg.resolvedLabel": "Consulta:",
   "bg.canvasTitle": "Lienzo",
   "bg.pageBadge": "Página #{page}",
+  "bg.source.liveStock": "STOCK EN VIVO",
+  "bg.source.curatedArchive": "ARCHIVO CURADO",
+  "bg.safeZonesButton": "Zonas Seguras",
+  "bg.safeZonesTitle":
+    "Mostrar guías de zona segura 9:16 para TikTok e Instagram Reels",
+  "bg.selectFrameTitle": "Seleccionar cuadro para pack .ZIP personalizado",
+  "bg.selectFrameRemoveTitle": "Quitar cuadro de selección",
+  "bg.selectFrameAria": "Seleccionar cuadro #{index}",
+  "bg.selectFrameRemoveAria": "Quitar selección del cuadro #{index}",
+  "bg.clearSelectionButton": "Limpiar ({count})",
   "bg.downloadZipButton": "Descargar .ZIP",
+  "bg.downloadSelectedZipButton": "Descargar Sel. ({count}) .ZIP",
   "bg.zipPackaging": "Empaquetando {count} fotos verticales HD en",
   "bg.loadingOverlay": "Curando {count} fondos verticales...",
-  "bg.sourceCurated": "curado",
   "bg.downloadSingleTitle": "Descargar #{index} HD",
   "bg.hdButton": "HD",
   "bg.downloadSingleAria": "Descargar foto #{index} de {photographer}",
@@ -524,14 +607,24 @@ const es: Record<TranslationKey, string> = {
   "voice.presetLabel": "Voz Neural Predefinida (Kokoro-82M)",
   "voice.preset.mateo.label": "Mateo — Narrador LatAm",
   "voice.preset.mateo.badge": "ES · LatAm",
+  "voice.preset.mateo.timbre":
+    "Barítono latinoamericano cálido y neutro · articulación equilibrada",
   "voice.preset.sofia.label": "Sofía — Estilo de Vida y Viajes",
   "voice.preset.sofia.badge": "ES · Natural",
+  "voice.preset.sofia.timbre":
+    "Timbre femenino natural y expresivo · cadencia ideal para Reels",
   "voice.preset.lucas.label": "Lucas — Dinámico Comercial",
   "voice.preset.lucas.badge": "ES · Reels",
+  "voice.preset.lucas.timbre":
+    "Locución masculina dinámica y comercial · alta retención en ganchos",
   "voice.preset.abella.label": "Abella — Creadora en Inglés",
   "voice.preset.abella.badge": "EN · Creadora",
+  "voice.preset.abella.timbre":
+    "Timbre femenino conversacional en inglés US · dicción nítida",
   "voice.preset.adam.label": "Adam — Documental y Tech",
   "voice.preset.adam.badge": "EN · Grave",
+  "voice.preset.adam.timbre":
+    "Narrador grave para documental y tecnología · presencia sólida",
   "voice.cloneSectionLabel": "Clonación de Voz Zero-Shot (MIT F5-TTS)",
   "voice.cloneToggleLabel": "Clonar Voz Personalizada",
   "voice.toggleOn": "ACTIVO",
@@ -553,9 +646,34 @@ const es: Record<TranslationKey, string> = {
   "voice.licenseMitSafe": "MIT Comercial",
   "voice.playAria": "Reproducir locución",
   "voice.pauseAria": "Pausar locución",
+  "voice.skipBackAria": "Retroceder 5 segundos",
+  "voice.skipBackLabel": "-5s",
+  "voice.skipForwardAria": "Adelantar 5 segundos",
+  "voice.skipForwardLabel": "+5s",
+  "voice.speedTitle": "Velocidad de reproducción: {speed}x (clic para cambiar)",
+  "voice.muteAria": "Silenciar salida de audio",
+  "voice.unmuteAria": "Activar sonido de salida",
+  "voice.deckStatusReady": "LISTO",
+  "voice.deckStatusPlaying": "AL AIRE",
+  "voice.scriptExcerptLabel": "Extracto del Guion",
   "voice.waveformAria": "Control interactivo de onda de audio",
   "voice.seekAria": "Ir al {percent}%",
   "voice.downloadAudioButton": "Descargar Audio Maestro",
+  "voice.profileTitle": "Perfil Vocal Activo y Telemetría",
+  "voice.profileModeClone": "Clonación Zero-Shot",
+  "voice.profileModePreset": "Voz Neural",
+  "voice.profilePipelineLabel": "Motor",
+  "voice.profilePipelineClone": "MIT F5-TTS",
+  "voice.profilePipelinePreset": "Kokoro-82M",
+  "voice.profileLanguageLabel": "Región",
+  "voice.profilePacingLabel": "Ritmo Est.",
+  "voice.profileSpecLabel": "Formato Máster",
+  "voice.profileSpecValue": "24kHz · 16-bit PCM",
+  "voice.profilePacingValue": "{words} pal · ~{seconds}s · 150 ppm",
+  "voice.profileAwaitingSample":
+    "Esperando clip .OGG / .MP3 / .WAV de WhatsApp para activar clonación.",
+  "voice.profileCloneLoadedDesc":
+    "Muestra de voz personalizada cargada ({format} · {size}).",
   "voice.emptyTitle": "Sin locución activa",
   "voice.emptyDescBefore": "Configura tu guion y haz clic en",
   "voice.emptyDescAction": "Generar Locución",
@@ -593,6 +711,15 @@ const es: Record<TranslationKey, string> = {
   "paywall.planSubtitle": "Licencia Comercial y de Agencia",
   "paywall.perMonthShort": "/ mes",
   "paywall.approxCopPerMonth": "~{priceCop} · mes",
+  "paywall.approxUsdPerMonth": "~{priceUsd} · mes",
+  "paywall.compare.freeLabel": "Prueba Gratuita",
+  "paywall.compare.freeValue": "{max} Créditos",
+  "paywall.compare.proLabel": "Pase Pro",
+  "paywall.compare.proValue":
+    "Ilimitado · Licencia Comercial MIT/Apache-2.0",
+  "paywall.currencyAria": "Seleccionar moneda de pago",
+  "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
+  "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.benefit1":
     "Lotes ilimitados de 15 imágenes estéticas (HD vertical 9:16 + exportación ZIP)",
   "paywall.benefit2":
@@ -724,17 +851,23 @@ const es: Record<TranslationKey, string> = {
   "api.bg.invalidProxyOrigin": "Origen de proxyUrl no válido o no permitido.",
   "api.bg.upstreamStatus": "La imagen de origen devolvió el estado {status}",
   "api.bg.proxyFailed": "No se pudo obtener la imagen a través del proxy.",
+  "api.bg.proxyTooLarge":
+    "La imagen de origen supera el límite de 15 MB del proxy.",
   "api.bg.fallbackNotice":
     "Se sirvió el lote curado de respaldo porque la búsqueda en vivo tuvo un problema.",
   "api.modelSwap.missingInputs":
     "Se requieren tanto la foto del modelo como la URL de fondo.",
   "api.modelSwap.invalidBackgroundOrigin":
     "Origen de backgroundUrl no válido o no permitido.",
+  "api.modelSwap.geminiEngine": "Compositor Visual Gemini 2.5",
   "api.modelSwap.fallbackEngine": "Compositor Canvas Local",
   "api.modelSwap.processError":
     "No se pudo procesar la colocación del modelo en escena.",
   "api.voice.invalidLength":
     "El texto del guion debe tener entre 1 y 1,500 caracteres.",
+  "api.voice.engine.f5tts": "F5-TTS (Clonación MIT)",
+  "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
+  "api.voice.engine.geminiTts": "Gemini 2.5 TTS Neural",
   "api.voice.demoFallbackEngine":
     "Respaldo Demo (Agrega FAL_KEY o GEMINI_API_KEY para Voz Neural Real)",
   "api.voice.processError":
@@ -753,6 +886,8 @@ const es: Record<TranslationKey, string> = {
     "Solicitud de verificación de administrador inválida.",
   "api.admin.invalidKeyLength":
     "La clave {keyName} debe tener más de 5 caracteres (o CLEAR).",
+  "api.admin.missingServerKey":
+    "Error de configuración del servidor: ADMIN_MASTER_KEY es obligatoria en producción.",
   "api.admin.noKeysProvided": "No se enviaron actualizaciones de claves.",
   "api.admin.vaultUpdated": "Bóveda de claves API cifrada y actualizada.",
   "api.admin.vaultCleared": "Cookie de bóveda de claves API eliminada.",

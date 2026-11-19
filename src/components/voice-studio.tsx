@@ -10,7 +10,11 @@ import {
   History,
   Play,
   Pause,
+  RotateCcw,
+  RotateCw,
   Volume2,
+  VolumeX,
+  Activity,
   Loader2,
   Sparkles,
   Trash2,
@@ -38,6 +42,7 @@ interface VoicePreset {
   shortName: string;
   labelKey: TranslationKey;
   badgeKey: TranslationKey;
+  timbreKey: TranslationKey;
   language: "es" | "en";
 }
 
@@ -47,6 +52,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Mateo",
     labelKey: "voice.preset.mateo.label",
     badgeKey: "voice.preset.mateo.badge",
+    timbreKey: "voice.preset.mateo.timbre",
     language: "es",
   },
   {
@@ -54,6 +60,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Sofía",
     labelKey: "voice.preset.sofia.label",
     badgeKey: "voice.preset.sofia.badge",
+    timbreKey: "voice.preset.sofia.timbre",
     language: "es",
   },
   {
@@ -61,6 +68,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Lucas",
     labelKey: "voice.preset.lucas.label",
     badgeKey: "voice.preset.lucas.badge",
+    timbreKey: "voice.preset.lucas.timbre",
     language: "es",
   },
   {
@@ -68,6 +76,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Abella",
     labelKey: "voice.preset.abella.label",
     badgeKey: "voice.preset.abella.badge",
+    timbreKey: "voice.preset.abella.timbre",
     language: "en",
   },
   {
@@ -75,6 +84,7 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Adam",
     labelKey: "voice.preset.adam.label",
     badgeKey: "voice.preset.adam.badge",
+    timbreKey: "voice.preset.adam.timbre",
     language: "en",
   },
 ];
@@ -116,12 +126,34 @@ interface VoiceHistoryItem {
   isClone: boolean;
 }
 
+interface ReferenceAudioMeta {
+  sizeBytes: number;
+  format: string;
+  durationSec?: number;
+}
+
 const VOICE_HISTORY_KEY = "vokaloom_voice_history_v1";
 
+const PLAYBACK_SPEEDS = [0.9, 1.0, 1.15] as const;
+type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+
 const WAVEFORM_BARS = [
-  28, 52, 40, 74, 58, 92, 68, 44, 82, 62, 95, 50, 78, 42, 86, 64, 38, 72, 56,
-  88, 60, 46, 76, 52, 84, 66, 44, 70, 54, 40, 62, 34,
+  24, 42, 34, 62, 48, 78, 56, 40, 84, 66, 92, 54, 70, 38, 60, 88, 72, 46, 58,
+  95, 76, 50, 68, 42, 82, 64, 90, 52, 74, 44, 66, 86, 60, 48, 78, 56, 70, 42,
+  84, 62, 50, 74, 46, 64, 52, 38, 48, 30,
 ];
+
+function formatBytesCompact(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatSpeedLabel(speed: PlaybackSpeed): string {
+  return speed === 1.15 ? "1.15x" : `${speed.toFixed(1)}x`;
+}
 
 function formatSeconds(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -176,6 +208,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     string | null
   >(null);
   const [referenceAudioName, setReferenceAudioName] = useState<string>("");
+  const [referenceAudioMeta, setReferenceAudioMeta] =
+    useState<ReferenceAudioMeta | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
   const [activeOutput, setActiveOutput] = useState<VoiceHistoryItem | null>(
@@ -187,6 +221,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
   const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1.0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -235,7 +271,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   };
 
   const getDisplayEngine = (item: VoiceHistoryItem): string => {
-    if (item.isFallback) {
+    if (
+      item.isFallback ||
+      item.engine.includes("Demo Fallback") ||
+      item.engine.includes("Respaldo Demo")
+    ) {
       return t("api.voice.demoFallbackEngine");
     }
     return item.engine;
@@ -283,8 +323,29 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
     const reader = new FileReader();
     reader.onload = () => {
-      setReferenceAudioBase64(String(reader.result || ""));
+      const dataUrl = String(reader.result || "");
+      const extMatch = file.name.split(".").pop()?.toUpperCase();
+      const format =
+        extMatch && extMatch.length <= 5
+          ? `.${extMatch}`
+          : file.type.split("/").pop()?.toUpperCase() || "AUDIO";
+
+      setReferenceAudioBase64(dataUrl);
       setReferenceAudioName(file.name);
+      setReferenceAudioMeta({
+        sizeBytes: file.size,
+        format,
+      });
+
+      const probe = new Audio(dataUrl);
+      probe.addEventListener("loadedmetadata", () => {
+        if (Number.isFinite(probe.duration) && probe.duration > 0) {
+          setReferenceAudioMeta((prev) =>
+            prev ? { ...prev, durationSec: probe.duration } : prev
+          );
+        }
+      });
+
       toast.success(
         t("voice.toast.loadedAudioSample", { name: file.name })
       );
@@ -308,6 +369,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const handleClearAudioSample = () => {
     setReferenceAudioBase64(null);
     setReferenceAudioName("");
+    setReferenceAudioMeta(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -402,6 +464,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       setTimeout(() => {
         if (audioPlayerRef.current) {
           audioPlayerRef.current.load();
+          audioPlayerRef.current.playbackRate = playbackSpeed;
+          audioPlayerRef.current.muted = isMuted;
           audioPlayerRef.current.play().catch(() => {
             // Autoplay blocked by browser policy; user can click play
           });
@@ -436,6 +500,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     setTimeout(() => {
       if (audioPlayerRef.current) {
         audioPlayerRef.current.load();
+        audioPlayerRef.current.playbackRate = playbackSpeed;
+        audioPlayerRef.current.muted = isMuted;
         audioPlayerRef.current.play().catch(() => {});
       }
     }, 80);
@@ -444,6 +510,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const handleTogglePlayPause = () => {
     const audio = audioPlayerRef.current;
     if (!audio) return;
+    audio.playbackRate = playbackSpeed;
+    audio.muted = isMuted;
     if (audio.paused) {
       audio.play().catch(() => {});
     } else {
@@ -451,13 +519,62 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     }
   };
 
+  const handleSkipSeconds = (delta: number) => {
+    const audio = audioPlayerRef.current;
+    if (!audio) return;
+    const duration =
+      Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : activeOutput
+          ? activeOutput.durationMs / 1000
+          : 0;
+    const nextTime =
+      duration > 0
+        ? Math.max(0, Math.min(duration, audio.currentTime + delta))
+        : Math.max(0, audio.currentTime + delta);
+    audio.currentTime = nextTime;
+    setAudioCurrentTime(nextTime);
+    setPlaybackProgress(duration > 0 ? nextTime / duration : 0);
+  };
+
+  const handleCycleSpeed = () => {
+    const currentIndex = PLAYBACK_SPEEDS.indexOf(playbackSpeed);
+    const nextSpeed =
+      PLAYBACK_SPEEDS[(currentIndex + 1) % PLAYBACK_SPEEDS.length];
+    setPlaybackSpeed(nextSpeed);
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.playbackRate = nextSpeed;
+    }
+  };
+
+  const handleToggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.muted = next;
+      }
+      return next;
+    });
+  };
+
   const handleWaveformSeek = (barIndex: number) => {
     const audio = audioPlayerRef.current;
     const ratio = (barIndex + 0.5) / WAVEFORM_BARS.length;
     setPlaybackProgress(ratio);
-    if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
-      audio.currentTime = ratio * audio.duration;
-      setAudioCurrentTime(audio.currentTime);
+    if (audio) {
+      const duration =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : activeOutput
+            ? activeOutput.durationMs / 1000
+            : 0;
+      if (duration > 0) {
+        const nextTime = ratio * duration;
+        audio.currentTime = nextTime;
+        setAudioCurrentTime(nextTime);
+      }
+      audio.playbackRate = playbackSpeed;
+      audio.muted = isMuted;
       if (audio.paused) {
         audio.play().catch(() => {});
       }
@@ -482,22 +599,31 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         ? activeOutput.durationMs / 1000
         : 0;
 
+  const isCloneReady = Boolean(cloneMode && referenceAudioBase64);
+  const cloneMetaText = referenceAudioMeta
+    ? `${referenceAudioMeta.format} · ${formatBytesCompact(referenceAudioMeta.sizeBytes)}${
+        referenceAudioMeta.durationSec
+          ? ` · ${referenceAudioMeta.durationSec.toFixed(1)}s`
+          : ""
+      }`
+    : null;
+
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
       {/* Left Column (7 Cols): Script Editor, Voice Presets & Zero-Shot Clone Uploader */}
-      <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80 lg:col-span-7">
+      <section className="studio-deck min-w-0 overflow-hidden rounded-lg divide-y divide-white/[0.06] lg:col-span-7">
         {/* Panel Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <div className="min-w-0 space-y-0.5">
-            <h2 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100 sm:text-sm">
-              <Mic className="size-3.5 shrink-0 text-violet-400" />
+            <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
+              <Mic className="size-3.5 shrink-0 text-amber-400" />
               <span>{t("voice.configTitle")}</span>
             </h2>
-            <p className="text-xs text-[#8a8a95]">
+            <p className="text-xs text-[#8B8D98]">
               {t("voice.configSubtitle")}
             </p>
           </div>
-          <span className="font-mono text-[10px] text-[#8a8a95]">
+          <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
             {t("voice.licenseBadge")}
           </span>
         </div>
@@ -505,7 +631,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         {/* Script Templates & Textarea */}
         <div className="space-y-4 p-4">
           <div className="space-y-1.5">
-            <span className="block text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+            <span className="block font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
               {t("voice.templatesLabel")}
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -519,8 +645,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     onClick={() => handleSampleClick(sample)}
                     className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                       isSelected
-                        ? "border-zinc-500 bg-[#1a1a22] text-zinc-100"
-                        : "border-zinc-800/80 bg-[#131318] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                        ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                        : "border-white/[0.08] bg-[#13151D]/70 text-[#8B8D98] hover:border-white/[0.15] hover:text-zinc-200"
                     }`}
                   >
                     {label}
@@ -534,13 +660,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label
                 htmlFor="voice-script-textarea"
-                className="text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]"
+                className="font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]"
               >
                 {t("voice.scriptLabel")}
               </label>
               <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
                 {estimatedReadSec > 0 && (
-                  <span className="text-zinc-500">
+                  <span className="text-[#8B8D98]">
                     {t("voice.readTime", { seconds: estimatedReadSec })}
                   </span>
                 )}
@@ -548,7 +674,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   className={
                     text.length > 1400
                       ? "font-semibold text-amber-400"
-                      : "text-[#8a8a95]"
+                      : "text-[#8B8D98]"
                   }
                 >
                   {t("voice.charCount", { count: text.length, max: 1500 })}
@@ -561,7 +687,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               onChange={(e) => setText(e.target.value.slice(0, 1500))}
               rows={5}
               placeholder={t("voice.scriptPlaceholder")}
-              className="min-h-36 resize-y border-zinc-800/80 bg-[#070709] text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-500 focus-visible:border-zinc-600"
+              className="min-h-36 resize-y border-white/[0.08] bg-[#050507] text-sm leading-relaxed text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-amber-500/50"
             />
           </div>
         </div>
@@ -570,7 +696,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         <div className="space-y-4 p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="min-w-0 space-y-1.5">
-              <label className="block truncate text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+              <label className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
                 {t("voice.presetLabel")}
               </label>
               <Select
@@ -579,7 +705,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   if (val) setSelectedVoiceId(String(val));
                 }}
               >
-                <SelectTrigger className="h-9 w-full border-zinc-800/80 bg-[#070709] text-xs text-zinc-100 focus-visible:border-zinc-600">
+                <SelectTrigger className="h-9 w-full border-white/[0.08] bg-[#050507] text-xs text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-amber-500/50">
                   <SelectValue>
                     {(val: string | null) => {
                       const preset =
@@ -589,12 +715,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     }}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="border-zinc-800 bg-[#0e0e13] text-zinc-100">
+                <SelectContent className="border-white/[0.1] bg-[#13151D] text-[#F4F4F5]">
                   {VOICE_PRESETS.map((voice) => (
                     <SelectItem
                       key={voice.id}
                       value={voice.id}
-                      className="text-xs"
+                      className="text-xs focus:bg-white/[0.08]"
                     >
                       {t(voice.labelKey)} ({t(voice.badgeKey)})
                     </SelectItem>
@@ -604,7 +730,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             </div>
 
             <div className="min-w-0 space-y-1.5">
-              <span className="block truncate text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+              <span className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
                 {t("voice.cloneSectionLabel")}
               </span>
               <button
@@ -613,8 +739,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 aria-expanded={cloneMode}
                 className={`flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
                   cloneMode
-                    ? "border-zinc-600 bg-[#131318] text-zinc-100"
-                    : "border-zinc-800/80 bg-[#070709] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                    ? "border-white/[0.14] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                    : "border-white/[0.08] bg-[#050507] text-[#8B8D98] hover:border-white/[0.14] hover:text-zinc-200"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -626,8 +752,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
                     cloneMode
-                      ? "bg-zinc-100 text-zinc-950"
-                      : "bg-zinc-800 text-zinc-400"
+                      ? "bg-[#F4F4F5] text-[#09090B]"
+                      : "bg-zinc-800/90 text-[#8B8D98]"
                   }`}
                 >
                   {cloneMode ? t("voice.toggleOn") : t("voice.toggleOff")}
@@ -637,7 +763,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
           </div>
 
           {cloneMode && (
-            <div className="rounded-md border border-zinc-800/80 bg-[#070709] p-3">
+            <div className="studio-well rounded-md p-3">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -658,28 +784,29 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   onDrop={handleAudioDrop}
                   className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded border border-dashed py-4 px-3 text-center transition-colors ${
                     isDraggingAudio
-                      ? "border-zinc-500 bg-[#131318]"
-                      : "border-zinc-800 bg-[#070709] hover:border-zinc-600 hover:bg-[#0c0c10]"
+                      ? "border-amber-500/60 bg-[#13151D]"
+                      : "border-white/[0.12] bg-[#050507] hover:border-white/[0.22] hover:bg-[#0B0C10]"
                   }`}
                 >
-                  <Upload className="size-4 text-zinc-400" />
+                  <Upload className="size-4 text-[#8B8D98]" />
                   <p className="text-xs font-medium text-zinc-200">
                     {t("voice.dropzoneTitle")}
                   </p>
-                  <p className="text-[11px] text-[#8a8a95]">
+                  <p className="text-[11px] text-[#8B8D98]">
                     {t("voice.dropzoneHint")}
                   </p>
                 </label>
               ) : (
-                <div className="flex items-center justify-between gap-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                <div className="flex items-center justify-between gap-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2.5">
                     <Volume2 className="size-4 shrink-0 text-emerald-400" />
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-zinc-100">
+                      <p className="truncate text-xs font-medium text-[#F4F4F5]">
                         {referenceAudioName}
                       </p>
                       <p className="text-[10px] text-emerald-400">
                         {t("voice.sampleReady")}
+                        {cloneMetaText ? ` · ${cloneMetaText}` : ""}
                       </p>
                     </div>
                   </div>
@@ -690,7 +817,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     onClick={handleClearAudioSample}
                     aria-label={t("voice.removeAudioAria")}
                     title={t("voice.removeAudioAria")}
-                    className="text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    className="text-zinc-400 hover:bg-[#13151D] hover:text-[#F4F4F5]"
                   >
                     <X className="size-3.5" />
                   </Button>
@@ -703,7 +830,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             type="button"
             onClick={handleSynthesize}
             disabled={isGenerating}
-            className="h-9 w-full bg-violet-600 px-3 text-xs font-semibold text-white hover:bg-violet-500 sm:text-sm"
+            className="h-9.5 w-full border border-amber-400/60 bg-amber-500 px-3 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:text-sm"
           >
             {isGenerating ? (
               <>
@@ -728,26 +855,44 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         </div>
       </section>
 
-      {/* Right Column (5 Cols): Master Audio Output & Session History */}
-      <aside className="min-w-0 space-y-5 lg:col-span-5">
-        {/* Panel 1: Master Audio Output */}
-        <div className="overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80">
+      {/* Right Column (5 Cols): Master Audio Output Deck, Active Voice Telemetry & Session History */}
+      <aside className="min-w-0 space-y-4 lg:col-span-5">
+        {/* Card 1: Unified Master Audio Output Transport Deck */}
+        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <div className="min-w-0 space-y-0.5">
-              <h2 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100 sm:text-sm">
-                <Volume2 className="size-3.5 shrink-0 text-violet-400" />
+              <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
+                <Volume2 className="size-3.5 shrink-0 text-amber-400" />
                 <span>{t("voice.outputTitle")}</span>
               </h2>
-              <p className="text-xs text-[#8a8a95]">
+              <p className="text-xs text-[#8B8D98]">
                 {t("voice.outputSubtitle")}
               </p>
             </div>
             {activeOutput && (
-              <span className="shrink-0 font-mono text-[10px] text-emerald-400">
-                {activeOutput.isClone
-                  ? t("voice.licenseMitSafe")
-                  : "Apache-2.0"}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                    isPlaying
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                      : "border-white/[0.08] bg-[#13151D] text-[#8B8D98]"
+                  }`}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${
+                      isPlaying ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                  />
+                  {isPlaying
+                    ? t("voice.deckStatusPlaying")
+                    : t("voice.deckStatusReady")}
+                </span>
+                <span className="rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
+                  {activeOutput.isClone
+                    ? t("voice.licenseMitSafe")
+                    : "Apache-2.0"}
+                </span>
+              </div>
             )}
           </div>
 
@@ -755,46 +900,34 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             {activeOutput ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-semibold text-zinc-100">
+                  <span className="min-w-0 truncate text-xs font-semibold text-[#F4F4F5]">
                     {getDisplayVoiceLabel(activeOutput)}
                   </span>
                   <span
-                    className="min-w-0 max-w-full truncate font-mono text-[10px] text-[#8a8a95]"
+                    className="min-w-0 max-w-full truncate font-mono text-[10px] text-[#8B8D98]"
                     title={getDisplayEngine(activeOutput)}
                   >
                     {getDisplayEngine(activeOutput)}
                   </span>
                 </div>
 
-                {/* Clean Flat Waveform Bar Scrubber */}
-                <div className="min-w-0 overflow-hidden rounded-md border border-zinc-800/80 bg-[#070709] p-2.5">
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={handleTogglePlayPause}
-                      aria-label={
-                        isPlaying ? t("voice.pauseAria") : t("voice.playAria")
-                      }
-                      title={
-                        isPlaying ? t("voice.pauseAria") : t("voice.playAria")
-                      }
-                      className="inline-flex size-7 shrink-0 items-center justify-center rounded border border-zinc-700 bg-[#131318] text-zinc-100 transition-colors hover:bg-zinc-800"
-                    >
-                      {isPlaying ? (
-                        <Pause className="size-3.5" />
-                      ) : (
-                        <Play className="size-3.5" />
-                      )}
-                    </button>
-
+                {/* Single Unified Master Transport Deck (48-Bar Scrubber + Precision Controls) */}
+                <div className="studio-well min-w-0 space-y-2.5 overflow-hidden rounded-md p-3">
+                  {/* 48-Bar High-Resolution Interactive Waveform */}
+                  <div className="space-y-1">
                     <div
-                      className="flex h-10 min-w-0 flex-1 items-center justify-between gap-[2px] px-0.5 sm:gap-[3px] sm:px-1"
+                      className="flex h-12 min-w-0 items-end justify-between gap-px sm:gap-[2px]"
                       role="group"
                       aria-label={t("voice.waveformAria")}
                     >
                       {WAVEFORM_BARS.map((heightPct, i) => {
+                        const barStart = i / WAVEFORM_BARS.length;
                         const barRatio = (i + 1) / WAVEFORM_BARS.length;
-                        const isActive = barRatio <= playbackProgress;
+                        const isPlayhead =
+                          playbackProgress > 0 &&
+                          playbackProgress >= barStart &&
+                          playbackProgress < barRatio;
+                        const isPlayed = barRatio <= playbackProgress;
                         return (
                           <button
                             key={i}
@@ -804,28 +937,138 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                               percent: Math.round(barRatio * 100),
                             })}
                             style={{ height: `${heightPct}%` }}
-                            className={`min-w-[2px] flex-1 rounded-full transition-colors duration-100 ${
-                              isActive
-                                ? "bg-zinc-100"
-                                : "bg-zinc-800 hover:bg-zinc-600"
+                            className={`min-w-[2px] flex-1 rounded-t-[2px] transition-colors duration-75 ${
+                              isPlayhead
+                                ? "bg-amber-400"
+                                : isPlayed
+                                  ? "bg-[#F4F4F5]"
+                                  : "bg-zinc-800 hover:bg-zinc-600"
                             }`}
                           />
                         );
                       })}
                     </div>
+                    <div className="h-[2px] w-full overflow-hidden rounded-full bg-zinc-900">
+                      <div
+                        className="h-full bg-amber-400 transition-[width] duration-75"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
 
-                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#8a8a95]">
-                      {formatSeconds(audioCurrentTime)} /{" "}
-                      {formatSeconds(effectiveDurationSec)}
-                    </span>
+                  {/* Unified Transport Row: -5s / Play / +5s + Speed / Mute / Timecode */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleSkipSeconds(-5)}
+                        aria-label={t("voice.skipBackAria")}
+                        title={t("voice.skipBackAria")}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2 font-mono text-[10px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5]"
+                      >
+                        <RotateCcw className="size-3" />
+                        <span>{t("voice.skipBackLabel")}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleTogglePlayPause}
+                        aria-label={
+                          isPlaying ? t("voice.pauseAria") : t("voice.playAria")
+                        }
+                        title={
+                          isPlaying ? t("voice.pauseAria") : t("voice.playAria")
+                        }
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-amber-400/60 bg-amber-500 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] transition-colors hover:bg-amber-400"
+                      >
+                        {isPlaying ? (
+                          <Pause className="size-3.5 fill-current" />
+                        ) : (
+                          <Play className="size-3.5 fill-current" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSkipSeconds(5)}
+                        aria-label={t("voice.skipForwardAria")}
+                        title={t("voice.skipForwardAria")}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2 font-mono text-[10px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5]"
+                      >
+                        <span>{t("voice.skipForwardLabel")}</span>
+                        <RotateCw className="size-3" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleCycleSpeed}
+                        title={t("voice.speedTitle", {
+                          speed: formatSpeedLabel(playbackSpeed).replace(
+                            "x",
+                            ""
+                          ),
+                        })}
+                        aria-label={t("voice.speedTitle", {
+                          speed: formatSpeedLabel(playbackSpeed).replace(
+                            "x",
+                            ""
+                          ),
+                        })}
+                        className={`inline-flex h-7 items-center justify-center rounded border px-2 font-mono text-[10px] font-semibold tabular-nums transition-colors ${
+                          playbackSpeed !== 1.0
+                            ? "border-amber-500/45 bg-amber-500/15 text-amber-300"
+                            : "border-white/[0.08] bg-[#13151D] text-zinc-200 hover:border-white/[0.18]"
+                        }`}
+                      >
+                        {formatSpeedLabel(playbackSpeed)}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleToggleMute}
+                        aria-label={
+                          isMuted ? t("voice.unmuteAria") : t("voice.muteAria")
+                        }
+                        title={
+                          isMuted ? t("voice.unmuteAria") : t("voice.muteAria")
+                        }
+                        className={`inline-flex size-7 items-center justify-center rounded border transition-colors ${
+                          isMuted
+                            ? "border-amber-500/45 bg-amber-500/15 text-amber-300"
+                            : "border-white/[0.08] bg-[#13151D] text-zinc-300 hover:border-white/[0.18] hover:text-[#F4F4F5]"
+                        }`}
+                      >
+                        {isMuted ? (
+                          <VolumeX className="size-3.5" />
+                        ) : (
+                          <Volume2 className="size-3.5" />
+                        )}
+                      </button>
+
+                      <span className="pl-1 font-mono text-[11px] font-medium tabular-nums text-zinc-200">
+                        {formatSeconds(audioCurrentTime)} /{" "}
+                        {formatSeconds(effectiveDurationSec)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
+                {/* Hidden Native Audio Engine Wired to Master Transport */}
                 <audio
                   ref={audioPlayerRef}
-                  controls
                   src={activeOutput.audioUrl}
-                  onPlay={() => setIsPlaying(true)}
+                  preload="metadata"
+                  onPlay={() => {
+                    if (audioPlayerRef.current) {
+                      audioPlayerRef.current.playbackRate = playbackSpeed;
+                      audioPlayerRef.current.muted = isMuted;
+                    }
+                    setIsPlaying(true);
+                  }}
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => {
                     setIsPlaying(false);
@@ -833,6 +1076,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   }}
                   onLoadedMetadata={(e) => {
                     const el = e.currentTarget;
+                    el.playbackRate = playbackSpeed;
+                    el.muted = isMuted;
                     if (Number.isFinite(el.duration) && el.duration > 0) {
                       setAudioDuration(el.duration);
                     }
@@ -845,17 +1090,22 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                       setPlaybackProgress(el.currentTime / el.duration);
                     }
                   }}
-                  className="h-9 w-full rounded"
+                  className="hidden"
                 />
 
-                <p className="line-clamp-2 text-xs text-[#8a8a95]">
-                  &ldquo;{activeOutput.text}&rdquo;
-                </p>
+                <div className="space-y-1">
+                  <span className="block font-mono text-[10px] uppercase tracking-wider text-[#8B8D98]">
+                    {t("voice.scriptExcerptLabel")}
+                  </span>
+                  <p className="line-clamp-2 text-xs text-zinc-300">
+                    &ldquo;{activeOutput.text}&rdquo;
+                  </p>
+                </div>
 
                 <Button
                   type="button"
                   onClick={() => handleDownloadAudio(activeOutput)}
-                  className="h-9 w-full bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
+                  className="h-9 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
                 >
                   <Download className="mr-1.5 size-3.5 shrink-0" />
                   <span className="truncate">
@@ -864,12 +1114,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-zinc-800 bg-[#070709] px-4 py-8 text-center">
+              <div className="studio-well flex flex-col items-center justify-center gap-2 rounded-md border-dashed px-4 py-7 text-center">
                 <Mic className="size-5 text-zinc-500" />
-                <p className="text-xs font-medium text-zinc-300">
+                <p className="text-xs font-medium text-zinc-200">
                   {t("voice.emptyTitle")}
                 </p>
-                <p className="text-[11px] text-[#8a8a95]">
+                <p className="text-[11px] text-[#8B8D98]">
                   {t("voice.emptyDescBefore")}{" "}
                   <strong className="font-medium text-zinc-200">
                     {t("voice.emptyDescAction")}
@@ -881,13 +1131,95 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
           </div>
         </div>
 
-        {/* Panel 2: Session History (Last 10 Clips) */}
-        <div className="overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80">
-          <div className="flex items-center justify-between gap-2 px-4 py-3">
-            <h3 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100">
-              <History className="size-3.5 shrink-0 text-zinc-400" />
+        {/* Card 2: Active Voice Profile & Telemetry Card */}
+        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+            <h3 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
+              <Activity className="size-3.5 shrink-0 text-violet-400" />
+              <span>{t("voice.profileTitle")}</span>
+            </h3>
+            <span
+              className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                cloneMode
+                  ? "border-violet-500/35 bg-violet-500/10 text-violet-300"
+                  : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+              }`}
+            >
+              {cloneMode
+                ? t("voice.profileModeClone")
+                : t("voice.profileModePreset")}
+            </span>
+          </div>
+
+          <div className="space-y-3 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold text-[#F4F4F5]">
+                  {isCloneReady
+                    ? t("voice.cloneVoiceLabel", { name: referenceAudioName })
+                    : t(selectedPreset.labelKey)}
+                </span>
+                <span className="shrink-0 rounded border border-white/[0.08] bg-[#13151D] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                  {isCloneReady
+                    ? cloneMetaText || t("voice.profileSpecValue")
+                    : t(selectedPreset.badgeKey)}
+                </span>
+              </div>
+              <p className="text-[11px] leading-snug text-[#8B8D98]">
+                {cloneMode
+                  ? isCloneReady && referenceAudioMeta
+                    ? t("voice.profileCloneLoadedDesc", {
+                        format: referenceAudioMeta.format,
+                        size: formatBytesCompact(referenceAudioMeta.sizeBytes),
+                      })
+                    : t("voice.profileAwaitingSample")
+                  : t(selectedPreset.timbreKey)}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="studio-well rounded px-2.5 py-1.5">
+                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
+                  {t("voice.profilePipelineLabel")}
+                </span>
+                <span className="block truncate font-mono text-[11px] font-medium text-zinc-200">
+                  {cloneMode
+                    ? t("voice.profilePipelineClone")
+                    : t("voice.profilePipelinePreset")}
+                </span>
+              </div>
+
+              <div className="studio-well rounded px-2.5 py-1.5">
+                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
+                  {t("voice.profilePacingLabel")}
+                </span>
+                <span className="block truncate font-mono text-[11px] font-medium tabular-nums text-zinc-200">
+                  {t("voice.profilePacingValue", {
+                    words: wordCount,
+                    seconds: estimatedReadSec,
+                  })}
+                </span>
+              </div>
+
+              <div className="studio-well rounded px-2.5 py-1.5">
+                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
+                  {t("voice.profileSpecLabel")}
+                </span>
+                <span className="block truncate font-mono text-[11px] font-medium tabular-nums text-emerald-400">
+                  {t("voice.profileSpecValue")}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Session History (Last 10 Clips) */}
+        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+            <h3 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
+              <History className="size-3.5 shrink-0 text-[#8B8D98]" />
               <span>{t("voice.historyTitle")}</span>
-              <span className="font-mono text-[11px] font-normal tabular-nums text-[#8a8a95]">
+              <span className="font-mono text-[11px] font-normal tabular-nums text-[#8B8D98]">
                 ({history.length}/10)
               </span>
             </h3>
@@ -897,7 +1229,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 variant="ghost"
                 size="xs"
                 onClick={handleClearHistory}
-                className="h-6 px-2 text-[11px] text-[#8a8a95] hover:bg-[#131318] hover:text-zinc-100"
+                className="h-6 px-2 text-[11px] text-[#8B8D98] hover:bg-[#13151D] hover:text-[#F4F4F5]"
               >
                 <Trash2 className="mr-1 size-3" />
                 {t("voice.clearHistory")}
@@ -907,11 +1239,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
           <div className="p-4">
             {history.length === 0 ? (
-              <p className="py-1 text-xs text-[#8a8a95]">
+              <p className="py-1 text-xs text-[#8B8D98]">
                 {t("voice.historyEmpty")}
               </p>
             ) : (
-              <div className="no-scrollbar max-h-64 space-y-2 overflow-y-auto">
+              <div className="no-scrollbar max-h-56 space-y-2 overflow-y-auto">
                 {history.map((item) => {
                   const isCurrent = activeOutput?.id === item.id;
                   return (
@@ -919,20 +1251,20 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                       key={item.id}
                       className={`flex items-center justify-between gap-2.5 rounded-md border p-2.5 text-xs transition-colors ${
                         isCurrent
-                          ? "border-zinc-600 bg-[#131318]"
-                          : "border-zinc-800/80 bg-[#070709] hover:border-zinc-700"
+                          ? "border-amber-500/45 bg-[#13151D]"
+                          : "border-white/[0.07] bg-[#050507] hover:border-white/[0.14]"
                       }`}
                     >
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate text-xs font-medium text-zinc-100">
+                          <span className="truncate text-xs font-medium text-[#F4F4F5]">
                             {getDisplayVoiceLabel(item)}
                           </span>
-                          <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
+                          <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#8B8D98]">
                             · {getDisplayTimestamp(item)}
                           </span>
                         </div>
-                        <p className="truncate text-[11px] text-[#8a8a95]">
+                        <p className="truncate text-[11px] text-[#8B8D98]">
                           {item.text}
                         </p>
                       </div>
@@ -944,7 +1276,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                           onClick={() => handleReplayItem(item)}
                           title={t("voice.replayClipTitle")}
                           aria-label={t("voice.replayClipTitle")}
-                          className="border-zinc-800 bg-[#131318] text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
+                          className="border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-amber-500/45 hover:bg-[#181b25] hover:text-amber-300"
                         >
                           <Play className="size-3" />
                         </Button>
@@ -955,7 +1287,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                           onClick={() => handleDownloadAudio(item)}
                           title={t("voice.downloadClipTitle")}
                           aria-label={t("voice.downloadClipTitle")}
-                          className="border-zinc-800 bg-[#131318] text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
+                          className="border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-emerald-500/45 hover:bg-[#181b25] hover:text-emerald-300"
                         >
                           <Download className="size-3" />
                         </Button>

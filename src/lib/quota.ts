@@ -9,8 +9,22 @@ export interface QuotaState {
   creditsRemaining: number;
   maxTrialCredits: number;
   isOperator: boolean;
+  isPro?: boolean;
   role?: "operator" | "pro_client" | "guest";
   totalGenerations: number;
+}
+
+export function hasProAccess(state: QuotaState): boolean {
+  return Boolean(
+    state.isPro ||
+      state.isOperator ||
+      state.role === "pro_client" ||
+      state.role === "operator"
+  );
+}
+
+export function hasOperatorAccess(state: QuotaState): boolean {
+  return Boolean(state.isOperator && state.role === "operator");
 }
 
 export interface BusinessConfig {
@@ -88,6 +102,7 @@ function getDefaultQuotaState(): QuotaState {
     creditsRemaining: cfg.maxTrialCredits,
     maxTrialCredits: cfg.maxTrialCredits,
     isOperator: false,
+    isPro: false,
     role: "guest",
     totalGenerations: 0,
   };
@@ -107,6 +122,7 @@ export function getQuotaState(): QuotaState {
       creditsRemaining: DEFAULT_TRIAL_CREDITS,
       maxTrialCredits: DEFAULT_TRIAL_CREDITS,
       isOperator: false,
+      isPro: false,
       role: "guest",
       totalGenerations: 0,
     };
@@ -119,6 +135,21 @@ export function getQuotaState(): QuotaState {
       return getDefaultQuotaState();
     }
     const parsed = JSON.parse(raw) as Partial<QuotaState>;
+    const normalizedRole: "operator" | "pro_client" | "guest" =
+      parsed.role === "operator" ||
+      parsed.role === "pro_client" ||
+      parsed.role === "guest"
+        ? parsed.role
+        : parsed.isOperator
+          ? "operator"
+          : parsed.isPro
+            ? "pro_client"
+            : "guest";
+
+    const isOperator = normalizedRole === "operator";
+    const isPro =
+      normalizedRole === "operator" || normalizedRole === "pro_client";
+
     return {
       creditsRemaining:
         typeof parsed.creditsRemaining === "number"
@@ -128,8 +159,9 @@ export function getQuotaState(): QuotaState {
         typeof parsed.maxTrialCredits === "number"
           ? parsed.maxTrialCredits
           : cfg.maxTrialCredits,
-      isOperator: Boolean(parsed.isOperator),
-      role: parsed.role || (parsed.isOperator ? "operator" : "guest"),
+      isOperator,
+      isPro,
+      role: normalizedRole,
       totalGenerations:
         typeof parsed.totalGenerations === "number"
           ? parsed.totalGenerations
@@ -155,7 +187,7 @@ function saveQuotaState(state: QuotaState): QuotaState {
 export function consumeCredit(): { allowed: boolean; state: QuotaState } {
   const current = getQuotaState();
 
-  if (current.isOperator) {
+  if (hasProAccess(current)) {
     const updated: QuotaState = {
       ...current,
       totalGenerations: current.totalGenerations + 1,
@@ -221,15 +253,20 @@ export async function verifyAndActivateAccessCode(
       return { success: false, state: current, error: data.error };
     }
 
+    const grantedRole: "operator" | "pro_client" =
+      data.role === "operator" ? "operator" : "pro_client";
+    const isOperator = grantedRole === "operator";
+
     const updated: QuotaState = {
       ...current,
-      isOperator: true,
-      role: data.role || "pro_client",
+      isOperator,
+      isPro: true,
+      role: grantedRole,
     };
     saveQuotaState(updated);
     return {
       success: true,
-      role: data.role || "pro_client",
+      role: grantedRole,
       state: updated,
     };
   } catch {
@@ -241,9 +278,11 @@ export function enableOperatorMode(
   role: "operator" | "pro_client" = "operator"
 ): QuotaState {
   const current = getQuotaState();
+  const isOperator = role === "operator";
   return saveQuotaState({
     ...current,
-    isOperator: true,
+    isOperator,
+    isPro: true,
     role,
   });
 }
@@ -253,6 +292,7 @@ export function deactivateOperatorMode(): QuotaState {
   return saveQuotaState({
     ...current,
     isOperator: false,
+    isPro: false,
     role: "guest",
   });
 }
@@ -263,6 +303,7 @@ export function resetTrialForDemo(): QuotaState {
     creditsRemaining: cfg.maxTrialCredits,
     maxTrialCredits: cfg.maxTrialCredits,
     isOperator: false,
+    isPro: false,
     role: "guest",
     totalGenerations: 0,
   };

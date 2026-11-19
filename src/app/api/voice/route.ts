@@ -180,7 +180,7 @@ export async function POST(request: Request) {
         if (audioUrl) {
           return NextResponse.json({
             audioUrl,
-            engine: "F5-TTS (MIT Clone)",
+            engine: translate(locale, "api.voice.engine.f5tts"),
             language,
             durationMs: Date.now() - startTime,
             isFallback: false,
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
         if (audioUrl) {
           return NextResponse.json({
             audioUrl,
-            engine: "Kokoro-82M (Apache-2.0)",
+            engine: translate(locale, "api.voice.engine.kokoro"),
             language,
             durationMs: Date.now() - startTime,
             isFallback: false,
@@ -279,7 +279,7 @@ export async function POST(request: Request) {
           );
           return NextResponse.json({
             audioUrl: "data:audio/wav;base64," + wavBuffer.toString("base64"),
-            engine: "Gemini 2.5 Neural TTS",
+            engine: translate(locale, "api.voice.engine.geminiTts"),
             language,
             durationMs,
             isFallback: false,
