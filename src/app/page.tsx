@@ -124,11 +124,15 @@ export default function VokaloomStudioPage() {
         }}
         className="flex flex-1 flex-col gap-0"
       >
-        {/* Top Hardware Workbench Bar (3-Zone Executive Header) */}
-        <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#060608]/92 backdrop-blur-md">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-6 lg:h-13 lg:flex-nowrap lg:py-0">
+        {/* Top Hardware Workbench Bar (Single-Row 52px Mobile + 3-Zone Executive Desktop Header) */}
+        <header className="sticky top-0 z-40">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 border-b border-white/[0.08] bg-[#060608]/92 backdrop-blur-md"
+          />
+          <div className="relative mx-auto flex h-13 max-w-7xl flex-nowrap items-center justify-between gap-1.5 px-2.5 sm:gap-2 sm:px-6">
             {/* Zone 1 (Left): Geometric Aperture/Waveform Mark & Wordmark */}
-            <div className="order-1 flex min-w-0 items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
               <div
                 aria-hidden="true"
                 className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
@@ -169,9 +173,9 @@ export default function VokaloomStudioPage() {
               </h1>
             </div>
 
-            {/* Zone 2 (Center): Crisp Segmented Mode Switcher */}
-            <div className="order-3 w-full border-t border-white/[0.06] pt-2 lg:order-2 lg:w-auto lg:border-0 lg:pt-0">
-              <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-0.5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] md:h-8.5 lg:inline-flex lg:w-auto">
+            {/* Zone 2 (Center on Desktop lg+, Docked Bottom Thumb-Arc Tab Bar below lg) */}
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#060608]/94 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.65)] backdrop-blur-md lg:static lg:z-auto lg:w-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+              <TabsList className="mx-auto grid h-11 w-full max-w-md grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] lg:inline-flex lg:h-8.5 lg:w-auto lg:max-w-none lg:p-0.5">
                 <TabsTrigger
                   value="backgrounds"
                   data-testid="tab-backgrounds"
@@ -199,14 +203,14 @@ export default function VokaloomStudioPage() {
               </TabsList>
             </div>
 
-            {/* Zone 3 (Right): Single Status Pill, Language Switcher & Single Primary Action */}
-            <div className="order-2 flex shrink-0 items-center gap-1.5 lg:order-3">
+            {/* Zone 3 (Right): Status / Interactive Trial Badge, Language Switcher, Divider & Primary Action */}
+            <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
               {proActive ? (
                 <span
                   data-testid={
                     isAdminOperator ? "badge-operator" : "badge-pro-pass"
                   }
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-400 md:h-7"
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-1.5 font-mono text-[11px] font-medium text-emerald-400 sm:gap-1.5 sm:px-2 md:h-7"
                 >
                   <ShieldCheck className="size-3 shrink-0" />
                   <span>
@@ -216,16 +220,18 @@ export default function VokaloomStudioPage() {
                   </span>
                 </span>
               ) : (
-                <span
+                <button
+                  type="button"
                   data-testid="status-quota"
+                  onClick={() => setIsPaywallOpen(true)}
                   title={t("page.creditsBadge", {
                     remaining: quota.creditsRemaining,
                     max: quota.maxTrialCredits,
                   })}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-2 font-mono text-[11px] font-medium tabular-nums shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] md:h-7 ${
+                  className={`inline-flex h-9 cursor-pointer items-center gap-1 rounded-md border px-1.5 font-mono text-[11px] font-medium tabular-nums shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] transition-colors sm:gap-1.5 sm:px-2 md:h-7 ${
                     quota.creditsRemaining > 0
-                      ? "border-white/[0.08] bg-[#050507] text-zinc-200"
-                      : "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                      ? "border-white/[0.08] bg-[#050507] text-zinc-200 hover:border-white/[0.16] hover:bg-[#0B0C10]"
+                      : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/18"
                   }`}
                 >
                   <span
@@ -244,10 +250,17 @@ export default function VokaloomStudioPage() {
                       max: quota.maxTrialCredits,
                     })}
                   </span>
-                </span>
+                </button>
               )}
 
               <LanguageSwitcher />
+
+              {(isAdminOperator || !proActive) && (
+                <span
+                  aria-hidden="true"
+                  className="mx-0.5 hidden h-4 w-px shrink-0 bg-white/[0.1] sm:block"
+                />
+              )}
 
               {isAdminOperator ? (
                 <Link
@@ -255,10 +268,10 @@ export default function VokaloomStudioPage() {
                   data-testid="link-admin"
                   title={t("page.adminTitle")}
                   aria-label={t("page.adminTitle")}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-2.5 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] md:h-7"
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-white/[0.1] bg-[#13151D] px-2 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] sm:gap-1.5 sm:px-2.5 md:h-7"
                 >
-                  <Settings className="size-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">{t("page.adminLink")}</span>
+                  <Settings className="size-3.5 shrink-0 text-amber-400" />
+                  <span>{t("page.adminLink")}</span>
                 </Link>
               ) : !proActive ? (
                 <Button
@@ -267,12 +280,10 @@ export default function VokaloomStudioPage() {
                   onClick={() => setIsPaywallOpen(true)}
                   title={t("page.upgradeButton")}
                   aria-label={t("page.upgradeButton")}
-                  className="h-9 rounded-md border border-amber-400/60 bg-amber-500 px-2.5 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-7"
+                  className="h-9 gap-1 rounded-md border border-amber-400/60 bg-amber-500 px-2 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:px-2.5 md:h-7"
                 >
-                  <Crown className="size-3.5 sm:mr-1" />
-                  <span className="hidden sm:inline">
-                    {t("page.upgradeButton")}
-                  </span>
+                  <Crown className="size-3.5 shrink-0" />
+                  <span>{t("page.upgradeButton")}</span>
                 </Button>
               ) : null}
             </div>
@@ -280,7 +291,7 @@ export default function VokaloomStudioPage() {
         </header>
 
         {/* Main Studio Workspace */}
-        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 py-4 sm:px-6 sm:py-5">
+        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 pt-4 pb-8 sm:px-6 sm:pt-5 sm:pb-8 lg:py-5">
           <TabsContent value="backgrounds" className="mt-0 flex-1">
             <BackgroundFinder
               onRequirePaywall={() => setIsPaywallOpen(true)}
@@ -293,11 +304,11 @@ export default function VokaloomStudioPage() {
         </main>
       </Tabs>
 
-      {/* Minimal Bottom Studio Status Rail */}
-      <footer className="border-t border-white/[0.08] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-        <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-3 py-1.5 sm:px-6 lg:h-8 lg:flex-nowrap lg:py-0">
+      {/* Minimal Bottom Studio Status Rail (40px tall, cleared above mobile bottom dock) */}
+      <footer className="mb-[56px] border-t border-white/[0.08] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] lg:mb-0">
+        <div className="mx-auto flex h-10 max-w-7xl flex-nowrap items-center justify-between gap-3 px-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[10px] tracking-wide text-[#8B8D98] sm:text-[11px]">
-            <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
+            <span className="size-1.5 shrink-0 rounded-full bg-zinc-500" />
             <span className="truncate">{t("page.footerNotice")}</span>
           </div>
 
@@ -309,7 +320,7 @@ export default function VokaloomStudioPage() {
             onClick={handleInstallPwa}
             title={t("page.installAppButton")}
             aria-label={t("page.installAppButton")}
-            className="h-8 shrink-0 rounded border-white/[0.1] bg-[#13151D] px-2.5 font-mono text-[10px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200 md:h-5.5 md:px-2"
+            className="h-8 shrink-0 rounded-md border-white/[0.1] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200 md:h-7.5"
           >
             <Download className="size-3" />
             <span>{t("page.installAppButton")}</span>

@@ -427,6 +427,12 @@ export default function VokaloomAdminPage() {
     },
   ];
 
+  const totalEngineCount = engineList.length;
+  const liveEngineCount = engineList.filter((eng) => eng.active).length;
+  const fallbackEngineCount = totalEngineCount - liveEngineCount;
+  const stripLeadingIndex = (title: string): string =>
+    title.replace(/^\d+\.\s*/, "");
+
   return (
     <div className="min-h-screen flex flex-col bg-[#060608] text-[#F4F4F5]">
       {/* Top Admin Header */}
@@ -468,6 +474,10 @@ export default function VokaloomAdminPage() {
                   })}
             </Badge>
             <LanguageSwitcher />
+            <span
+              aria-hidden="true"
+              className="mx-0.5 hidden h-4 w-px shrink-0 bg-white/[0.1] sm:block"
+            />
             <Link
               href="/"
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] md:h-7 md:px-2.5"
@@ -545,443 +555,501 @@ export default function VokaloomAdminPage() {
             </Card>
           </div>
         ) : (
-          /* 5 Administrative Control Cards */
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Card 1: API & AI Engine Health Status */}
-            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
-              <CardHeader className="pb-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                    <Activity className="size-4 shrink-0 text-emerald-400" />
-                    <span>{t("admin.card1Title")}</span>
-                  </CardTitle>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => void fetchAdminStatus()}
-                    disabled={isRefreshingHealth}
-                    className="h-9 border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
-                  >
-                    <RefreshCw
-                      className={`mr-1.5 size-3 ${
-                        isRefreshingHealth ? "animate-spin" : ""
-                      }`}
-                    />
-                    {t("admin.refreshHealth")}
-                  </Button>
-                </div>
-                <CardDescription className="text-xs text-[#8B8D98]">
-                  {t("admin.card1Desc")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                {engineList.map((eng) => (
-                  <div
-                    key={eng.key}
-                    className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3.5 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#F4F4F5]">
-                        {eng.name}
-                      </p>
-                      <p className="font-mono text-[10px] text-[#8B8D98]">
-                        {t("admin.envLabel", { envVar: eng.envVar })}
-                      </p>
-                    </div>
-                    {eng.active ? (
-                      <Badge className="shrink-0 rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10.5px] font-medium text-emerald-400">
-                        <CheckCircle2 className="mr-1 size-3" />
-                        {t("admin.statusActive")}
-                      </Badge>
-                    ) : (
-                      <Badge className="shrink-0 rounded-md border border-amber-500/35 bg-amber-500/10 font-mono text-[10.5px] font-medium text-amber-300">
-                        <AlertTriangle className="mr-1 size-3" />
-                        {t("admin.statusFallback")}
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          /* Engine Summary Strip + 5 Administrative Control Cards */
+          <div className="space-y-5">
+            {/* Compact Top Engine Telemetry Summary Strip */}
+            <div
+              data-testid="admin-health-summary"
+              className="studio-deck flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-2.5"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                  {locale === "es" ? "TELEMETRÍA" : "TELEMETRY"}
+                </span>
+                <span className="truncate text-xs font-medium text-zinc-200">
+                  {locale === "es"
+                    ? `Resumen de Motores IA y Stock (${liveEngineCount} de ${totalEngineCount} en vivo)`
+                    : `AI & Stock Engine Summary (${liveEngineCount} of ${totalEngineCount} live)`}
+                </span>
+              </div>
 
-            {/* Card 2: Runtime API Keys Vault (AES-256-GCM HttpOnly Cookie + Local Dev .env.local) */}
-            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                  <KeyRound className="size-4 shrink-0 text-amber-400" />
-                  <span>{t("admin.vault.title")}</span>
-                </CardTitle>
-                <CardDescription className="text-xs text-[#8B8D98]">
-                  {t("admin.vault.desc")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSaveVaultKeys} className="space-y-3">
-                  {VAULT_KEY_FIELDS.map(({ keyName, serviceHint }) => {
-                    const masked = maskedKeys[keyName];
-                    return (
-                      <div key={keyName} className="space-y-1">
-                        <div className="flex flex-wrap items-center justify-between gap-1.5">
-                          <label
-                            htmlFor={`vault-${keyName}`}
-                            className="font-mono text-[11px] font-semibold text-[#F4F4F5]"
-                          >
-                            {keyName}{" "}
-                            <span className="font-sans font-normal text-[#8B8D98]">
-                              · {serviceHint}
-                            </span>
-                          </label>
-                          {masked ? (
-                            <div className="flex items-center gap-1.5">
-                              <Badge className="rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10px] text-emerald-400">
-                                {t("admin.vault.activeBadge", { masked })}
-                              </Badge>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleClearSingleVaultKey(keyName)
-                                }
-                                disabled={isSavingVault}
-                                title={t("admin.vault.clearSingleTitle", {
-                                  keyName,
-                                })}
-                                aria-label={t("admin.vault.clearSingleTitle", {
-                                  keyName,
-                                })}
-                                className="inline-flex size-8 items-center justify-center rounded-md border border-white/[0.08] bg-[#13151D] text-[#8B8D98] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:size-7"
-                              >
-                                <X className="size-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="rounded-md border-white/[0.08] bg-[#050507] font-mono text-[10px] text-[#8B8D98]"
-                            >
-                              {t("admin.vault.unsetBadge")}
-                            </Badge>
-                          )}
-                        </div>
-                        <Input
-                          id={`vault-${keyName}`}
-                          type="password"
-                          autoComplete="off"
-                          value={vaultInputs[keyName]}
-                          onChange={(e) =>
-                            setVaultInputs((prev) => ({
-                              ...prev,
-                              [keyName]: e.target.value,
-                            }))
-                          }
-                          placeholder={t("admin.vault.placeholder")}
-                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-8 md:text-xs"
-                        />
-                      </div>
-                    );
-                  })}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] font-medium tabular-nums text-emerald-400">
+                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  <span>
+                    {locale === "es"
+                      ? `${liveEngineCount}/${totalEngineCount} En Vivo`
+                      : `${liveEngineCount}/${totalEngineCount} Live`}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 font-mono text-[11px] font-medium tabular-nums text-amber-300">
+                  <span className="size-1.5 rounded-full bg-amber-400" />
+                  <span>
+                    {locale === "es"
+                      ? `${fallbackEngineCount}/${totalEngineCount} Respaldo`
+                      : `${fallbackEngineCount}/${totalEngineCount} Fallback`}
+                  </span>
+                </span>
+              </div>
+            </div>
 
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      type="submit"
-                      disabled={isSavingVault}
-                      className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
-                    >
-                      {isSavingVault ? (
-                        <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
-                      ) : (
-                        <Lock className="mr-1.5 size-3.5 shrink-0" />
-                      )}
-                      <span className="truncate">
-                        {isSavingVault
-                          ? t("admin.vault.savingButton")
-                          : t("admin.vault.saveButton")}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Card 01: API & AI Engine Health Status */}
+              <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                      <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                        01
                       </span>
-                    </Button>
+                      <Activity className="size-4 shrink-0 text-emerald-400" />
+                      <span>{stripLeadingIndex(t("admin.card1Title"))}</span>
+                    </CardTitle>
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={isClearingVault}
-                      onClick={() => void handleClearVault()}
-                      className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-9"
+                      size="xs"
+                      onClick={() => void fetchAdminStatus()}
+                      disabled={isRefreshingHealth}
+                      className="h-9 border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
                     >
-                      {isClearingVault ? (
-                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="mr-1.5 size-3.5 text-[#8B8D98]" />
-                      )}
-                      {t("admin.vault.clearButton")}
+                      <RefreshCw
+                        className={`mr-1.5 size-3 ${
+                          isRefreshingHealth ? "animate-spin" : ""
+                        }`}
+                      />
+                      {t("admin.refreshHealth")}
                     </Button>
                   </div>
-                </form>
-              </CardContent>
-            </Card>
+                  <CardDescription className="text-xs text-[#8B8D98]">
+                    {t("admin.card1Desc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col justify-between gap-2.5">
+                  {engineList.map((eng) => (
+                    <div
+                      key={eng.key}
+                      className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3.5 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[#F4F4F5]">
+                          {eng.name}
+                        </p>
+                        <p className="font-mono text-[10px] text-[#8B8D98]">
+                          {t("admin.envLabel", { envVar: eng.envVar })}
+                        </p>
+                      </div>
+                      {eng.active ? (
+                        <Badge className="shrink-0 rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10.5px] font-medium text-emerald-400">
+                          <CheckCircle2 className="mr-1 size-3" />
+                          {t("admin.statusActive")}
+                        </Badge>
+                      ) : (
+                        <Badge className="shrink-0 rounded-md border border-amber-500/35 bg-amber-500/10 font-mono text-[10.5px] font-medium text-amber-300">
+                          <AlertTriangle className="mr-1 size-3" />
+                          {t("admin.statusFallback")}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
 
-            {/* Card 3: Commercial & Paywall Configuration */}
-            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                  <DollarSign className="size-4 shrink-0 text-amber-400" />
-                  <span>{t("admin.card2Title")}</span>
-                </CardTitle>
-                <CardDescription className="text-xs text-[#8B8D98]">
-                  {t("admin.card2Desc")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form
-                  onSubmit={handleSaveBusinessConfig}
-                  className="space-y-3.5"
-                >
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="admin-price-cop"
-                        className="text-xs font-medium text-zinc-300"
-                      >
-                        {t("admin.priceCopLabel")}
-                      </label>
-                      <Input
-                        id="admin-price-cop"
-                        value={businessForm.priceCop}
-                        onChange={(e) =>
-                          setBusinessForm({
-                            ...businessForm,
-                            priceCop: e.target.value,
-                          })
-                        }
-                        className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                      />
+              {/* Card 02: Runtime API Keys Vault (AES-256-GCM HttpOnly Cookie + Local Dev .env.local) */}
+              <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                      02
+                    </span>
+                    <KeyRound className="size-4 shrink-0 text-amber-400" />
+                    <span>{stripLeadingIndex(t("admin.vault.title"))}</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#8B8D98]">
+                    {t("admin.vault.desc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col">
+                  <form
+                    onSubmit={handleSaveVaultKeys}
+                    className="flex flex-1 flex-col justify-between gap-2.5"
+                  >
+                    <div className="space-y-2.5">
+                      {VAULT_KEY_FIELDS.map(({ keyName, serviceHint }) => {
+                        const masked = maskedKeys[keyName];
+                        return (
+                          <div
+                            key={keyName}
+                            className="studio-well space-y-1.5 rounded-lg px-3.5 py-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <label
+                                htmlFor={`vault-${keyName}`}
+                                className="min-w-0 font-mono text-[11px] font-semibold text-[#F4F4F5]"
+                              >
+                                {keyName}{" "}
+                                <span className="font-sans font-normal text-[#8B8D98]">
+                                  · {serviceHint}
+                                </span>
+                              </label>
+                              {masked ? (
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  <Badge className="rounded-md border border-emerald-500/35 bg-emerald-500/10 font-mono text-[10.5px] font-medium text-emerald-400">
+                                    {t("admin.vault.activeBadge", { masked })}
+                                  </Badge>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleClearSingleVaultKey(keyName)
+                                    }
+                                    disabled={isSavingVault}
+                                    title={t("admin.vault.clearSingleTitle", {
+                                      keyName,
+                                    })}
+                                    aria-label={t(
+                                      "admin.vault.clearSingleTitle",
+                                      {
+                                        keyName,
+                                      }
+                                    )}
+                                    className="inline-flex size-8 items-center justify-center rounded-md border border-white/[0.08] bg-[#13151D] text-[#8B8D98] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:size-7"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 rounded-md border-white/[0.08] bg-[#0B0C10] font-mono text-[10.5px] text-[#8B8D98]"
+                                >
+                                  {t("admin.vault.unsetBadge")}
+                                </Badge>
+                              )}
+                            </div>
+                            <Input
+                              id={`vault-${keyName}`}
+                              type="password"
+                              autoComplete="off"
+                              value={vaultInputs[keyName]}
+                              onChange={(e) =>
+                                setVaultInputs((prev) => ({
+                                  ...prev,
+                                  [keyName]: e.target.value,
+                                }))
+                              }
+                              placeholder={t("admin.vault.placeholder")}
+                              className="h-11 border-white/[0.08] bg-[#0B0C10]/90 font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-8 md:text-xs"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="admin-price-usd"
-                        className="text-xs font-medium text-zinc-300"
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="submit"
+                        disabled={isSavingVault}
+                        className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
                       >
-                        {t("admin.priceUsdLabel")}
-                      </label>
-                      <Input
-                        id="admin-price-usd"
-                        value={businessForm.priceUsd}
-                        onChange={(e) =>
-                          setBusinessForm({
-                            ...businessForm,
-                            priceUsd: e.target.value,
-                          })
-                        }
-                        className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                      />
+                        {isSavingVault ? (
+                          <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
+                        ) : (
+                          <Lock className="mr-1.5 size-3.5 shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {isSavingVault
+                            ? t("admin.vault.savingButton")
+                            : t("admin.vault.saveButton")}
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isClearingVault}
+                        onClick={() => void handleClearVault()}
+                        className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-9"
+                      >
+                        {isClearingVault ? (
+                          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-1.5 size-3.5 text-[#8B8D98]" />
+                        )}
+                        {t("admin.vault.clearButton")}
+                      </Button>
                     </div>
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="admin-trial-credits"
-                        className="text-xs font-medium text-zinc-300"
-                      >
-                        {t("admin.trialCreditsLabel")}
-                      </label>
-                      <Input
-                        id="admin-trial-credits"
-                        type="number"
-                        min={0}
-                        max={50}
-                        value={businessForm.maxTrialCredits}
-                        onChange={(e) =>
-                          setBusinessForm({
-                            ...businessForm,
-                            maxTrialCredits: Math.max(
-                              0,
-                              Number(e.target.value) || 0
-                            ),
-                          })
-                        }
-                        className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                      />
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Card 03: Commercial & Paywall Configuration */}
+              <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                      03
+                    </span>
+                    <DollarSign className="size-4 shrink-0 text-amber-400" />
+                    <span>{stripLeadingIndex(t("admin.card2Title"))}</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#8B8D98]">
+                    {t("admin.card2Desc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col">
+                  <form
+                    onSubmit={handleSaveBusinessConfig}
+                    className="flex flex-1 flex-col justify-between gap-3.5"
+                  >
+                    <div className="space-y-3.5">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="admin-price-cop"
+                            className="text-xs font-medium text-zinc-300"
+                          >
+                            {t("admin.priceCopLabel")}
+                          </label>
+                          <Input
+                            id="admin-price-cop"
+                            value={businessForm.priceCop}
+                            onChange={(e) =>
+                              setBusinessForm({
+                                ...businessForm,
+                                priceCop: e.target.value,
+                              })
+                            }
+                            className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="admin-price-usd"
+                            className="text-xs font-medium text-zinc-300"
+                          >
+                            {t("admin.priceUsdLabel")}
+                          </label>
+                          <Input
+                            id="admin-price-usd"
+                            value={businessForm.priceUsd}
+                            onChange={(e) =>
+                              setBusinessForm({
+                                ...businessForm,
+                                priceUsd: e.target.value,
+                              })
+                            }
+                            className="h-11 border-white/[0.08] bg-[#050507] text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="admin-trial-credits"
+                            className="text-xs font-medium text-zinc-300"
+                          >
+                            {t("admin.trialCreditsLabel")}
+                          </label>
+                          <Input
+                            id="admin-trial-credits"
+                            type="number"
+                            min={0}
+                            max={50}
+                            value={businessForm.maxTrialCredits}
+                            onChange={(e) =>
+                              setBusinessForm({
+                                ...businessForm,
+                                maxTrialCredits: Math.max(
+                                  0,
+                                  Number(e.target.value) || 0
+                                ),
+                              })
+                            }
+                            className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label
+                          htmlFor="admin-checkout-cop"
+                          className="text-xs font-medium text-zinc-300"
+                        >
+                          {t("admin.checkoutCopLabel")}
+                        </label>
+                        <Input
+                          id="admin-checkout-cop"
+                          value={businessForm.checkoutUrlCop}
+                          onChange={(e) =>
+                            setBusinessForm({
+                              ...businessForm,
+                              checkoutUrlCop: e.target.value,
+                            })
+                          }
+                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label
+                          htmlFor="admin-checkout-usd"
+                          className="text-xs font-medium text-zinc-300"
+                        >
+                          {t("admin.checkoutUsdLabel")}
+                        </label>
+                        <Input
+                          id="admin-checkout-usd"
+                          value={businessForm.checkoutUrlUsd}
+                          onChange={(e) =>
+                            setBusinessForm({
+                              ...businessForm,
+                              checkoutUrlUsd: e.target.value,
+                            })
+                          }
+                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
+                    >
+                      <span className="truncate">
+                        {t("admin.saveSettingsButton")}
+                      </span>
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Card 04: Client Access Links & WhatsApp Invite Generator */}
+              <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                      04
+                    </span>
+                    <Share2 className="size-4 shrink-0 text-amber-400" />
+                    <span>{stripLeadingIndex(t("admin.card3Title"))}</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#8B8D98]">
+                    {t("admin.card3Desc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col justify-between gap-4">
+                  <div className="space-y-2">
+                    <span className="text-xs font-medium text-zinc-300">
+                      {t("admin.vipCodesLabelBefore")}
+                      <code className="text-[#8B8D98]">VIP_CLIENT_CODES</code>
+                      {t("admin.vipCodesLabelAfter")}
+                    </span>
+                    <div className="space-y-2">
+                      {vipCodes.map((code) => (
+                        <div
+                          key={code}
+                          className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Sparkles className="size-3.5 shrink-0 text-amber-400" />
+                            <code className="truncate text-xs font-semibold text-[#F4F4F5]">
+                              {code}
+                            </code>
+                          </div>
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => void handleCopyInviteLink(code)}
+                            className="h-9 shrink-0 border border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
+                          >
+                            <Copy className="mr-1.5 size-3" />
+                            {t("admin.copyInviteButton")}
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="studio-well space-y-1.5 rounded-lg p-3">
                     <label
-                      htmlFor="admin-checkout-cop"
+                      htmlFor="admin-custom-invite"
                       className="text-xs font-medium text-zinc-300"
                     >
-                      {t("admin.checkoutCopLabel")}
+                      {t("admin.customInviteLabel")}
                     </label>
-                    <Input
-                      id="admin-checkout-cop"
-                      value={businessForm.checkoutUrlCop}
-                      onChange={(e) =>
-                        setBusinessForm({
-                          ...businessForm,
-                          checkoutUrlCop: e.target.value,
-                        })
-                      }
-                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="admin-custom-invite"
+                        value={customInviteCode}
+                        onChange={(e) => setCustomInviteCode(e.target.value)}
+                        placeholder={t("admin.customInvitePlaceholder")}
+                        className="h-11 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-8 md:text-xs"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!customInviteCode.trim()}
+                        onClick={() =>
+                          void handleCopyInviteLink(customInviteCode)
+                        }
+                        className="h-11 shrink-0 border border-white/[0.12] bg-[#13151D] px-3 text-xs font-semibold text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-white/[0.2] hover:bg-[#191c26] md:h-8"
+                      >
+                        <Copy className="mr-1.5 size-3.5" />
+                        {t("admin.copyInviteButton")}
+                      </Button>
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="admin-checkout-usd"
-                      className="text-xs font-medium text-zinc-300"
-                    >
-                      {t("admin.checkoutUsdLabel")}
-                    </label>
-                    <Input
-                      id="admin-checkout-usd"
-                      value={businessForm.checkoutUrlUsd}
-                      onChange={(e) =>
-                        setBusinessForm({
-                          ...businessForm,
-                          checkoutUrlUsd: e.target.value,
-                        })
-                      }
-                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                    />
-                  </div>
+              {/* Card 05: Operator Sandbox & Device Controls (Clean 3-Column Equal-Height Grid) */}
+              <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5] lg:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                      05
+                    </span>
+                    <Sliders className="size-4 shrink-0 text-emerald-400" />
+                    <span>{stripLeadingIndex(t("admin.card4Title"))}</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#8B8D98]">
+                    {t("admin.card4Desc")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-3">
+                  <Button
+                    type="button"
+                    onClick={handleEnableOperatorBrowser}
+                    className="h-full min-h-11 w-full justify-start whitespace-normal border border-emerald-400/50 bg-emerald-500 px-3.5 py-2.5 text-left text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400 md:min-h-10"
+                  >
+                    <UserCheck className="mr-2 size-4 shrink-0" />
+                    <span>{t("admin.enableOperatorButton")}</span>
+                  </Button>
 
                   <Button
-                    type="submit"
-                    className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
+                    type="button"
+                    variant="outline"
+                    onClick={handleSwitchToNormalClientView}
+                    className="h-full min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] px-3.5 py-2.5 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-10"
                   >
-                    <span className="truncate">
-                      {t("admin.saveSettingsButton")}
+                    <Eye className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
+                    <span>{t("admin.switchClientButton")}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleResetLocalTrial}
+                    className="h-full min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] px-3.5 py-2.5 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-10"
+                  >
+                    <RotateCcw className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
+                    <span>
+                      {t("admin.resetTrialButton", {
+                        max: businessForm.maxTrialCredits,
+                      })}
                     </span>
                   </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Card 4: Client Access Links & WhatsApp Invite Generator */}
-            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5]">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                  <Share2 className="size-4 shrink-0 text-amber-400" />
-                  <span>{t("admin.card3Title")}</span>
-                </CardTitle>
-                <CardDescription className="text-xs text-[#8B8D98]">
-                  {t("admin.card3Desc")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <span className="text-xs font-medium text-zinc-300">
-                    {t("admin.vipCodesLabelBefore")}
-                    <code className="text-[#8B8D98]">VIP_CLIENT_CODES</code>
-                    {t("admin.vipCodesLabelAfter")}
-                  </span>
-                  <div className="space-y-2">
-                    {vipCodes.map((code) => (
-                      <div
-                        key={code}
-                        className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <Sparkles className="size-3.5 shrink-0 text-amber-400" />
-                          <code className="truncate text-xs font-semibold text-[#F4F4F5]">
-                            {code}
-                          </code>
-                        </div>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="secondary"
-                          onClick={() => void handleCopyInviteLink(code)}
-                          className="h-9 shrink-0 border border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
-                        >
-                          <Copy className="mr-1.5 size-3" />
-                          {t("admin.copyInviteButton")}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="studio-well space-y-1.5 rounded-lg p-3">
-                  <label
-                    htmlFor="admin-custom-invite"
-                    className="text-xs font-medium text-zinc-300"
-                  >
-                    {t("admin.customInviteLabel")}
-                  </label>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      id="admin-custom-invite"
-                      value={customInviteCode}
-                      onChange={(e) => setCustomInviteCode(e.target.value)}
-                      placeholder={t("admin.customInvitePlaceholder")}
-                      className="h-11 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-8 md:text-xs"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!customInviteCode.trim()}
-                      onClick={() =>
-                        void handleCopyInviteLink(customInviteCode)
-                      }
-                      className="h-11 shrink-0 border border-white/[0.12] bg-[#13151D] px-3 text-xs font-semibold text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-white/[0.2] hover:bg-[#191c26] md:h-8"
-                    >
-                      <Copy className="mr-1.5 size-3.5" />
-                      {t("admin.copyInviteButton")}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card 5: Operator Sandbox & Device Controls */}
-            <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5] lg:col-span-2">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                  <Sliders className="size-4 shrink-0 text-emerald-400" />
-                  <span>{t("admin.card4Title")}</span>
-                </CardTitle>
-                <CardDescription className="text-xs text-[#8B8D98]">
-                  {t("admin.card4Desc")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Button
-                  type="button"
-                  onClick={handleEnableOperatorBrowser}
-                  className="h-auto min-h-11 w-full justify-start whitespace-normal border border-emerald-400/50 bg-emerald-500 py-2 text-left text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400 md:min-h-9"
-                >
-                  <UserCheck className="mr-2 size-4 shrink-0" />
-                  <span>{t("admin.enableOperatorButton")}</span>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSwitchToNormalClientView}
-                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] py-2 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-9"
-                >
-                  <Eye className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
-                  <span>{t("admin.switchClientButton")}</span>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleResetLocalTrial}
-                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-white/[0.1] bg-[#13151D] py-2 text-left text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:min-h-9"
-                >
-                  <RotateCcw className="mr-2 size-4 shrink-0 text-[#8B8D98]" />
-                  <span>
-                    {t("admin.resetTrialButton", {
-                      max: businessForm.maxTrialCredits,
-                    })}
-                  </span>
-                </Button>
-
-                <Link
-                  href="/"
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.12] bg-[#13151D] px-3 py-2 text-xs font-semibold text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.2] hover:bg-[#191c26] md:min-h-9"
-                >
-                  <ArrowLeft className="size-4 shrink-0" />
-                  <span>{t("admin.returnToStudio")}</span>
-                </Link>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
       </main>

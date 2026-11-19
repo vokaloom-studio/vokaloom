@@ -221,6 +221,16 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const outputDeckRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollOutputIntoViewOnMobile = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      outputDeckRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  };
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -399,6 +409,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     }
 
     setIsGenerating(true);
+    scrollOutputIntoViewOnMobile();
     try {
       const response = await fetch("/api/voice", {
         method: "POST",
@@ -471,6 +482,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       );
 
       setTimeout(() => {
+        scrollOutputIntoViewOnMobile();
         if (audioPlayerRef.current) {
           audioPlayerRef.current.load();
           audioPlayerRef.current.playbackRate = playbackSpeed;
@@ -857,11 +869,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       </section>
 
       {/* Right Column (5 Cols): Master Audio Output Deck & Session History */}
-      <aside className="min-w-0 space-y-4 lg:col-span-5">
+      <aside className="min-w-0 space-y-4 lg:sticky lg:top-[68px] lg:col-span-5">
         {/* Card 1: Unified Master Audio Output Transport Deck */}
         <div
+          ref={outputDeckRef}
           data-testid="voice-output-panel"
-          className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]"
+          className="studio-deck scroll-mt-[68px] overflow-hidden rounded-lg divide-y divide-white/[0.06]"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
