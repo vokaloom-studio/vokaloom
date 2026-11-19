@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import net from "node:net";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { resolveRequestLocale, translate } from "@/lib/i18n";
+import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
 import {
   ADMIN_SESSION_COOKIE_NAME,
   ENTITLEMENT_COOKIE_NAME,
@@ -350,43 +350,109 @@ async function resolveAllDiagnostics() {
   });
 }
 
-async function isAdminAuthorized(
+type AdminAuthCheckResult =
+  | { authorized: true; usedSubmittedKey: boolean }
+  | { authorized: false; rateLimited: boolean };
+
+/**
+ * Verifies admin authorization via submitted key (`x-admin-key` / `body.adminKey`)
+ * or operator session cookie, applying brute-force rate limiting whenever a key is supplied.
+ */
+async function authorizeAdminRequest(
   request: Request,
-  bodyAdminKey?: string
-): Promise<boolean> {
+  bodyAdminKey?: unknown
+): Promise<AdminAuthCheckResult> {
   const masterKey = resolveAdminMasterKey();
   if (!masterKey) {
-    return false;
+    return { authorized: false, rateLimited: false };
   }
+
+  const hasHeaderKey = request.headers.has("x-admin-key");
+  const hasBodyKey = bodyAdminKey !== undefined;
+  const headerKey = request.headers.get("x-admin-key")?.trim() || "";
+  const bodyKey = typeof bodyAdminKey === "string" ? bodyAdminKey.trim() : "";
+  const hasNonEmptyKey = headerKey.length > 0 || bodyKey.length > 0;
 
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
-  if (verifyAdminSessionToken(sessionCookie)) {
-    return true;
+  const hasValidSession = verifyAdminSessionToken(sessionCookie);
+
+  if (!hasNonEmptyKey && hasValidSession) {
+    return { authorized: true, usedSubmittedKey: false };
   }
 
-  const headerKey = request.headers.get("x-admin-key")?.trim() || "";
-  if (headerKey.length > 0 && timingSafeEqualIgnoreCase(headerKey, masterKey)) {
-    return true;
+  if (hasHeaderKey || hasBodyKey) {
+    const clientIp = getClientIp(request);
+    if (isRateLimited(clientIp)) {
+      return { authorized: false, rateLimited: true };
+    }
+
+    if (
+      (headerKey.length > 0 &&
+        timingSafeEqualIgnoreCase(headerKey, masterKey)) ||
+      (bodyKey.length > 0 && timingSafeEqualIgnoreCase(bodyKey, masterKey))
+    ) {
+      clearFailedLogins(clientIp);
+      return { authorized: true, usedSubmittedKey: true };
+    }
+
+    recordFailedLogin(clientIp);
+    return { authorized: false, rateLimited: false };
   }
 
-  if (
-    bodyAdminKey &&
-    bodyAdminKey.trim().length > 0 &&
-    timingSafeEqualIgnoreCase(bodyAdminKey, masterKey)
-  ) {
-    return true;
+  return { authorized: false, rateLimited: false };
+}
+
+async function ensurePrivilegedAdminAccess(
+  request: Request,
+  locale: Locale,
+  bodyAdminKey?: unknown
+): Promise<NextResponse | null> {
+  if (!resolveAdminMasterKey()) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: translate(locale, "api.admin.missingServerKey"),
+      },
+      { status: 503 }
+    );
   }
 
-  return false;
+  const authResult = await authorizeAdminRequest(request, bodyAdminKey);
+  if (!authResult.authorized) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: translate(
+          locale,
+          authResult.rateLimited
+            ? "api.admin.tooManyAttempts"
+            : "api.admin.unauthenticated"
+        ),
+      },
+      { status: authResult.rateLimited ? 429 : 401 }
+    );
+  }
+
+  return null;
 }
 
 export async function GET(request: Request) {
   const locale = resolveRequestLocale(request);
-  const [isAdminAuthenticated, entitlement] = await Promise.all([
-    isAdminAuthorized(request),
+  const [authResult, entitlement] = await Promise.all([
+    authorizeAdminRequest(request),
     resolveServerEntitlement(),
   ]);
+
+  if (!authResult.authorized && authResult.rateLimited) {
+    return NextResponse.json(
+      {
+        authenticated: false,
+        error: translate(locale, "api.admin.tooManyAttempts"),
+      },
+      { status: 429 }
+    );
+  }
 
   const publicDefaults = {
     priceCop: "$60,000 COP",
@@ -400,7 +466,7 @@ export async function GET(request: Request) {
       "https://buy.stripe.com/your_15_usd_link",
   };
 
-  if (!isAdminAuthenticated) {
+  if (!authResult.authorized) {
     return NextResponse.json({
       authenticated: false,
       entitlement,
@@ -450,26 +516,12 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "update-keys") {
-      if (!resolveAdminMasterKey()) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: translate(locale, "api.admin.missingServerKey"),
-          },
-          { status: 503 }
-        );
-      }
-
-      const authorized = await isAdminAuthorized(request, body.adminKey);
-      if (!authorized) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: translate(locale, "api.admin.unauthenticated"),
-          },
-          { status: 401 }
-        );
-      }
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
 
       const incomingKeys = body.keys;
       if (!incomingKeys || typeof incomingKeys !== "object") {
@@ -565,26 +617,12 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "clear-vault") {
-      if (!resolveAdminMasterKey()) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: translate(locale, "api.admin.missingServerKey"),
-          },
-          { status: 503 }
-        );
-      }
-
-      const authorized = await isAdminAuthorized(request, body.adminKey);
-      if (!authorized) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: translate(locale, "api.admin.unauthenticated"),
-          },
-          { status: 401 }
-        );
-      }
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
 
       const envOnlyValues = {} as Record<SecretKeyName, string | undefined>;
       for (const keyName of SECRET_KEY_NAMES) {
@@ -617,8 +655,8 @@ export async function POST(request: Request) {
     }
 
     const isAdminLogin = body.action === "admin-login";
-    const clientIp = isAdminLogin ? getClientIp(request) : "";
-    if (isAdminLogin && isRateLimited(clientIp)) {
+    const clientIp = getClientIp(request);
+    if (isRateLimited(clientIp)) {
       return NextResponse.json(
         {
           valid: false,
@@ -630,9 +668,7 @@ export async function POST(request: Request) {
 
     const submitted = typeof body.code === "string" ? body.code.trim() : "";
     if (!submitted) {
-      if (isAdminLogin) {
-        recordFailedLogin(clientIp);
-      }
+      recordFailedLogin(clientIp);
       return NextResponse.json(
         { valid: false, error: translate(locale, "api.admin.missingCode") },
         { status: 401 }
@@ -658,6 +694,7 @@ export async function POST(request: Request) {
     }
 
     if (!isOperator && !isVipClient) {
+      recordFailedLogin(clientIp);
       return NextResponse.json(
         {
           valid: false,
@@ -667,9 +704,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (isAdminLogin && isOperator) {
-      clearFailedLogins(clientIp);
-    }
+    clearFailedLogins(clientIp);
 
     const role: EntitlementRole = isOperator ? "operator" : "pro_client";
     const response = NextResponse.json({
