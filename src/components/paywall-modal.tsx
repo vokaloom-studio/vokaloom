@@ -54,6 +54,7 @@ export function PaywallModal({
   const { locale, t } = useLocale();
   const [currency, setCurrency] = useState<"cop" | "usd">("cop");
   const [accessCode, setAccessCode] = useState<string>("");
+  const [codeError, setCodeError] = useState<string>("");
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [businessConfig, setBusinessConfig] = useState<BusinessConfig>({
     priceCop: "$60,000 COP",
@@ -67,6 +68,7 @@ export function PaywallModal({
     if (open) {
       queueMicrotask(() => {
         setBusinessConfig(getBusinessConfig());
+        setCodeError("");
       });
     }
   }, [open]);
@@ -87,16 +89,20 @@ export function PaywallModal({
   const handleActivateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!accessCode.trim()) {
-      toast.error(t("paywall.toast.enterCode"));
+      const msg = t("paywall.toast.enterCode");
+      setCodeError(msg);
+      toast.error(msg);
       return;
     }
 
+    setCodeError("");
     setIsVerifying(true);
     try {
       const res = await verifyAndActivateAccessCode(accessCode, locale);
       if (res.success) {
         onQuotaChange?.(res.state);
         setAccessCode("");
+        setCodeError("");
         onOpenChange(false);
         toast.success(
           res.role === "operator"
@@ -104,7 +110,9 @@ export function PaywallModal({
             : t("paywall.toast.proActivated")
         );
       } else {
-        toast.error(t("paywall.toast.invalidCode"));
+        const msg = res.error || t("paywall.toast.invalidCode");
+        setCodeError(msg);
+        toast.error(msg);
       }
     } finally {
       setIsVerifying(false);
@@ -163,42 +171,80 @@ export function PaywallModal({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Currency Selector Switch */}
+          {/* Active Pro / Operator Summary (Foregrounded when active) */}
+          {proActive && (
+            <div
+              data-testid="paywall-active-summary"
+              className="rounded-lg border border-emerald-500/45 bg-emerald-500/10 p-3.5 shadow-[inset_0_1px_0_rgba(16,185,129,0.18)]"
+            >
+              <div className="flex items-start gap-2.5">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-400" />
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-xs font-semibold text-emerald-300">
+                    {quota.isOperator || quota.role === "operator"
+                      ? t("paywall.activeSummaryOperator")
+                      : t("paywall.activeSummaryTitle")}
+                  </p>
+                  <p className="text-[11px] leading-snug text-zinc-300">
+                    {t("paywall.activeSummaryDesc")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Currency Selector Switch (Side-by-side 2 equal columns on ALL viewports) */}
           <div
             role="group"
             aria-label={t("paywall.currencyAria")}
-            className="studio-well grid grid-cols-1 gap-1 rounded-lg p-1 sm:grid-cols-2"
+            className={`studio-well grid grid-cols-2 gap-1 rounded-lg p-1 transition-opacity ${
+              proActive ? "opacity-60" : ""
+            }`}
           >
             <button
               type="button"
               data-testid="currency-cop"
               onClick={() => setCurrency("cop")}
               aria-pressed={currency === "cop"}
-              className={`min-h-10 rounded-md px-2.5 py-2 text-center font-mono text-[11px] font-medium transition-colors md:min-h-0 md:px-2 md:py-1.5 md:text-[10.5px] ${
+              className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors md:min-h-0 ${
                 currency === "cop"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
-              {t("paywall.currency.cop")}
+              <span className="truncate sm:hidden">
+                {t("paywall.currencyShort.cop")}
+              </span>
+              <span className="hidden truncate sm:inline">
+                {t("paywall.currency.cop")}
+              </span>
             </button>
             <button
               type="button"
               data-testid="currency-usd"
               onClick={() => setCurrency("usd")}
               aria-pressed={currency === "usd"}
-              className={`min-h-10 rounded-md px-2.5 py-2 text-center font-mono text-[11px] font-medium transition-colors md:min-h-0 md:px-2 md:py-1.5 md:text-[10.5px] ${
+              className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors md:min-h-0 ${
                 currency === "usd"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
-              {t("paywall.currency.usd")}
+              <span className="truncate sm:hidden">
+                {t("paywall.currencyShort.usd")}
+              </span>
+              <span className="hidden truncate sm:inline">
+                {t("paywall.currency.usd")}
+              </span>
             </button>
           </div>
 
           {/* Pricing & Benefit Summary Deck */}
-          <div className="studio-elevated rounded-lg p-3.5">
+          <div
+            className={`studio-elevated rounded-lg p-3.5 transition-opacity ${
+              proActive ? "opacity-60" : ""
+            }`}
+          >
             <div className="flex items-baseline gap-1.5 border-b border-white/[0.08] pb-2.5">
               <span
                 data-testid="paywall-price"
@@ -226,8 +272,12 @@ export function PaywallModal({
             </ul>
           </div>
 
-          {/* Highlighted Selected-Currency Primary Checkout + Secondary Accessible Option */}
-          <div className="space-y-2">
+          {/* Single Warm Amber Primary Checkout + Quiet Single-Line Secondary Link */}
+          <div
+            className={`space-y-1.5 transition-opacity ${
+              proActive ? "opacity-50" : ""
+            }`}
+          >
             <Button
               type="button"
               data-testid="btn-checkout-primary"
@@ -245,10 +295,9 @@ export function PaywallModal({
               <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
             </Button>
 
-            <Button
+            <button
               type="button"
               data-testid="btn-checkout-secondary"
-              variant="outline"
               onClick={() =>
                 handleOpenCheckout(
                   secondaryCheckout.url,
@@ -256,12 +305,15 @@ export function PaywallModal({
                   secondaryCheckout.fallbackUrl
                 )
               }
-              className="h-auto min-h-11 w-full whitespace-normal border-white/[0.1] bg-[#13151D] px-3 py-2 text-center text-xs font-semibold text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] md:min-h-9"
+              className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#8B8D98] transition-colors hover:bg-white/[0.04] hover:text-zinc-200 md:h-8"
             >
-              <CreditCard className="mr-2 size-3.5 shrink-0 text-[#8B8D98]" />
-              <span>{secondaryCheckout.buttonText}</span>
-              <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
-            </Button>
+              <span className="truncate">
+                {currency === "cop"
+                  ? t("paywall.secondaryCheckoutToUsd")
+                  : t("paywall.secondaryCheckoutToCop")}
+              </span>
+              <ExternalLink className="size-3 shrink-0 opacity-75" />
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
@@ -281,16 +333,35 @@ export function PaywallModal({
               <KeyRound className="size-3.5 shrink-0 text-amber-400" />
               <span>{t("paywall.codeLabel")}</span>
             </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                id="paywall-access-code"
-                data-testid="input-access-code"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                placeholder={t("paywall.codePlaceholder")}
-                disabled={isVerifying}
-                className="h-11 min-w-0 flex-1 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-9 md:text-xs"
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Input
+                  id="paywall-access-code"
+                  data-testid="input-access-code"
+                  value={accessCode}
+                  aria-invalid={Boolean(codeError)}
+                  onChange={(e) => {
+                    setAccessCode(e.target.value);
+                    if (codeError) setCodeError("");
+                  }}
+                  placeholder={t("paywall.codePlaceholder")}
+                  disabled={isVerifying}
+                  className={`h-11 w-full bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 md:h-9 md:text-xs ${
+                    codeError
+                      ? "border-destructive/85 focus-visible:border-destructive focus-visible:ring-destructive/30"
+                      : "border-white/[0.08] focus-visible:border-ring"
+                  }`}
+                />
+                {codeError && (
+                  <p
+                    role="alert"
+                    data-testid="paywall-code-error"
+                    className="text-[11px] font-medium text-red-400"
+                  >
+                    {codeError}
+                  </p>
+                )}
+              </div>
               <Button
                 type="submit"
                 data-testid="btn-unlock-code"

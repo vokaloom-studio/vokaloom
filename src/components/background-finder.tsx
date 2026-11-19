@@ -135,6 +135,58 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function wrapCanvasLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i];
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      currentLine = candidate;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      lines.push(word);
+      currentLine = "";
+    }
+
+    if (lines.length === maxLines) {
+      const remaining = [currentLine, ...words.slice(i + 1)]
+        .filter(Boolean)
+        .join(" ");
+      if (remaining) {
+        let truncated = `${lines[maxLines - 1]}…`;
+        while (
+          ctx.measureText(truncated).width > maxWidth &&
+          truncated.length > 2
+        ) {
+          truncated = `${truncated.slice(0, -2)}…`;
+        }
+        lines[maxLines - 1] = truncated;
+      }
+      return lines;
+    }
+  }
+
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
 async function generateOfflineVerticalFallbackBlob(
   item: BackgroundItem,
   index: number,
@@ -145,29 +197,142 @@ async function generateOfflineVerticalFallbackBlob(
   canvas.height = 1920;
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    const grad = ctx.createLinearGradient(0, 0, 1080, 1920);
-    grad.addColorStop(0, "#14141d");
-    grad.addColorStop(0.5, "#1a1824");
-    grad.addColorStop(1, "#070709");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1080, 1920);
+    const width = 1080;
+    const height = 1920;
+    const inset = 48;
+    const contentX = 96;
+    const contentWidth = width - contentX * 2;
 
-    ctx.fillStyle = "rgba(244,244,246,0.9)";
-    ctx.font = "bold 46px sans-serif";
+    // Obsidian hardware base gradient
+    const grad = ctx.createLinearGradient(0, 0, width, height);
+    grad.addColorStop(0, "#0B0C10");
+    grad.addColorStop(0.55, "#13151D");
+    grad.addColorStop(1, "#060608");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle upper-right warm amber studio wash
+    const amberGlow = ctx.createRadialGradient(840, 260, 40, 840, 260, 760);
+    amberGlow.addColorStop(0, "rgba(245, 158, 11, 0.14)");
+    amberGlow.addColorStop(1, "rgba(245, 158, 11, 0)");
+    ctx.fillStyle = amberGlow;
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle lower-left cool slate studio fill
+    const slateGlow = ctx.createRadialGradient(220, 1540, 30, 220, 1540, 680);
+    slateGlow.addColorStop(0, "rgba(148, 163, 184, 0.09)");
+    slateGlow.addColorStop(1, "rgba(148, 163, 184, 0)");
+    ctx.fillStyle = slateGlow;
+    ctx.fillRect(0, 0, width, height);
+
+    // Inset 48px geometric framing hairline
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.14)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+
+    // Crisp amber corner registration ticks on the 48px frame
+    const tick = 28;
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.72)";
+    ctx.lineWidth = 2.5;
+    const corners: Array<[number, number, number, number]> = [
+      [inset, inset, 1, 1],
+      [width - inset, inset, -1, 1],
+      [inset, height - inset, 1, -1],
+      [width - inset, height - inset, -1, -1],
+    ];
+    for (const [cx, cy, dx, dy] of corners) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + dy * tick);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + dx * tick, cy);
+      ctx.stroke();
+    }
+
+    // Top-left Vokaloom Studio hardware header
+    ctx.strokeStyle = "rgba(244, 244, 245, 0.35)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(contentX, 94, 34, 34);
+    ctx.fillStyle = "#F59E0B";
+    ctx.fillRect(contentX + 9, 105, 4, 12);
+    ctx.fillRect(contentX + 15, 100, 4, 22);
+    ctx.fillRect(contentX + 21, 105, 4, 12);
+
+    ctx.fillStyle = "rgba(244, 244, 245, 0.92)";
+    ctx.font = "600 24px monospace";
+    ctx.fillText("VOKALOOM STUDIO", contentX + 48, 120);
+
+    // Top-right plate index counter
+    const plateNo = `#${String(index + 1).padStart(2, "0")}`;
+    ctx.fillStyle = "rgba(139, 141, 152, 0.85)";
+    ctx.font = "500 22px monospace";
+    const plateMetrics = ctx.measureText(plateNo);
+    ctx.fillText(plateNo, width - contentX - plateMetrics.width, 120);
+
+    // Top header separator hairline
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(contentX, 154);
+    ctx.lineTo(width - contentX, 154);
+    ctx.stroke();
+
+    // Lower-third structured editorial block
+    const tagText = "9:16 STUDIO PLATE";
+    ctx.font = "600 21px monospace";
+    const tagWidth = ctx.measureText(tagText).width + 52;
+    ctx.fillStyle = "rgba(245, 158, 11, 0.12)";
+    ctx.fillRect(contentX, 1348, tagWidth, 44);
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.45)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(contentX, 1348, tagWidth, 44);
+    ctx.fillStyle = "#F59E0B";
+    ctx.beginPath();
+    ctx.arc(contentX + 20, 1370, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#FDE68A";
+    ctx.fillText(tagText, contentX + 36, 1378);
+
+    // Kicker heading + warm amber divider rule
+    ctx.fillStyle = "rgba(244, 244, 245, 0.96)";
+    ctx.font = "700 48px sans-serif";
     ctx.fillText(
       translate(locale, "bg.fallbackCanvasTitle", { index: index + 1 }),
-      80,
-      880
+      contentX,
+      1454
     );
-    ctx.font = "34px sans-serif";
-    ctx.fillStyle = "rgba(161,161,170,0.85)";
-    ctx.fillText(item.title.slice(0, 42), 80, 950);
+
+    ctx.fillStyle = "#F59E0B";
+    ctx.fillRect(contentX, 1482, 112, 4);
+
+    // Word-wrapped aesthetic title lines
+    ctx.fillStyle = "rgba(228, 228, 231, 0.88)";
+    ctx.font = "400 36px sans-serif";
+    const wrappedTitleLines = wrapCanvasLines(
+      ctx,
+      item.title,
+      contentWidth,
+      3
+    );
+    wrappedTitleLines.forEach((line, lineIdx) => {
+      ctx.fillText(line, contentX, 1546 + lineIdx * 50);
+    });
+
+    // Bottom attribution baseline
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(contentX, 1728);
+    ctx.lineTo(width - contentX, 1728);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(139, 141, 152, 0.92)";
+    ctx.font = "500 25px monospace";
     ctx.fillText(
       translate(locale, "bg.fallbackCanvasCredit", {
         photographer: item.photographer,
       }),
-      80,
-      1010
+      contentX,
+      1778
     );
   }
   return new Promise<Blob>((resolve) => {

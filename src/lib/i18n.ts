@@ -173,11 +173,19 @@ const en = {
   "voice.cloneToggleLabel": "Clone Custom Voice",
   "voice.toggleOn": "ON",
   "voice.toggleOff": "OFF",
-  "voice.dropzoneTitle":
-    "Drop or select WhatsApp voice note (.OGG, .MP3, .WAV)",
+  "voice.dropzoneTitle": "Drop or select voice sample",
+  "voice.dropzoneSubtitle":
+    ".OGG (WhatsApp) · .MP3 · .WAV · .M4A — 5–20s / max 3 MB",
+  "voice.dropzoneRequiredHint":
+    "Attach a reference clip or turn Clone Mode OFF",
+  "voice.presetOverriddenNote":
+    "Overridden while custom clone sample is attached",
   "voice.sampleReady": "Ready for zero-shot F5-TTS synthesis",
   "voice.removeAudioAria": "Remove reference audio sample",
   "voice.synthesizingButton": "Synthesizing Neural Voiceover...",
+  "voice.synthesizingWaveformStatus": "Rendering neural waveform...",
+  "voice.synthesizingSubtext":
+    "Aligning prosody, room tone, and broadcast dynamics",
   "voice.generateCloneButton": "Generate Zero-Shot Cloned Voiceover (F5-TTS)",
   "voice.generatePresetButton": "Generate Voiceover ({name})",
   "voice.cloneVoiceLabel": "Zero-Shot Clone ({name})",
@@ -195,10 +203,15 @@ const en = {
   "voice.seekAria": "Seek to {percent}%",
   "voice.downloadAudioButton": "Download Broadcast Audio",
   "voice.emptyTitle": "No active voiceover output",
+  "voice.emptyHelper":
+    "Select a preset or attach a voice sample, then click Synthesize",
   "voice.historyTitle": "Session History",
   "voice.clearHistory": "Clear",
   "voice.historyEmpty":
     "Your last 10 synthesized voiceovers will be logged here for instant replay and export.",
+  "voice.historyPillClone": "Clone",
+  "voice.historyPillPreset": "Preset",
+  "voice.historyAudioExpired": "Session audio expired",
   "voice.replayClipTitle": "Replay clip",
   "voice.downloadClipTitle": "Download clip",
   "voice.toast.loadedSample": "Loaded sample script: {label}",
@@ -226,6 +239,8 @@ const en = {
   "paywall.currencyAria": "Select checkout currency",
   "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
   "paywall.currency.usd": "USD · Global (Stripe)",
+  "paywall.currencyShort.cop": "COP · Wompi / PSE",
+  "paywall.currencyShort.usd": "USD · Stripe",
   "paywall.benefit1":
     "Unlimited 15-photo vertical batches & ZIP export",
   "paywall.benefit2":
@@ -236,6 +251,12 @@ const en = {
     "Subscribe for {priceCop} / month (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":
     "Subscribe for {priceUsd} / month (Stripe Global)",
+  "paywall.secondaryCheckoutToUsd": "Or pay in USD via Stripe",
+  "paywall.secondaryCheckoutToCop": "Or pay in COP via Nequi / PSE / Wompi",
+  "paywall.activeSummaryTitle": "Unlimited Pro Pass Active",
+  "paywall.activeSummaryOperator": "Unlimited Operator Mode Active",
+  "paywall.activeSummaryDesc":
+    "Unrestricted 15-photo batches, Vision matching, and neural voice synthesis unlocked.",
   "paywall.checkoutCopLabel": "Wompi / Nequi / PSE ({priceCop})",
   "paywall.checkoutUsdLabel": "Stripe Global ({priceUsd})",
   "paywall.dividerLabel": "Or Instant Key Activation",
@@ -290,11 +311,14 @@ const en = {
   "admin.checkoutCopLabel": "Wompi / Nequi / PSE Checkout URL (COP)",
   "admin.checkoutUsdLabel": "Stripe Global Checkout URL (USD)",
   "admin.saveSettingsButton": "Save Paywall & Pricing Settings",
+  "admin.unsavedChangesBadge": "Unsaved changes",
   "admin.card3Title": "4. Client Access Links & WhatsApp Invite Generator",
   "admin.card3Desc":
     "Generate 1-click auto-unlock links (/?key=...) for paying clients or VIP testers on WhatsApp.",
   "admin.vipCodesLabelBefore": "Active Server-Side VIP Client Codes (",
   "admin.vipCodesLabelAfter": ")",
+  "admin.vipCodesEmpty":
+    "No server-side VIP client codes are currently configured in VIP_CLIENT_CODES. Add codes in environment variables or use the custom builder below.",
   "admin.copyInviteButton": "Copy VIP Invite Link",
   "admin.customInviteLabel": "Custom Invite Code Link Builder",
   "admin.customInvitePlaceholder": "Enter access code...",
@@ -577,11 +601,19 @@ const es: Record<TranslationKey, string> = {
   "voice.cloneToggleLabel": "Clonar Voz Personalizada",
   "voice.toggleOn": "ACTIVO",
   "voice.toggleOff": "INACTIVO",
-  "voice.dropzoneTitle":
-    "Sube o arrastra nota de voz de WhatsApp (.OGG, .MP3, .WAV)",
+  "voice.dropzoneTitle": "Arrastra o selecciona nota de voz",
+  "voice.dropzoneSubtitle":
+    ".OGG (WhatsApp) · .MP3 · .WAV · .M4A — 5–20s / máx. 3 MB",
+  "voice.dropzoneRequiredHint":
+    "Adjunta un clip de referencia o desactiva la clonación",
+  "voice.presetOverriddenNote":
+    "Anulado mientras haya una muestra clonada adjunta",
   "voice.sampleReady": "Lista para síntesis zero-shot con F5-TTS",
   "voice.removeAudioAria": "Quitar muestra de audio de referencia",
   "voice.synthesizingButton": "Sintetizando locución neural...",
+  "voice.synthesizingWaveformStatus": "Renderizando onda neural...",
+  "voice.synthesizingSubtext":
+    "Alineando prosodia, timbre y dinámica de emisión",
   "voice.generateCloneButton":
     "Generar Locución Clonada Zero-Shot (F5-TTS)",
   "voice.generatePresetButton": "Generar Locución ({name})",
@@ -600,10 +632,15 @@ const es: Record<TranslationKey, string> = {
   "voice.seekAria": "Ir al {percent}%",
   "voice.downloadAudioButton": "Descargar Audio Maestro",
   "voice.emptyTitle": "Sin locución activa",
+  "voice.emptyHelper":
+    "Elige una voz o adjunta una muestra y pulsa Sintetizar",
   "voice.historyTitle": "Historial de Sesión",
   "voice.clearHistory": "Limpiar",
   "voice.historyEmpty":
     "Tus últimas 10 locuciones sintetizadas aparecerán aquí para reproducirlas y exportarlas al instante.",
+  "voice.historyPillClone": "Clon",
+  "voice.historyPillPreset": "Voz",
+  "voice.historyAudioExpired": "Audio de sesión expirado",
   "voice.replayClipTitle": "Reproducir clip",
   "voice.downloadClipTitle": "Descargar clip",
   "voice.toast.loadedSample": "Guion de ejemplo cargado: {label}",
@@ -631,6 +668,8 @@ const es: Record<TranslationKey, string> = {
   "paywall.currencyAria": "Seleccionar moneda de pago",
   "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
   "paywall.currency.usd": "USD · Global (Stripe)",
+  "paywall.currencyShort.cop": "COP · Wompi / PSE",
+  "paywall.currencyShort.usd": "USD · Stripe",
   "paywall.benefit1":
     "Lotes verticales ilimitados de 15 fotos y exportación ZIP",
   "paywall.benefit2":
@@ -641,6 +680,12 @@ const es: Record<TranslationKey, string> = {
     "Suscribirse por {priceCop} / mes (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":
     "Suscribirse por {priceUsd} / mes (Stripe Global)",
+  "paywall.secondaryCheckoutToUsd": "O paga en USD con Stripe",
+  "paywall.secondaryCheckoutToCop": "O paga en COP con Nequi / PSE / Wompi",
+  "paywall.activeSummaryTitle": "Pase Pro Ilimitado Activo",
+  "paywall.activeSummaryOperator": "Modo Operador Ilimitado Activo",
+  "paywall.activeSummaryDesc":
+    "Acceso sin límites a lotes de 15 fotos, emparejamiento Vision y síntesis neural.",
   "paywall.checkoutCopLabel": "Wompi / Nequi / PSE ({priceCop})",
   "paywall.checkoutUsdLabel": "Stripe Global ({priceUsd})",
   "paywall.dividerLabel": "O Activación Instantánea con Clave",
@@ -697,12 +742,15 @@ const es: Record<TranslationKey, string> = {
   "admin.checkoutCopLabel": "URL de Pago Wompi / Nequi / PSE (COP)",
   "admin.checkoutUsdLabel": "URL de Pago Stripe Global (USD)",
   "admin.saveSettingsButton": "Guardar Ajustes de Paywall y Precios",
+  "admin.unsavedChangesBadge": "Cambios sin guardar",
   "admin.card3Title":
     "4. Enlaces de Acceso y Generador de Invitaciones WhatsApp",
   "admin.card3Desc":
     "Genera enlaces de autodesbloqueo en 1 clic (/?key=...) para clientes de pago o testers VIP por WhatsApp.",
   "admin.vipCodesLabelBefore": "Códigos VIP Activos en el Servidor (",
   "admin.vipCodesLabelAfter": ")",
+  "admin.vipCodesEmpty":
+    "No hay códigos VIP configurados actualmente en VIP_CLIENT_CODES. Agrégalos en las variables de entorno o usa el constructor inferior.",
   "admin.copyInviteButton": "Copiar Enlace VIP",
   "admin.customInviteLabel": "Constructor de Enlace con Código Personalizado",
   "admin.customInvitePlaceholder": "Ingresa un código de acceso...",

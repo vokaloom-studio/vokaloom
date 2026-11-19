@@ -93,6 +93,7 @@ export default function VokaloomAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingSession, setIsCheckingSession] = useState<boolean>(true);
   const [passwordInput, setPasswordInput] = useState<string>("");
+  const [loginError, setLoginError] = useState<string>("");
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [isRefreshingHealth, setIsRefreshingHealth] = useState<boolean>(false);
 
@@ -119,6 +120,15 @@ export default function VokaloomAdminPage() {
     checkoutUrlCop: "https://checkout.wompi.co/l/your_60000_cop_link",
     checkoutUrlUsd: "https://buy.stripe.com/your_15_usd_link",
   });
+  const [savedBusinessConfig, setSavedBusinessConfig] = useState<BusinessConfig>(
+    {
+      priceCop: "$60,000 COP",
+      priceUsd: "$15 USD",
+      maxTrialCredits: 3,
+      checkoutUrlCop: "https://checkout.wompi.co/l/your_60000_cop_link",
+      checkoutUrlUsd: "https://buy.stripe.com/your_15_usd_link",
+    }
+  );
   const [localQuota, setLocalQuota] = useState<QuotaState>({
     creditsRemaining: 3,
     maxTrialCredits: 3,
@@ -163,7 +173,9 @@ export default function VokaloomAdminPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
-      setBusinessForm(getBusinessConfig());
+      const initialConfig = getBusinessConfig();
+      setBusinessForm(initialConfig);
+      setSavedBusinessConfig(initialConfig);
       setLocalQuota(getQuotaState());
       void fetchAdminStatus();
     });
@@ -173,10 +185,13 @@ export default function VokaloomAdminPage() {
     e.preventDefault();
     const trimmed = passwordInput.trim();
     if (!trimmed) {
-      toast.error(t("admin.toast.enterPassword"));
+      const msg = t("admin.toast.enterPassword");
+      setLoginError(msg);
+      toast.error(msg);
       return;
     }
 
+    setLoginError("");
     setIsLoggingIn(true);
     try {
       const res = await fetch("/api/admin", {
@@ -199,17 +214,22 @@ export default function VokaloomAdminPage() {
       };
 
       if (!res.ok || !data.valid) {
-        toast.error(data.error || t("admin.toast.invalidPassword"));
+        const msg = data.error || t("admin.toast.invalidPassword");
+        setLoginError(msg);
+        toast.error(msg);
         return;
       }
 
       const updatedQuota = enableOperatorMode("operator");
       setLocalQuota(updatedQuota);
       setPasswordInput("");
+      setLoginError("");
       await fetchAdminStatus(trimmed);
       toast.success(t("admin.toast.authenticated"));
     } catch {
-      toast.error(t("admin.toast.verifyFailed"));
+      const msg = t("admin.toast.verifyFailed");
+      setLoginError(msg);
+      toast.error(msg);
     } finally {
       setIsLoggingIn(false);
     }
@@ -354,6 +374,7 @@ export default function VokaloomAdminPage() {
     e.preventDefault();
     const saved = saveBusinessConfig(businessForm);
     setBusinessForm(saved);
+    setSavedBusinessConfig(saved);
     toast.success(t("admin.toast.savedConfig"));
   };
 
@@ -432,6 +453,15 @@ export default function VokaloomAdminPage() {
   const fallbackEngineCount = totalEngineCount - liveEngineCount;
   const stripLeadingIndex = (title: string): string =>
     title.replace(/^\d+\.\s*/, "");
+  const hasVaultInput = VAULT_KEY_FIELDS.some(
+    (field) => vaultInputs[field.keyName].trim().length > 0
+  );
+  const hasUnsavedBusinessChanges =
+    businessForm.priceCop !== savedBusinessConfig.priceCop ||
+    businessForm.priceUsd !== savedBusinessConfig.priceUsd ||
+    businessForm.maxTrialCredits !== savedBusinessConfig.maxTrialCredits ||
+    businessForm.checkoutUrlCop !== savedBusinessConfig.checkoutUrlCop ||
+    businessForm.checkoutUrlUsd !== savedBusinessConfig.checkoutUrlUsd;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#060608] text-[#F4F4F5]">
@@ -498,9 +528,41 @@ export default function VokaloomAdminPage() {
           /* Admin Login Gate */
           <div className="mx-auto my-auto w-full max-w-md py-12">
             <Card className="studio-deck rounded-lg ring-0 text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_64px_-12px_rgba(0,0,0,0.85)]">
-              <CardHeader className="space-y-2 text-center">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/10 text-amber-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <Lock className="size-6" />
+              <CardHeader className="space-y-2.5 text-center">
+                <div
+                  aria-hidden="true"
+                  className="mx-auto flex size-12 items-center justify-center rounded-lg border border-amber-500/35 bg-[#050507] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="size-7"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <rect
+                      x="2.5"
+                      y="2.5"
+                      width="19"
+                      height="19"
+                      rx="4"
+                      stroke="rgba(244,244,245,0.22)"
+                      strokeWidth="1.25"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="6.25"
+                      stroke="#F4F4F5"
+                      strokeWidth="1.25"
+                      strokeDasharray="6 3"
+                    />
+                    <path
+                      d="M8.5 13V11M12 15.25V8.75M15.5 13V11"
+                      stroke="#F59E0B"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                    />
+                  </svg>
                 </div>
                 <CardTitle className="font-heading text-lg font-semibold text-[#F4F4F5]">
                   {t("admin.loginTitle")}
@@ -524,10 +586,27 @@ export default function VokaloomAdminPage() {
                       id="admin-master-password"
                       type="password"
                       value={passwordInput}
-                      onChange={(e) => setPasswordInput(e.target.value)}
+                      aria-invalid={Boolean(loginError)}
+                      onChange={(e) => {
+                        setPasswordInput(e.target.value);
+                        if (loginError) setLoginError("");
+                      }}
                       placeholder={t("admin.passwordPlaceholder")}
-                      className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-10 md:text-sm"
+                      className={`h-11 bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 md:h-10 md:text-sm ${
+                        loginError
+                          ? "border-destructive/85 focus-visible:border-destructive focus-visible:ring-destructive/30"
+                          : "border-white/[0.08] focus-visible:border-ring"
+                      }`}
                     />
+                    {loginError && (
+                      <p
+                        role="alert"
+                        data-testid="admin-login-error"
+                        className="text-[11px] font-medium text-red-400"
+                      >
+                        {loginError}
+                      </p>
+                    )}
                   </div>
                   <Button
                     type="submit"
@@ -658,13 +737,31 @@ export default function VokaloomAdminPage() {
               {/* Card 02: Runtime API Keys Vault (AES-256-GCM HttpOnly Cookie + Local Dev .env.local) */}
               <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
-                      02
-                    </span>
-                    <KeyRound className="size-4 shrink-0 text-amber-400" />
-                    <span>{stripLeadingIndex(t("admin.vault.title"))}</span>
-                  </CardTitle>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                      <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                        02
+                      </span>
+                      <KeyRound className="size-4 shrink-0 text-amber-400" />
+                      <span>{stripLeadingIndex(t("admin.vault.title"))}</span>
+                    </CardTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      data-testid="btn-clear-vault"
+                      disabled={isClearingVault}
+                      onClick={() => void handleClearVault()}
+                      className="h-7 shrink-0 rounded-md px-2 font-mono text-[10.5px] font-medium text-[#8B8D98] transition-colors hover:bg-red-500/10 hover:text-red-300"
+                    >
+                      {isClearingVault ? (
+                        <Loader2 className="mr-1 size-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-1 size-3" />
+                      )}
+                      {t("admin.vault.clearButton")}
+                    </Button>
+                  </div>
                   <CardDescription className="text-xs text-[#8B8D98]">
                     {t("admin.vault.desc")}
                   </CardDescription>
@@ -712,7 +809,7 @@ export default function VokaloomAdminPage() {
                                         keyName,
                                       }
                                     )}
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-white/[0.08] bg-[#13151D] text-[#8B8D98] transition-colors hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:size-7"
+                                    className="inline-flex size-7 items-center justify-center rounded border border-white/[0.08] bg-[#13151D] text-[#8B8D98] transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
                                   >
                                     <X className="size-3.5" />
                                   </button>
@@ -745,11 +842,12 @@ export default function VokaloomAdminPage() {
                       })}
                     </div>
 
-                    <div className="flex flex-wrap gap-2 pt-1">
+                    <div className="pt-1">
                       <Button
                         type="submit"
-                        disabled={isSavingVault}
-                        className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
+                        data-testid="btn-save-vault"
+                        disabled={isSavingVault || !hasVaultInput}
+                        className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-45 md:h-9"
                       >
                         {isSavingVault ? (
                           <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -762,20 +860,6 @@ export default function VokaloomAdminPage() {
                             : t("admin.vault.saveButton")}
                         </span>
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isClearingVault}
-                        onClick={() => void handleClearVault()}
-                        className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-9"
-                      >
-                        {isClearingVault ? (
-                          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="mr-1.5 size-3.5 text-[#8B8D98]" />
-                        )}
-                        {t("admin.vault.clearButton")}
-                      </Button>
                     </div>
                   </form>
                 </CardContent>
@@ -784,13 +868,23 @@ export default function VokaloomAdminPage() {
               {/* Card 03: Commercial & Paywall Configuration */}
               <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
-                    <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
-                      03
-                    </span>
-                    <DollarSign className="size-4 shrink-0 text-amber-400" />
-                    <span>{stripLeadingIndex(t("admin.card2Title"))}</span>
-                  </CardTitle>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                      <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold tabular-nums text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                        03
+                      </span>
+                      <DollarSign className="size-4 shrink-0 text-amber-400" />
+                      <span>{stripLeadingIndex(t("admin.card2Title"))}</span>
+                    </CardTitle>
+                    {hasUnsavedBusinessChanges && (
+                      <Badge
+                        data-testid="badge-unsaved-config"
+                        className="shrink-0 rounded-md border border-amber-500/35 bg-amber-500/10 font-mono text-[10px] font-medium text-amber-300"
+                      >
+                        {t("admin.unsavedChangesBadge")}
+                      </Badge>
+                    )}
+                  </div>
                   <CardDescription className="text-xs text-[#8B8D98]">
                     {t("admin.card2Desc")}
                   </CardDescription>
@@ -867,44 +961,46 @@ export default function VokaloomAdminPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="admin-checkout-cop"
-                          className="text-xs font-medium text-zinc-300"
-                        >
-                          {t("admin.checkoutCopLabel")}
-                        </label>
-                        <Input
-                          id="admin-checkout-cop"
-                          value={businessForm.checkoutUrlCop}
-                          onChange={(e) =>
-                            setBusinessForm({
-                              ...businessForm,
-                              checkoutUrlCop: e.target.value,
-                            })
-                          }
-                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                        />
-                      </div>
+                      <div className="space-y-3.5 border-t border-white/[0.06] pt-3.5">
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="admin-checkout-cop"
+                            className="text-xs font-medium text-zinc-300"
+                          >
+                            {t("admin.checkoutCopLabel")}
+                          </label>
+                          <Input
+                            id="admin-checkout-cop"
+                            value={businessForm.checkoutUrlCop}
+                            onChange={(e) =>
+                              setBusinessForm({
+                                ...businessForm,
+                                checkoutUrlCop: e.target.value,
+                              })
+                            }
+                            className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                          />
+                        </div>
 
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="admin-checkout-usd"
-                          className="text-xs font-medium text-zinc-300"
-                        >
-                          {t("admin.checkoutUsdLabel")}
-                        </label>
-                        <Input
-                          id="admin-checkout-usd"
-                          value={businessForm.checkoutUrlUsd}
-                          onChange={(e) =>
-                            setBusinessForm({
-                              ...businessForm,
-                              checkoutUrlUsd: e.target.value,
-                            })
-                          }
-                          className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
-                        />
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="admin-checkout-usd"
+                            className="text-xs font-medium text-zinc-300"
+                          >
+                            {t("admin.checkoutUsdLabel")}
+                          </label>
+                          <Input
+                            id="admin-checkout-usd"
+                            value={businessForm.checkoutUrlUsd}
+                            onChange={(e) =>
+                              setBusinessForm({
+                                ...businessForm,
+                                checkoutUrlUsd: e.target.value,
+                              })
+                            }
+                            className="h-11 border-white/[0.08] bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] focus-visible:border-ring md:h-9 md:text-xs"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -941,31 +1037,43 @@ export default function VokaloomAdminPage() {
                       <code className="text-[#8B8D98]">VIP_CLIENT_CODES</code>
                       {t("admin.vipCodesLabelAfter")}
                     </span>
-                    <div className="space-y-2">
-                      {vipCodes.map((code) => (
-                        <div
-                          key={code}
-                          className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Sparkles className="size-3.5 shrink-0 text-amber-400" />
-                            <code className="truncate text-xs font-semibold text-[#F4F4F5]">
-                              {code}
-                            </code>
-                          </div>
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="secondary"
-                            onClick={() => void handleCopyInviteLink(code)}
-                            className="h-9 shrink-0 border border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
+                    {vipCodes.length === 0 ? (
+                      <div
+                        data-testid="vip-codes-empty"
+                        className="studio-well flex items-start gap-2.5 rounded-lg border-dashed px-3.5 py-3 text-xs text-[#8B8D98]"
+                      >
+                        <KeyRound className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+                        <p className="leading-relaxed">
+                          {t("admin.vipCodesEmpty")}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {vipCodes.map((code) => (
+                          <div
+                            key={code}
+                            className="studio-well flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
                           >
-                            <Copy className="mr-1.5 size-3" />
-                            {t("admin.copyInviteButton")}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Sparkles className="size-3.5 shrink-0 text-amber-400" />
+                              <code className="truncate text-xs font-semibold text-[#F4F4F5]">
+                                {code}
+                              </code>
+                            </div>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => void handleCopyInviteLink(code)}
+                              className="h-9 shrink-0 border border-white/[0.1] bg-[#13151D] text-zinc-200 hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
+                            >
+                              <Copy className="mr-1.5 size-3" />
+                              {t("admin.copyInviteButton")}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="studio-well space-y-1.5 rounded-lg p-3">

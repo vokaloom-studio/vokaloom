@@ -206,11 +206,13 @@ export default function VokaloomStudioPage() {
             {/* Zone 3 (Right): Status / Interactive Trial Badge, Language Switcher, Divider & Primary Action */}
             <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
               {proActive ? (
-                <span
+                <button
+                  type="button"
                   data-testid={
                     isAdminOperator ? "badge-operator" : "badge-pro-pass"
                   }
-                  className="inline-flex h-9 items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-1.5 font-mono text-[11px] font-medium text-emerald-400 sm:gap-1.5 sm:px-2 md:h-7"
+                  onClick={() => setIsPaywallOpen(true)}
+                  className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-1.5 font-mono text-[11px] font-medium text-emerald-400 transition-colors hover:border-emerald-500/50 hover:bg-emerald-500/15 sm:gap-1.5 sm:px-2 md:h-7"
                 >
                   <ShieldCheck className="size-3 shrink-0" />
                   <span>
@@ -218,7 +220,7 @@ export default function VokaloomStudioPage() {
                       ? t("page.badgeOperator")
                       : t("page.badgeProPass")}
                   </span>
-                </span>
+                </button>
               ) : (
                 <button
                   type="button"
