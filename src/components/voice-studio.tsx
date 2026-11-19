@@ -217,6 +217,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
+  const [waveformGlideEnabled, setWaveformGlideEnabled] =
+    useState<boolean>(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1.0);
@@ -229,6 +231,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const waveformBarRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const pointerScrubCleanupRef = useRef<(() => void) | null>(null);
   const didDragScrubRef = useRef<boolean>(false);
+  const suppressNextTimeUpdateGlideRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => {
@@ -489,6 +492,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       });
 
       setActiveOutput(newItem);
+      setWaveformGlideEnabled(false);
       setPlaybackProgress(0);
       setAudioCurrentTime(0);
       setAudioDuration(newItem.durationMs / 1000);
@@ -533,6 +537,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const handleReplayItem = (item: VoiceHistoryItem) => {
     if (!item.audioUrl) return;
     setActiveOutput(item);
+    setWaveformGlideEnabled(false);
     setPlaybackProgress(0);
     setAudioCurrentTime(0);
     setAudioDuration(item.durationMs / 1000);
@@ -572,6 +577,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         ? Math.max(0, Math.min(duration, audio.currentTime + delta))
         : Math.max(0, audio.currentTime + delta);
     audio.currentTime = nextTime;
+    suppressNextTimeUpdateGlideRef.current = true;
+    setWaveformGlideEnabled(false);
     setAudioCurrentTime(nextTime);
     setPlaybackProgress(duration > 0 ? nextTime / duration : 0);
   };
@@ -616,6 +623,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
   const seekToRatio = (rawRatio: number, autoPlay: boolean) => {
     const ratio = Math.max(0, Math.min(1, rawRatio));
+    suppressNextTimeUpdateGlideRef.current = true;
+    setWaveformGlideEnabled(false);
     setPlaybackProgress(ratio);
     const audio = audioPlayerRef.current;
     if (!audio) return;
@@ -872,9 +881,9 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   })
                 }
                 aria-expanded={cloneMode}
-                className={`flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-sm font-medium transition-colors md:h-9 md:text-xs ${
+                className={`studio-segment flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-sm font-medium md:h-9 md:text-xs ${
                   cloneMode
-                    ? "border-white/[0.14] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                    ? "border-white/[0.14] bg-[#13151D] text-[#F4F4F5]"
                     : "border-white/[0.08] bg-[#050507] text-[#8B8D98] hover:border-white/[0.14] hover:text-zinc-200"
                 }`}
               >
@@ -976,7 +985,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             data-testid="btn-synthesize"
             onClick={handleSynthesize}
             disabled={isGenerating}
-            className="h-11 w-full border border-amber-400/60 bg-amber-500 px-3 text-sm font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9.5"
+            className="studio-amber-cta h-11 w-full border border-amber-400/60 bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400 md:h-9.5"
           >
             {isGenerating ? (
               <>
@@ -1050,9 +1059,9 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         key={i}
                         style={{
                           height: `${heightPct}%`,
-                          animationDelay: `${(i % 8) * 90}ms`,
+                          animationDelay: `${i * 24}ms`,
                         }}
-                        className="min-w-[2px] flex-1 animate-pulse rounded-t-[2px] bg-amber-400/75"
+                        className="studio-waveform-shimmer-bar min-w-[2px] flex-1 rounded-t-[2px] bg-amber-400/80"
                       />
                     ))}
                   </div>
@@ -1081,7 +1090,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 {/* Single Unified Master Transport Deck (48-Bar Scrubber + Precision Controls) */}
                 <div className="studio-well min-w-0 space-y-2.5 overflow-hidden rounded-md p-3">
                   {/* 48-Bar High-Resolution Interactive Waveform (Roving Tabindex + Pointer Drag Scrub) */}
-                  <div className="space-y-1">
+                  <div className="space-y-1.5 pt-1">
                     <div
                       ref={waveformRef}
                       data-testid="voice-waveform"
@@ -1116,12 +1125,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                             <span
                               aria-hidden="true"
                               style={{ height: `${heightPct}%` }}
-                              className={`w-full rounded-t-[2px] transition-colors duration-75 ${
+                              className={`w-full origin-bottom rounded-t-[2px] transition-[transform,background-color,box-shadow,filter] duration-[120ms] ease-out ${
                                 isPlayhead
-                                  ? "bg-amber-400"
+                                  ? "scale-y-[1.08] bg-amber-400 brightness-110 shadow-[0_0_8px_rgba(245,158,11,0.45)]"
                                   : isPlayed
-                                    ? "bg-[#F4F4F5]"
-                                    : "bg-zinc-800 group-hover:bg-zinc-600"
+                                    ? "bg-[#F4F4F5] group-hover:scale-y-[1.06] group-hover:bg-white"
+                                    : "bg-zinc-800 group-hover:scale-y-[1.07] group-hover:bg-zinc-600"
                               }`}
                             />
                           </button>
@@ -1129,7 +1138,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                       })}
                       <span
                         aria-hidden="true"
-                        className="pointer-events-none absolute inset-y-0 z-10 w-[1.5px] -translate-x-1/2 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.7)] transition-[left] duration-75"
+                        className={`pointer-events-none absolute inset-y-0 z-10 w-[1.5px] -translate-x-1/2 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.75)] ${
+                          waveformGlideEnabled
+                            ? "transition-[left] duration-[120ms] ease-linear"
+                            : "transition-none"
+                        }`}
                         style={{
                           left: `${Math.min(99.5, Math.max(0.5, playbackProgress * 100))}%`,
                         }}
@@ -1137,7 +1150,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     </div>
                     <div className="h-[2px] w-full overflow-hidden rounded-full bg-zinc-900">
                       <div
-                        className="h-full bg-amber-400 transition-[width] duration-75"
+                        className={`h-full bg-amber-400 ${
+                          waveformGlideEnabled
+                            ? "transition-[width] duration-[120ms] ease-linear"
+                            : "transition-none"
+                        }`}
                         style={{
                           width: `${Math.min(100, Math.max(0, playbackProgress * 100))}%`,
                         }}
@@ -1170,7 +1187,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         title={
                           isPlaying ? t("voice.pauseAria") : t("voice.playAria")
                         }
-                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-amber-400/60 bg-amber-500 text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] transition-colors hover:bg-amber-400 md:size-8"
+                        className="studio-amber-cta inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-amber-400/60 bg-amber-500 text-zinc-950 hover:bg-amber-400 md:size-8"
                       >
                         {isPlaying ? (
                           <Pause className="size-4 fill-current md:size-3.5" />
@@ -1266,6 +1283,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   }}
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => {
+                    setWaveformGlideEnabled(true);
                     setIsPlaying(false);
                     setPlaybackProgress(1);
                   }}
@@ -1279,6 +1297,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   }}
                   onTimeUpdate={(e) => {
                     const el = e.currentTarget;
+                    if (!el.paused && !el.seeking && !pointerScrubCleanupRef.current) {
+                      if (suppressNextTimeUpdateGlideRef.current) {
+                        suppressNextTimeUpdateGlideRef.current = false;
+                      } else {
+                        setWaveformGlideEnabled(true);
+                      }
+                    }
                     setAudioCurrentTime(el.currentTime);
                     if (Number.isFinite(el.duration) && el.duration > 0) {
                       setAudioDuration(el.duration);

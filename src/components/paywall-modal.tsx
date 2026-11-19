@@ -206,9 +206,9 @@ export function PaywallModal({
               data-testid="currency-cop"
               onClick={() => setCurrency("cop")}
               aria-pressed={currency === "cop"}
-              className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors md:min-h-0 ${
+              className={`studio-segment flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium md:min-h-0 ${
                 currency === "cop"
-                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
@@ -224,9 +224,9 @@ export function PaywallModal({
               data-testid="currency-usd"
               onClick={() => setCurrency("usd")}
               aria-pressed={currency === "usd"}
-              className={`flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors md:min-h-0 ${
+              className={`studio-segment flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium md:min-h-0 ${
                 currency === "usd"
-                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                  ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
@@ -288,7 +288,7 @@ export function PaywallModal({
                   primaryCheckout.fallbackUrl
                 )
               }
-              className="h-auto min-h-11 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:min-h-9.5"
+              className="studio-amber-cta h-auto min-h-11 w-full whitespace-normal border border-amber-400/60 bg-amber-500 px-3 py-2 text-center text-xs font-semibold text-zinc-950 hover:bg-amber-400 md:min-h-9.5"
             >
               <CreditCard className="mr-2 size-3.5 shrink-0" />
               <span>{primaryCheckout.buttonText}</span>

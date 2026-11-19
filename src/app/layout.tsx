@@ -53,7 +53,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-chassis text-foreground font-sans antialiased tracking-tight selection:bg-amber-500/25 selection:text-amber-100">
         <LocaleProvider>
           {children}
-          <Toaster theme="dark" richColors position="bottom-right" />
+          <Toaster />
         </LocaleProvider>
       </body>
     </html>

@@ -179,10 +179,10 @@ export default function VokaloomStudioPage() {
                 <TabsTrigger
                   value="backgrounds"
                   data-testid="tab-backgrounds"
-                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
+                  className="studio-segment flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
                 >
                   <ImageIcon
-                    className={`size-3.5 shrink-0 ${
+                    className={`size-3.5 shrink-0 transition-colors duration-150 ${
                       isBackgroundsActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
@@ -191,10 +191,10 @@ export default function VokaloomStudioPage() {
                 <TabsTrigger
                   value="voice"
                   data-testid="tab-voice"
-                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
+                  className="studio-segment flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
                 >
                   <Mic
-                    className={`size-3.5 shrink-0 ${
+                    className={`size-3.5 shrink-0 transition-colors duration-150 ${
                       isVoiceActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
@@ -282,7 +282,7 @@ export default function VokaloomStudioPage() {
                   onClick={() => setIsPaywallOpen(true)}
                   title={t("page.upgradeButton")}
                   aria-label={t("page.upgradeButton")}
-                  className="h-9 gap-1 rounded-md border border-amber-400/60 bg-amber-500 px-2 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:px-2.5 md:h-7"
+                  className="studio-amber-cta h-9 gap-1 rounded-md border border-amber-400/60 bg-amber-500 px-2 text-xs font-semibold text-zinc-950 hover:bg-amber-400 sm:px-2.5 md:h-7"
                 >
                   <Crown className="size-3.5 shrink-0" />
                   <span>{t("page.upgradeButton")}</span>
@@ -294,13 +294,13 @@ export default function VokaloomStudioPage() {
 
         {/* Main Studio Workspace */}
         <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 pt-4 pb-8 sm:px-6 sm:pt-5 sm:pb-8 lg:py-5">
-          <TabsContent value="backgrounds" className="mt-0 flex-1">
+          <TabsContent value="backgrounds" className="studio-tab-panel mt-0 flex-1">
             <BackgroundFinder
               onRequirePaywall={() => setIsPaywallOpen(true)}
             />
           </TabsContent>
 
-          <TabsContent value="voice" className="mt-0 flex-1">
+          <TabsContent value="voice" className="studio-tab-panel mt-0 flex-1">
             <VoiceStudio onRequirePaywall={() => setIsPaywallOpen(true)} />
           </TabsContent>
         </main>

@@ -611,7 +611,7 @@ export default function VokaloomAdminPage() {
                   <Button
                     type="submit"
                     disabled={isLoggingIn}
-                    className="h-11 w-full border border-amber-400/60 bg-amber-500 text-sm font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-10"
+                    className="studio-amber-cta h-11 w-full border border-amber-400/60 bg-amber-500 text-sm font-semibold text-zinc-950 hover:bg-amber-400 md:h-10"
                   >
                     {isLoggingIn ? (
                       <>
@@ -847,7 +847,7 @@ export default function VokaloomAdminPage() {
                         type="submit"
                         data-testid="btn-save-vault"
                         disabled={isSavingVault || !hasVaultInput}
-                        className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-45 md:h-9"
+                        className="studio-amber-cta h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-45 md:h-9"
                       >
                         {isSavingVault ? (
                           <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -1006,7 +1006,7 @@ export default function VokaloomAdminPage() {
 
                     <Button
                       type="submit"
-                      className="h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-9"
+                      className="studio-amber-cta h-11 w-full border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 hover:bg-amber-400 md:h-9"
                     >
                       <span className="truncate">
                         {t("admin.saveSettingsButton")}

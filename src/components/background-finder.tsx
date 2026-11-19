@@ -1340,7 +1340,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               data-testid="btn-generate"
               onClick={handleGenerateClick}
               disabled={isLoading}
-              className="h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 md:h-8.5"
+              className="studio-amber-cta h-11 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 hover:bg-amber-400 md:h-8.5"
             >
               {isLoading ? (
                 <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -1771,7 +1771,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                         index: index + 1,
                         photographer: item.photographer,
                       })}
-                      className="h-7 rounded-md border border-amber-400/60 bg-amber-500 px-2.5 text-[11px] font-semibold text-zinc-950 shadow-md hover:bg-amber-400"
+                      className="studio-amber-cta h-7 rounded-md border border-amber-400/60 bg-amber-500 px-2.5 text-[11px] font-semibold text-zinc-950 hover:bg-amber-400"
                     >
                       {swappingItemId === item.id ? (
                         <Loader2 className="mr-1.5 size-3 animate-spin" />
@@ -1824,7 +1824,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                             photographer: item.photographer,
                           })}
                           title={t("bg.placeModelTitle", { index: index + 1 })}
-                          className="inline-flex h-8 items-center gap-1 rounded bg-amber-500 px-2.5 text-[10px] font-semibold text-zinc-950 active:scale-95"
+                          className="studio-amber-cta inline-flex h-8 items-center gap-1 rounded border border-amber-400/60 bg-amber-500 px-2.5 text-[10px] font-semibold text-zinc-950 hover:bg-amber-400"
                         >
                           {swappingItemId === item.id ? (
                             <Loader2 className="size-3 animate-spin" />
