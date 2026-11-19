@@ -141,7 +141,7 @@ export function PaywallModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="studio-deck max-h-[94vh] overflow-y-auto border-white/[0.12] border-t-2 border-t-amber-500/80 bg-[#0B0C10] p-0 text-[#F4F4F5] sm:max-w-xl">
+      <DialogContent className="studio-deck max-h-[94vh] overflow-y-auto border-white/[0.12] border-t-2 border-t-amber-500/80 bg-[#0E1016] p-0 text-[#F4F4F5] sm:max-w-xl">
         <div className="space-y-3.5 p-4 sm:p-5">
           <DialogHeader className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 pr-10 font-mono text-[11px] md:pr-8">
@@ -206,17 +206,17 @@ export function PaywallModal({
               data-testid="currency-cop"
               onClick={() => setCurrency("cop")}
               aria-pressed={currency === "cop"}
-              className={`studio-segment flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium md:min-h-0 ${
+              className={`studio-segment flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-center md:min-h-0 ${
                 currency === "cop"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
-              <span className="truncate sm:hidden">
-                {t("paywall.currencyShort.cop")}
+              <span className="truncate font-mono text-[11px] font-semibold leading-tight">
+                {t("paywall.currencyPrimary.cop")}
               </span>
-              <span className="hidden truncate sm:inline">
-                {t("paywall.currency.cop")}
+              <span className="truncate font-mono text-[9.5px] leading-tight opacity-75">
+                {t("paywall.currencyNetwork.cop")}
               </span>
             </button>
             <button
@@ -224,17 +224,17 @@ export function PaywallModal({
               data-testid="currency-usd"
               onClick={() => setCurrency("usd")}
               aria-pressed={currency === "usd"}
-              className={`studio-segment flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium md:min-h-0 ${
+              className={`studio-segment flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-center md:min-h-0 ${
                 currency === "usd"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
                   : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
               }`}
             >
-              <span className="truncate sm:hidden">
-                {t("paywall.currencyShort.usd")}
+              <span className="truncate font-mono text-[11px] font-semibold leading-tight">
+                {t("paywall.currencyPrimary.usd")}
               </span>
-              <span className="hidden truncate sm:inline">
-                {t("paywall.currency.usd")}
+              <span className="truncate font-mono text-[9.5px] leading-tight opacity-75">
+                {t("paywall.currencyNetwork.usd")}
               </span>
             </button>
           </div>

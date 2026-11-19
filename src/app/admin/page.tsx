@@ -466,7 +466,7 @@ export default function VokaloomAdminPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#060608] text-[#F4F4F5]">
       {/* Top Admin Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#060608]/92 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#060608]/95 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-lg">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/35 bg-emerald-500/10 text-emerald-400">
@@ -519,7 +519,7 @@ export default function VokaloomAdminPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-8 sm:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 lg:py-5">
         {isCheckingSession ? (
           <div className="flex flex-1 items-center justify-center py-20">
             <Loader2 className="size-6 animate-spin text-amber-400" />
@@ -635,17 +635,17 @@ export default function VokaloomAdminPage() {
           </div>
         ) : (
           /* Engine Summary Strip + 5 Administrative Control Cards */
-          <div className="space-y-5">
+          <div className="space-y-4 lg:space-y-5">
             {/* Compact Top Engine Telemetry Summary Strip */}
             <div
               data-testid="admin-health-summary"
               className="studio-deck flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-2.5"
             >
-              <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8B8D98] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
                   {locale === "es" ? "TELEMETRÍA" : "TELEMETRY"}
                 </span>
-                <span className="truncate text-xs font-medium text-zinc-200">
+                <span className="text-xs leading-snug font-medium text-zinc-200">
                   {locale === "es"
                     ? `Resumen de Motores IA y Stock (${liveEngineCount} de ${totalEngineCount} en vivo)`
                     : `AI & Stock Engine Summary (${liveEngineCount} of ${totalEngineCount} live)`}
@@ -672,7 +672,7 @@ export default function VokaloomAdminPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
               {/* Card 01: API & AI Engine Health Status */}
               <Card className="studio-deck flex flex-col rounded-lg ring-0 text-[#F4F4F5]">
                 <CardHeader className="pb-3">

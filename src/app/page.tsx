@@ -128,14 +128,14 @@ export default function VokaloomStudioPage() {
         <header className="sticky top-0 z-40">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 border-b border-white/[0.08] bg-[#060608]/92 backdrop-blur-md"
+            className="pointer-events-none absolute inset-0 border-b border-white/[0.08] bg-[#060608]/95 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-lg"
           />
-          <div className="relative mx-auto flex h-13 max-w-7xl flex-nowrap items-center justify-between gap-1.5 px-2.5 sm:gap-2 sm:px-6">
+          <div className="relative mx-auto flex h-13 max-w-7xl flex-nowrap items-center justify-between gap-1 px-2 sm:gap-2 sm:px-6">
             {/* Zone 1 (Left): Geometric Aperture/Waveform Mark & Wordmark */}
             <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5">
               <div
                 aria-hidden="true"
-                className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-[#0E1016] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -168,37 +168,41 @@ export default function VokaloomStudioPage() {
                   />
                 </svg>
               </div>
-              <h1 className="truncate font-heading text-[13px] font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
+              <h1 className="truncate font-heading text-[11.5px] font-semibold tracking-tight text-[#F4F4F5] min-[380px]:text-[13px] sm:text-sm">
                 {t("page.brandName")}
               </h1>
             </div>
 
-            {/* Zone 2 (Center on Desktop lg+, Docked Bottom Thumb-Arc Tab Bar below lg) */}
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#060608]/94 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.65)] backdrop-blur-md lg:static lg:z-auto lg:w-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
-              <TabsList className="mx-auto grid h-11 w-full max-w-md grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] lg:inline-flex lg:h-8.5 lg:w-auto lg:max-w-none lg:p-0.5">
+            {/* Zone 2 (Center on Desktop lg+, Native Docked Bottom Thumb-Arc Tab Bar below lg) */}
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#060608]/95 px-3 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.65)] backdrop-blur-lg lg:static lg:z-auto lg:w-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+              <TabsList className="mx-auto grid h-auto min-h-13 w-full max-w-md grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] lg:inline-flex lg:h-8.5 lg:min-h-0 lg:w-auto lg:max-w-none lg:p-0.5">
                 <TabsTrigger
                   value="backgrounds"
                   data-testid="tab-backgrounds"
-                  className="studio-segment flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
+                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
                 >
                   <ImageIcon
-                    className={`size-3.5 shrink-0 transition-colors duration-150 ${
+                    className={`size-4 shrink-0 transition-colors duration-150 lg:size-3.5 ${
                       isBackgroundsActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
-                  <span className="truncate">{t("page.tabBackgrounds")}</span>
+                  <span className="whitespace-normal text-center lg:whitespace-nowrap">
+                    {t("page.tabBackgrounds")}
+                  </span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="voice"
                   data-testid="tab-voice"
-                  className="studio-segment flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
+                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
                 >
                   <Mic
-                    className={`size-3.5 shrink-0 transition-colors duration-150 ${
+                    className={`size-4 shrink-0 transition-colors duration-150 lg:size-3.5 ${
                       isVoiceActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
-                  <span className="truncate">{t("page.tabVoice")}</span>
+                  <span className="whitespace-normal text-center lg:whitespace-nowrap">
+                    {t("page.tabVoice")}
+                  </span>
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -232,7 +236,7 @@ export default function VokaloomStudioPage() {
                   })}
                   className={`inline-flex h-9 cursor-pointer items-center gap-1 rounded-md border px-1.5 font-mono text-[11px] font-medium tabular-nums shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)] transition-colors sm:gap-1.5 sm:px-2 md:h-7 ${
                     quota.creditsRemaining > 0
-                      ? "border-white/[0.08] bg-[#050507] text-zinc-200 hover:border-white/[0.16] hover:bg-[#0B0C10]"
+                      ? "border-white/[0.08] bg-[#050507] text-zinc-200 hover:border-white/[0.16] hover:bg-[#0E1016]"
                       : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/18"
                   }`}
                 >
@@ -282,7 +286,7 @@ export default function VokaloomStudioPage() {
                   onClick={() => setIsPaywallOpen(true)}
                   title={t("page.upgradeButton")}
                   aria-label={t("page.upgradeButton")}
-                  className="studio-amber-cta h-9 gap-1 rounded-md border border-amber-400/60 bg-amber-500 px-2 text-xs font-semibold text-zinc-950 hover:bg-amber-400 sm:px-2.5 md:h-7"
+                  className="studio-amber-cta h-9 gap-1 rounded-md border border-amber-400/60 bg-amber-500 px-1.5 text-xs font-semibold text-zinc-950 hover:bg-amber-400 sm:px-2.5 md:h-7"
                 >
                   <Crown className="size-3.5 shrink-0" />
                   <span>{t("page.upgradeButton")}</span>
@@ -293,7 +297,7 @@ export default function VokaloomStudioPage() {
         </header>
 
         {/* Main Studio Workspace */}
-        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-3 pt-4 pb-8 sm:px-6 sm:pt-5 sm:pb-8 lg:py-5">
+        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 lg:py-5">
           <TabsContent value="backgrounds" className="studio-tab-panel mt-0 flex-1">
             <BackgroundFinder
               onRequirePaywall={() => setIsPaywallOpen(true)}
@@ -307,8 +311,8 @@ export default function VokaloomStudioPage() {
       </Tabs>
 
       {/* Minimal Bottom Studio Status Rail (40px tall, cleared above mobile bottom dock) */}
-      <footer className="mb-[56px] border-t border-white/[0.08] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] lg:mb-0">
-        <div className="mx-auto flex h-10 max-w-7xl flex-nowrap items-center justify-between gap-3 px-3 sm:px-6">
+      <footer className="mb-[68px] border-t border-white/[0.08] bg-[#0E1016] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] lg:mb-0">
+        <div className="mx-auto flex h-10 max-w-7xl flex-nowrap items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[10px] tracking-wide text-[#8B8D98] sm:text-[11px]">
             <span className="size-1.5 shrink-0 rounded-full bg-zinc-500" />
             <span className="truncate">{t("page.footerNotice")}</span>

@@ -383,7 +383,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     processAudioFile(file);
   };
 
-  const handleAudioDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+  const handleAudioDrop = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDraggingAudio(false);
     const file = e.dataTransfer.files?.[0];
@@ -744,7 +744,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         : 0;
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-5">
       {/* Left Column (7 Cols): Script Editor, Voice Presets & Zero-Shot Clone Uploader */}
       <section className="studio-deck min-w-0 overflow-hidden rounded-lg divide-y divide-white/[0.06] lg:col-span-7">
         {/* Panel Header */}
@@ -952,14 +952,38 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   )}
                 </label>
               ) : (
-                <div className="flex items-center justify-between gap-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Volume2 className="size-4 shrink-0 text-emerald-400" />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-[#F4F4F5]">
+                <div
+                  data-testid="loaded-voice-sample"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingAudio(true);
+                  }}
+                  onDragLeave={() => setIsDraggingAudio(false)}
+                  onDrop={handleAudioDrop}
+                  className={`flex items-center justify-between gap-2 rounded border px-3 py-2 transition-colors ${
+                    isDraggingAudio
+                      ? "border-amber-500/85 bg-amber-500/[0.08] ring-1 ring-amber-500/35"
+                      : "border-emerald-500/35 bg-emerald-500/10"
+                  }`}
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <Volume2
+                      className={`size-4 shrink-0 ${
+                        isDraggingAudio ? "text-amber-400" : "text-emerald-400"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-xs font-medium text-[#F4F4F5]"
+                        title={referenceAudioName}
+                      >
                         {referenceAudioName}
                       </p>
-                      <p className="text-[10px] text-emerald-400">
+                      <p
+                        className={`truncate text-[10px] ${
+                          isDraggingAudio ? "text-amber-300" : "text-emerald-400"
+                        }`}
+                      >
                         {t("voice.sampleReady")}
                       </p>
                     </div>
@@ -967,11 +991,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-xs"
+                    size="icon-sm"
                     onClick={handleClearAudioSample}
                     aria-label={t("voice.removeAudioAria")}
                     title={t("voice.removeAudioAria")}
-                    className="text-zinc-400 hover:bg-[#13151D] hover:text-[#F4F4F5]"
+                    className="size-8 shrink-0 text-zinc-400 hover:bg-[#13151D] hover:text-[#F4F4F5] md:size-7"
                   >
                     <X className="size-3.5" />
                   </Button>
@@ -985,19 +1009,17 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             data-testid="btn-synthesize"
             onClick={handleSynthesize}
             disabled={isGenerating}
-            className="studio-amber-cta h-11 w-full border border-amber-400/60 bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400 md:h-9.5"
+            className="studio-amber-cta h-auto min-h-11 w-full border border-amber-400/60 bg-amber-500 px-3.5 py-2.5 text-center text-[13px] leading-snug font-semibold whitespace-normal text-zinc-950 hover:bg-amber-400 md:h-9.5 md:min-h-0 md:py-0 md:text-sm md:whitespace-nowrap"
           >
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
-                <span className="truncate">
-                  {t("voice.synthesizingButton")}
-                </span>
+                <span>{t("voice.synthesizingButton")}</span>
               </>
             ) : (
               <>
                 <Wand2 className="mr-2 size-4 shrink-0" />
-                <span className="truncate">
+                <span>
                   {cloneMode
                     ? t("voice.generateCloneButton")
                     : t("voice.generatePresetButton", {

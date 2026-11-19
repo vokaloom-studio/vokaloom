@@ -241,6 +241,10 @@ const en = {
   "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.currencyShort.cop": "COP · Wompi / PSE",
   "paywall.currencyShort.usd": "USD · Stripe",
+  "paywall.currencyPrimary.cop": "COP · Colombia",
+  "paywall.currencyNetwork.cop": "Nequi / PSE / Wompi",
+  "paywall.currencyPrimary.usd": "USD · Global",
+  "paywall.currencyNetwork.usd": "Stripe",
   "paywall.benefit1":
     "Unlimited 15-photo vertical batches & ZIP export",
   "paywall.benefit2":
@@ -670,6 +674,10 @@ const es: Record<TranslationKey, string> = {
   "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.currencyShort.cop": "COP · Wompi / PSE",
   "paywall.currencyShort.usd": "USD · Stripe",
+  "paywall.currencyPrimary.cop": "COP · Colombia",
+  "paywall.currencyNetwork.cop": "Nequi / PSE / Wompi",
+  "paywall.currencyPrimary.usd": "USD · Global",
+  "paywall.currencyNetwork.usd": "Stripe",
   "paywall.benefit1":
     "Lotes verticales ilimitados de 15 fotos y exportación ZIP",
   "paywall.benefit2":

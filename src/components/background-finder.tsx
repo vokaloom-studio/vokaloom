@@ -1261,7 +1261,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       : swapEngine;
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-5">
       {/* Director's Inspector Rail (4 Columns) */}
       <aside className="studio-deck min-w-0 overflow-hidden rounded-lg divide-y divide-white/[0.06] lg:sticky lg:top-18 lg:col-span-4">
         {/* Section 1: Query & Vibe */}
@@ -1686,7 +1686,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <div
                   key={item.id}
                   data-testid="bg-card"
-                  className={`group relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-[#0B0C10] transition-colors ${
+                  className={`group relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-[#0E1016] transition-colors ${
                     isSelected
                       ? "border-amber-400/90 ring-2 ring-amber-500/45"
                       : "border-white/[0.08] hover:border-white/[0.22]"
@@ -1866,7 +1866,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
         <DialogContent
           data-testid="dialog-model-swap"
-          className="studio-deck border-white/[0.12] bg-[#0B0C10] p-5 text-[#F4F4F5] sm:max-w-md"
+          className="studio-deck border-white/[0.12] bg-[#0E1016] p-5 text-[#F4F4F5] sm:max-w-md"
         >
           <DialogHeader className="space-y-1 pr-6">
             <div className="flex flex-wrap items-center gap-2">
