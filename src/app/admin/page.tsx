@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ShieldCheck,
@@ -31,6 +31,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useLocale } from "@/components/locale-provider";
+import { LOCALE_HEADER } from "@/lib/i18n";
 import {
   getQuotaState,
   getBusinessConfig,
@@ -57,6 +60,11 @@ interface AdminApiGetResponse {
 }
 
 export default function VokaloomAdminPage() {
+  const { locale, t } = useLocale();
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingSession, setIsCheckingSession] = useState<boolean>(true);
   const [passwordInput, setPasswordInput] = useState<string>("");
@@ -94,7 +102,9 @@ export default function VokaloomAdminPage() {
   const fetchAdminStatus = useCallback(async (adminKeyHeader?: string) => {
     setIsRefreshingHealth(true);
     try {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        [LOCALE_HEADER]: localeRef.current,
+      };
       if (adminKeyHeader) {
         headers["x-admin-key"] = adminKeyHeader;
       }
@@ -132,7 +142,7 @@ export default function VokaloomAdminPage() {
     e.preventDefault();
     const trimmed = passwordInput.trim();
     if (!trimmed) {
-      toast.error("Please enter the Master Admin Password.");
+      toast.error(t("admin.toast.enterPassword"));
       return;
     }
 
@@ -140,30 +150,35 @@ export default function VokaloomAdminPage() {
     try {
       const res = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
         body: JSON.stringify({
           action: "admin-login",
           code: trimmed,
+          locale,
         }),
       });
 
-      if (!res.ok) {
-        toast.error("Invalid Master Admin Password.");
+      const data = (await res.json().catch(() => ({}))) as {
+        valid?: boolean;
+        role?: string;
+        error?: string;
+      };
+
+      if (!res.ok || !data.valid) {
+        toast.error(data.error || t("admin.toast.invalidPassword"));
         return;
       }
 
-      const data = (await res.json()) as { valid?: boolean; role?: string };
-      if (data.valid) {
-        const updatedQuota = enableOperatorMode("operator");
-        setLocalQuota(updatedQuota);
-        setPasswordInput("");
-        await fetchAdminStatus(trimmed);
-        toast.success("Authenticated into Vokaloom Admin Control Center.");
-      } else {
-        toast.error("Invalid Master Admin Password.");
-      }
+      const updatedQuota = enableOperatorMode("operator");
+      setLocalQuota(updatedQuota);
+      setPasswordInput("");
+      await fetchAdminStatus(trimmed);
+      toast.success(t("admin.toast.authenticated"));
     } catch {
-      toast.error("Failed to verify admin credentials.");
+      toast.error(t("admin.toast.verifyFailed"));
     } finally {
       setIsLoggingIn(false);
     }
@@ -173,9 +188,7 @@ export default function VokaloomAdminPage() {
     e.preventDefault();
     const saved = saveBusinessConfig(businessForm);
     setBusinessForm(saved);
-    toast.success(
-      "Saved Commercial & Paywall Configuration for this workstation."
-    );
+    toast.success(t("admin.toast.savedConfig"));
   };
 
   const handleCopyInviteLink = async (code: string) => {
@@ -186,57 +199,63 @@ export default function VokaloomAdminPage() {
     const inviteUrl = `${origin}/?key=${encodeURIComponent(code)}`;
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      toast.success(`Copied VIP Invite Link: ${inviteUrl}`);
+      toast.success(t("admin.toast.copiedInvite", { url: inviteUrl }));
     } catch {
-      toast.info(`Invite Link: ${inviteUrl}`);
+      toast.info(t("admin.toast.inviteFallback", { url: inviteUrl }));
     }
   };
 
   const handleEnableOperatorBrowser = () => {
     const updated = enableOperatorMode("operator");
     setLocalQuota(updated);
-    toast.success("Unlimited Operator Mode enabled on this browser.");
+    toast.success(t("admin.toast.operatorEnabled"));
   };
 
   const handleSwitchToNormalClientView = () => {
     const updated = deactivateOperatorMode();
     setLocalQuota(updated);
-    toast.info(
-      "Switched to Normal Client View. You can now test the trial counter and paywall."
-    );
+    toast.info(t("admin.toast.clientViewEnabled"));
   };
 
   const handleResetLocalTrial = () => {
     const updated = resetTrialForDemo();
     setLocalQuota(updated);
     toast.success(
-      `Reset local trial credits to ${updated.creditsRemaining}/${updated.maxTrialCredits}.`
+      t("admin.toast.trialReset", {
+        remaining: updated.creditsRemaining,
+        max: updated.maxTrialCredits,
+      })
     );
   };
 
   const engineList = [
     {
-      name: "Gemini 2.5 Flash Vision (Boss Reference Matcher)",
+      key: "gemini-vision",
+      name: t("admin.engine.geminiVision"),
       active: health.geminiConfigured,
       envVar: "GEMINI_API_KEY",
     },
     {
-      name: "Gemini 2.5 Native Neural TTS (Voiceover Engine)",
+      key: "gemini-tts",
+      name: t("admin.engine.geminiTts"),
       active: health.geminiConfigured,
       envVar: "GEMINI_API_KEY",
     },
     {
-      name: "Pexels Portrait Stock API",
+      key: "pexels",
+      name: t("admin.engine.pexels"),
       active: health.pexelsConfigured,
       envVar: "PEXELS_API_KEY",
     },
     {
-      name: "Unsplash Portrait Stock API",
+      key: "unsplash",
+      name: t("admin.engine.unsplash"),
       active: health.unsplashConfigured,
       envVar: "UNSPLASH_ACCESS_KEY",
     },
     {
-      name: "Fal.ai Serverless GPU (Kokoro-82M & F5-TTS Voice Cloning)",
+      key: "fal",
+      name: t("admin.engine.fal"),
       active: health.falConfigured,
       envVar: "FAL_KEY",
     },
@@ -247,42 +266,44 @@ export default function VokaloomAdminPage() {
       {/* Top Admin Header */}
       <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
               <ShieldCheck className="size-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-white sm:text-lg">
-                  Vokaloom Admin Control Center
+                  {t("admin.headerTitle")}
                 </h1>
                 <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-[10px] text-emerald-300">
-                  Operator Console
+                  {t("admin.operatorConsoleBadge")}
                 </Badge>
               </div>
               <p className="text-xs text-zinc-400">
-                Server-Side API Engine Diagnostics, Paywall Configuration &amp;
-                VIP Client Invite Generator
+                {t("admin.headerSubtitle")}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
               className="border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300"
             >
-              Browser Mode:{" "}
               {localQuota.isOperator
-                ? "Unlimited Operator"
-                : `Client Trial (${localQuota.creditsRemaining}/${localQuota.maxTrialCredits})`}
+                ? t("admin.browserModeOperator")
+                : t("admin.browserModeTrial", {
+                    remaining: localQuota.creditsRemaining,
+                    max: localQuota.maxTrialCredits,
+                  })}
             </Badge>
+            <LanguageSwitcher />
             <Link
               href="/"
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white"
             >
-              <ArrowLeft className="size-3.5" />
-              Return to Studio (/)
+              <ArrowLeft className="size-3.5 shrink-0" />
+              <span>{t("admin.returnToStudio")}</span>
             </Link>
           </div>
         </div>
@@ -302,13 +323,12 @@ export default function VokaloomAdminPage() {
                   <Lock className="size-6" />
                 </div>
                 <CardTitle className="text-lg font-bold text-white">
-                  Operator Authentication Required
+                  {t("admin.loginTitle")}
                 </CardTitle>
                 <CardDescription className="text-xs text-zinc-400">
-                  Enter your server-side{" "}
-                  <code className="text-zinc-300">ADMIN_MASTER_KEY</code> to
-                  access engine diagnostics, paywall settings, and VIP invite
-                  links.
+                  {t("admin.loginDescBefore")}{" "}
+                  <code className="text-zinc-300">ADMIN_MASTER_KEY</code>{" "}
+                  {t("admin.loginDescAfter")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -318,14 +338,14 @@ export default function VokaloomAdminPage() {
                       htmlFor="admin-master-password"
                       className="text-xs font-medium text-zinc-300"
                     >
-                      Master Admin Password
+                      {t("admin.passwordLabel")}
                     </label>
                     <Input
                       id="admin-master-password"
                       type="password"
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="Enter ADMIN_MASTER_KEY..."
+                      placeholder={t("admin.passwordPlaceholder")}
                       className="h-10 border-zinc-800 bg-zinc-950 font-mono text-sm text-white"
                     />
                   </div>
@@ -336,13 +356,17 @@ export default function VokaloomAdminPage() {
                   >
                     {isLoggingIn ? (
                       <>
-                        <Loader2 className="mr-2 size-4 animate-spin" />
-                        Verifying with Server...
+                        <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
+                        <span className="truncate">
+                          {t("admin.verifyingButton")}
+                        </span>
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="mr-2 size-4" />
-                        Unlock Admin Control Center
+                        <ShieldCheck className="mr-2 size-4 shrink-0" />
+                        <span className="truncate">
+                          {t("admin.unlockButton")}
+                        </span>
                       </>
                     )}
                   </Button>
@@ -356,10 +380,10 @@ export default function VokaloomAdminPage() {
             {/* Card 1: API & AI Engine Health Status */}
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                    <Activity className="size-4 text-emerald-400" />
-                    1. API &amp; AI Engine Health Status
+                    <Activity className="size-4 shrink-0 text-emerald-400" />
+                    <span>{t("admin.card1Title")}</span>
                   </CardTitle>
                   <Button
                     type="button"
@@ -374,37 +398,36 @@ export default function VokaloomAdminPage() {
                         isRefreshingHealth ? "animate-spin" : ""
                       }`}
                     />
-                    Refresh Health Status
+                    {t("admin.refreshHealth")}
                   </Button>
                 </div>
                 <CardDescription className="text-xs text-zinc-400">
-                  Live server-side check of `.env.local` / Vercel environment
-                  variables without exposing secret keys to the browser.
+                  {t("admin.card1Desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5">
                 {engineList.map((eng) => (
                   <div
-                    key={eng.name}
+                    key={eng.key}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/80 px-3.5 py-2.5"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-100">
                         {eng.name}
                       </p>
                       <p className="font-mono text-[10px] text-zinc-500">
-                        Env: {eng.envVar}
+                        {t("admin.envLabel", { envVar: eng.envVar })}
                       </p>
                     </div>
                     {eng.active ? (
-                      <Badge className="border border-emerald-500/30 bg-emerald-500/15 text-[11px] font-semibold text-emerald-300">
+                      <Badge className="shrink-0 border border-emerald-500/30 bg-emerald-500/15 text-[11px] font-semibold text-emerald-300">
                         <CheckCircle2 className="mr-1 size-3" />
-                        Live Neural / API Active
+                        {t("admin.statusActive")}
                       </Badge>
                     ) : (
-                      <Badge className="border border-amber-500/30 bg-amber-500/15 text-[11px] font-semibold text-amber-300">
+                      <Badge className="shrink-0 border border-amber-500/30 bg-amber-500/15 text-[11px] font-semibold text-amber-300">
                         <AlertTriangle className="mr-1 size-3" />
-                        Zero-Key Fallback Active
+                        {t("admin.statusFallback")}
                       </Badge>
                     )}
                   </div>
@@ -416,12 +439,11 @@ export default function VokaloomAdminPage() {
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <DollarSign className="size-4 text-violet-400" />
-                  2. Commercial &amp; Paywall Configuration
+                  <DollarSign className="size-4 shrink-0 text-violet-400" />
+                  <span>{t("admin.card2Title")}</span>
                 </CardTitle>
                 <CardDescription className="text-xs text-zinc-400">
-                  Customize the Pro Pass pricing, Wompi/Stripe checkout links,
-                  and guest trial credit limit.
+                  {t("admin.card2Desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -431,10 +453,14 @@ export default function VokaloomAdminPage() {
                 >
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1">
-                      <label className="text-xs font-medium text-zinc-300">
-                        Price (COP)
+                      <label
+                        htmlFor="admin-price-cop"
+                        className="text-xs font-medium text-zinc-300"
+                      >
+                        {t("admin.priceCopLabel")}
                       </label>
                       <Input
+                        id="admin-price-cop"
                         value={businessForm.priceCop}
                         onChange={(e) =>
                           setBusinessForm({
@@ -446,10 +472,14 @@ export default function VokaloomAdminPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-medium text-zinc-300">
-                        Price (USD)
+                      <label
+                        htmlFor="admin-price-usd"
+                        className="text-xs font-medium text-zinc-300"
+                      >
+                        {t("admin.priceUsdLabel")}
                       </label>
                       <Input
+                        id="admin-price-usd"
                         value={businessForm.priceUsd}
                         onChange={(e) =>
                           setBusinessForm({
@@ -461,10 +491,14 @@ export default function VokaloomAdminPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-medium text-zinc-300">
-                        Free Trial Credits
+                      <label
+                        htmlFor="admin-trial-credits"
+                        className="text-xs font-medium text-zinc-300"
+                      >
+                        {t("admin.trialCreditsLabel")}
                       </label>
                       <Input
+                        id="admin-trial-credits"
                         type="number"
                         min={0}
                         max={50}
@@ -484,10 +518,14 @@ export default function VokaloomAdminPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-zinc-300">
-                      Wompi / Nequi / PSE Checkout URL (COP)
+                    <label
+                      htmlFor="admin-checkout-cop"
+                      className="text-xs font-medium text-zinc-300"
+                    >
+                      {t("admin.checkoutCopLabel")}
                     </label>
                     <Input
+                      id="admin-checkout-cop"
                       value={businessForm.checkoutUrlCop}
                       onChange={(e) =>
                         setBusinessForm({
@@ -500,10 +538,14 @@ export default function VokaloomAdminPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-zinc-300">
-                      Stripe Global Checkout URL (USD)
+                    <label
+                      htmlFor="admin-checkout-usd"
+                      className="text-xs font-medium text-zinc-300"
+                    >
+                      {t("admin.checkoutUsdLabel")}
                     </label>
                     <Input
+                      id="admin-checkout-usd"
                       value={businessForm.checkoutUrlUsd}
                       onChange={(e) =>
                         setBusinessForm({
@@ -519,7 +561,9 @@ export default function VokaloomAdminPage() {
                     type="submit"
                     className="h-9 w-full bg-violet-600 text-xs font-semibold text-white hover:bg-violet-500"
                   >
-                    Save Paywall &amp; Pricing Settings
+                    <span className="truncate">
+                      {t("admin.saveSettingsButton")}
+                    </span>
                   </Button>
                 </form>
               </CardContent>
@@ -529,29 +573,29 @@ export default function VokaloomAdminPage() {
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <Share2 className="size-4 text-violet-400" />
-                  3. Client Access Links &amp; WhatsApp Invite Generator
+                  <Share2 className="size-4 shrink-0 text-violet-400" />
+                  <span>{t("admin.card3Title")}</span>
                 </CardTitle>
                 <CardDescription className="text-xs text-zinc-400">
-                  Generate 1-click auto-unlock links (`/?key=...`) for paying
-                  clients or VIP testers on WhatsApp.
+                  {t("admin.card3Desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <span className="text-xs font-medium text-zinc-300">
-                    Active Server-Side VIP Client Codes (
-                    <code className="text-zinc-400">VIP_CLIENT_CODES</code>)
+                    {t("admin.vipCodesLabelBefore")}
+                    <code className="text-zinc-400">VIP_CLIENT_CODES</code>
+                    {t("admin.vipCodesLabelAfter")}
                   </span>
                   <div className="space-y-2">
                     {vipCodes.map((code) => (
                       <div
                         key={code}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2"
                       >
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="size-3.5 text-violet-400" />
-                          <code className="text-xs font-semibold text-violet-200">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Sparkles className="size-3.5 shrink-0 text-violet-400" />
+                          <code className="truncate text-xs font-semibold text-violet-200">
                             {code}
                           </code>
                         </div>
@@ -560,10 +604,10 @@ export default function VokaloomAdminPage() {
                           size="xs"
                           variant="secondary"
                           onClick={() => void handleCopyInviteLink(code)}
-                          className="border border-violet-500/30 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25"
+                          className="shrink-0 border border-violet-500/30 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25"
                         >
                           <Copy className="mr-1.5 size-3" />
-                          Copy VIP Invite Link
+                          {t("admin.copyInviteButton")}
                         </Button>
                       </div>
                     ))}
@@ -571,15 +615,19 @@ export default function VokaloomAdminPage() {
                 </div>
 
                 <div className="space-y-1.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60 p-3">
-                  <label className="text-xs font-medium text-zinc-300">
-                    Custom Invite Code Link Builder
+                  <label
+                    htmlFor="admin-custom-invite"
+                    className="text-xs font-medium text-zinc-300"
+                  >
+                    {t("admin.customInviteLabel")}
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 sm:flex-nowrap">
                     <Input
+                      id="admin-custom-invite"
                       value={customInviteCode}
                       onChange={(e) => setCustomInviteCode(e.target.value)}
-                      placeholder="Enter access code..."
-                      className="h-8 border-zinc-800 bg-zinc-900 font-mono text-xs text-white"
+                      placeholder={t("admin.customInvitePlaceholder")}
+                      className="h-8 min-w-0 flex-1 border-zinc-800 bg-zinc-900 font-mono text-xs text-white"
                     />
                     <Button
                       type="button"
@@ -590,7 +638,7 @@ export default function VokaloomAdminPage() {
                       className="h-8 shrink-0 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
                     >
                       <Copy className="mr-1.5 size-3.5" />
-                      Copy VIP Invite Link
+                      {t("admin.copyInviteButton")}
                     </Button>
                   </div>
                 </div>
@@ -601,50 +649,53 @@ export default function VokaloomAdminPage() {
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-white">
-                  <Sliders className="size-4 text-emerald-400" />
-                  4. Operator Sandbox &amp; Device Controls
+                  <Sliders className="size-4 shrink-0 text-emerald-400" />
+                  <span>{t("admin.card4Title")}</span>
                 </CardTitle>
                 <CardDescription className="text-xs text-zinc-400">
-                  Switch this browser between Unlimited Operator Mode and Normal
-                  Client View to test the 3-credit trial and paywall experience.
+                  {t("admin.card4Desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button
                   type="button"
                   onClick={handleEnableOperatorBrowser}
-                  className="h-9 w-full justify-start bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
+                  className="h-auto min-h-9 w-full justify-start whitespace-normal bg-emerald-600 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-500"
                 >
-                  <UserCheck className="mr-2 size-4" />
-                  Enable Unlimited Operator Mode on This Browser
+                  <UserCheck className="mr-2 size-4 shrink-0" />
+                  <span>{t("admin.enableOperatorButton")}</span>
                 </Button>
 
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleSwitchToNormalClientView}
-                  className="h-9 w-full justify-start border-zinc-700 bg-zinc-950 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                  className="h-auto min-h-9 w-full justify-start whitespace-normal border-zinc-700 bg-zinc-950 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800"
                 >
-                  <Eye className="mr-2 size-4 text-amber-400" />
-                  Switch to Normal Client View (Test Paywall)
+                  <Eye className="mr-2 size-4 shrink-0 text-amber-400" />
+                  <span>{t("admin.switchClientButton")}</span>
                 </Button>
 
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleResetLocalTrial}
-                  className="h-9 w-full justify-start border-zinc-700 bg-zinc-950 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                  className="h-auto min-h-9 w-full justify-start whitespace-normal border-zinc-700 bg-zinc-950 py-2 text-left text-xs font-medium text-zinc-200 hover:bg-zinc-800"
                 >
-                  <RotateCcw className="mr-2 size-4 text-violet-400" />
-                  Reset Local Trial Credits to 3/3
+                  <RotateCcw className="mr-2 size-4 shrink-0 text-violet-400" />
+                  <span>
+                    {t("admin.resetTrialButton", {
+                      max: businessForm.maxTrialCredits,
+                    })}
+                  </span>
                 </Button>
 
                 <Link
                   href="/"
                   className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/15 px-3 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/25 hover:text-white"
                 >
-                  <ArrowLeft className="size-4" />
-                  Return to Studio (/)
+                  <ArrowLeft className="size-4 shrink-0" />
+                  <span>{t("admin.returnToStudio")}</span>
                 </Link>
               </CardContent>
             </Card>

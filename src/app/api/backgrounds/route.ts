@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { resolveRequestLocale, translate } from "@/lib/i18n";
 
 export const maxDuration = 60;
 
@@ -19,6 +20,7 @@ interface BackgroundsRequest {
   page?: number;
   referenceImageBase64?: string;
   mimeType?: string;
+  locale?: unknown;
 }
 
 interface CuratedPhotoSeed {
@@ -447,15 +449,20 @@ function buildCuratedBatch(
 }
 
 export async function GET(request: Request) {
+  const reqUrl = new URL(request.url);
+  const locale = resolveRequestLocale(
+    request,
+    reqUrl.searchParams.get("locale")
+  );
   try {
-    const proxyUrl = new URL(request.url).searchParams.get("proxyUrl");
+    const proxyUrl = reqUrl.searchParams.get("proxyUrl");
     if (
       !proxyUrl ||
       (!proxyUrl.startsWith("https://images.pexels.com/") &&
         !proxyUrl.startsWith("https://images.unsplash.com/"))
     ) {
       return NextResponse.json(
-        { error: "Invalid or disallowed proxyUrl origin." },
+        { error: translate(locale, "api.bg.invalidProxyOrigin") },
         { status: 400 }
       );
     }
@@ -463,7 +470,11 @@ export async function GET(request: Request) {
     const upstream = await fetch(proxyUrl);
     if (!upstream.ok) {
       return NextResponse.json(
-        { error: `Upstream image returned ${upstream.status}` },
+        {
+          error: translate(locale, "api.bg.upstreamStatus", {
+            status: upstream.status,
+          }),
+        },
         { status: upstream.status }
       );
     }
@@ -480,15 +491,19 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Image proxy error:", error);
     return NextResponse.json(
-      { error: "Failed to proxy image download." },
+      { error: translate(locale, "api.bg.proxyFailed") },
       { status: 502 }
     );
   }
 }
 
 export async function POST(request: Request) {
+  let locale = resolveRequestLocale(request);
   try {
     const body = (await request.json()) as BackgroundsRequest;
+    if (body.locale !== undefined) {
+      locale = resolveRequestLocale(request, body.locale);
+    }
     const rawQuery = (body.query || "").trim();
     const vibe = (body.vibe || "Luxury Travel").trim();
     const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
@@ -563,6 +578,7 @@ export async function POST(request: Request) {
       extractedTags: ["aesthetic", "travel", "lifestyle", "candid", "vertical"],
       visionUsed: false,
       isCuratedFallback: true,
+      notice: translate(locale, "api.bg.fallbackNotice"),
       page: 1,
     });
   }

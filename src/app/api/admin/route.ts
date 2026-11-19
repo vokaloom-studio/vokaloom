@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { resolveRequestLocale, translate } from "@/lib/i18n";
 
 const ADMIN_SESSION_COOKIE = "vokaloom_admin_session";
 const ADMIN_SESSION_TOKEN = "operator_authenticated_v1";
@@ -21,6 +22,7 @@ function getVipClientCodes(): string[] {
 }
 
 export async function GET(request: Request) {
+  const locale = resolveRequestLocale(request);
   const headerKey = request.headers.get("x-admin-key")?.trim() || "";
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
@@ -47,12 +49,14 @@ export async function GET(request: Request) {
     return NextResponse.json({
       authenticated: false,
       config: publicDefaults,
+      message: translate(locale, "api.admin.unauthenticated"),
     });
   }
 
   return NextResponse.json({
     authenticated: true,
     config: publicDefaults,
+    message: translate(locale, "api.admin.authenticated"),
     health: {
       geminiConfigured: isKeyConfigured(
         process.env.GEMINI_API_KEY,
@@ -73,21 +77,33 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let locale = resolveRequestLocale(request);
   try {
     const body = (await request.json()) as {
       action?: "verify-code" | "admin-login" | "admin-logout";
       code?: string;
+      locale?: unknown;
     };
+    if (body.locale !== undefined) {
+      locale = resolveRequestLocale(request, body.locale);
+    }
 
     if (body.action === "admin-logout") {
-      const res = NextResponse.json({ valid: true, loggedOut: true });
+      const res = NextResponse.json({
+        valid: true,
+        loggedOut: true,
+        message: translate(locale, "api.admin.loggedOut"),
+      });
       res.cookies.delete(ADMIN_SESSION_COOKIE);
       return res;
     }
 
     const submitted = (body.code || "").trim();
     if (!submitted) {
-      return NextResponse.json({ valid: false }, { status: 401 });
+      return NextResponse.json(
+        { valid: false, error: translate(locale, "api.admin.missingCode") },
+        { status: 401 }
+      );
     }
 
     const masterKey = getAdminMasterKey();
@@ -99,11 +115,23 @@ export async function POST(request: Request) {
     );
 
     if (body.action === "admin-login" && !isOperator) {
-      return NextResponse.json({ valid: false }, { status: 401 });
+      return NextResponse.json(
+        {
+          valid: false,
+          error: translate(locale, "api.admin.invalidAdminKey"),
+        },
+        { status: 401 }
+      );
     }
 
     if (!isOperator && !isVipClient) {
-      return NextResponse.json({ valid: false }, { status: 401 });
+      return NextResponse.json(
+        {
+          valid: false,
+          error: translate(locale, "api.admin.invalidAccessCode"),
+        },
+        { status: 401 }
+      );
     }
 
     const role: "operator" | "pro_client" = isOperator
@@ -113,6 +141,10 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       valid: true,
       role,
+      message: translate(
+        locale,
+        isOperator ? "api.admin.operatorGranted" : "api.admin.proGranted"
+      ),
     });
 
     if (isOperator) {
@@ -126,6 +158,9 @@ export async function POST(request: Request) {
 
     return response;
   } catch {
-    return NextResponse.json({ valid: false }, { status: 400 });
+    return NextResponse.json(
+      { valid: false, error: translate(locale, "api.admin.invalidRequest") },
+      { status: 400 }
+    );
   }
 }

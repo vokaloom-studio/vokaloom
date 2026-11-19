@@ -20,6 +20,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { useLocale } from "@/components/locale-provider";
+import {
+  LOCALE_HEADER,
+  translate,
+  type Locale,
+  type TranslationKey,
+} from "@/lib/i18n";
 import { consumeCredit } from "@/lib/quota";
 import type { BackgroundItem } from "@/app/api/backgrounds/route";
 
@@ -27,13 +34,16 @@ export interface BackgroundFinderProps {
   onRequirePaywall: () => void;
 }
 
-const VIBE_PRESETS = [
-  "Luxury Travel",
-  "Candid Lifestyle",
-  "Minimalist Cafe",
-  "Urban Street POV",
-  "Nature Sunset",
-] as const;
+const VIBE_PRESETS: ReadonlyArray<{
+  value: string;
+  labelKey: TranslationKey;
+}> = [
+  { value: "Luxury Travel", labelKey: "bg.vibe.luxuryTravel" },
+  { value: "Candid Lifestyle", labelKey: "bg.vibe.candidLifestyle" },
+  { value: "Minimalist Cafe", labelKey: "bg.vibe.minimalistCafe" },
+  { value: "Urban Street POV", labelKey: "bg.vibe.urbanStreetPov" },
+  { value: "Nature Sunset", labelKey: "bg.vibe.natureSunset" },
+];
 
 interface BackgroundsApiResponse {
   items: BackgroundItem[];
@@ -42,6 +52,7 @@ interface BackgroundsApiResponse {
   extractedTags: string[];
   visionUsed: boolean;
   isCuratedFallback: boolean;
+  notice?: string;
   page: number;
 }
 
@@ -93,7 +104,8 @@ async function compressImageFileToBase64(
 
 async function generateOfflineVerticalFallbackBlob(
   item: BackgroundItem,
-  index: number
+  index: number,
+  locale: Locale
 ): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
@@ -109,11 +121,21 @@ async function generateOfflineVerticalFallbackBlob(
 
     ctx.fillStyle = "rgba(255,255,255,0.88)";
     ctx.font = "bold 46px sans-serif";
-    ctx.fillText(`Vokaloom 9:16 Aesthetic #${index + 1}`, 80, 880);
+    ctx.fillText(
+      translate(locale, "bg.fallbackCanvasTitle", { index: index + 1 }),
+      80,
+      880
+    );
     ctx.font = "34px sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.65)";
     ctx.fillText(item.title.slice(0, 42), 80, 950);
-    ctx.fillText(`Photo by ${item.photographer}`, 80, 1010);
+    ctx.fillText(
+      translate(locale, "bg.fallbackCanvasCredit", {
+        photographer: item.photographer,
+      }),
+      80,
+      1010
+    );
   }
   return new Promise<Blob>((resolve) => {
     canvas.toBlob(
@@ -126,13 +148,16 @@ async function generateOfflineVerticalFallbackBlob(
 
 async function fetchImageBlobWithCorsProxy(
   item: BackgroundItem,
-  index: number
+  index: number,
+  locale: Locale
 ): Promise<Blob> {
   const proxiedEndpoint = `/api/backgrounds?proxyUrl=${encodeURIComponent(
     item.downloadUrl
   )}`;
   try {
-    const proxyRes = await fetch(proxiedEndpoint);
+    const proxyRes = await fetch(proxiedEndpoint, {
+      headers: { [LOCALE_HEADER]: locale },
+    });
     if (proxyRes.ok) {
       return await proxyRes.blob();
     }
@@ -149,10 +174,11 @@ async function fetchImageBlobWithCorsProxy(
     // Fall through to offline canvas generator
   }
 
-  return generateOfflineVerticalFallbackBlob(item, index);
+  return generateOfflineVerticalFallbackBlob(item, index, locale);
 }
 
 export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
+  const { locale, t } = useLocale();
   const [selectedVibe, setSelectedVibe] = useState<string>("Luxury Travel");
   const [query, setQuery] = useState<string>("");
   const [page, setPage] = useState<number>(1);
@@ -182,6 +208,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const [zipProgress, setZipProgress] = useState<number>(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  const selectedVibeMeta =
+    VIBE_PRESETS.find((v) => v.value === selectedVibe) ?? VIBE_PRESETS[0];
+
   const fetchBatch = async (opts: {
     targetPage: number;
     vibeOverride?: string;
@@ -194,7 +223,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       const creditCheck = consumeCredit();
       if (!creditCheck.allowed) {
         toast.warning(
-          "Free trial credits exhausted (0/3). Unlock Vokaloom Pro or enter your Operator Key!"
+          t("quota.exhaustedToast", {
+            remaining: creditCheck.state.creditsRemaining,
+            max: creditCheck.state.maxTrialCredits,
+          })
         );
         onRequirePaywall();
         return;
@@ -205,7 +237,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     try {
       const response = await fetch("/api/backgrounds", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
         body: JSON.stringify({
           query: opts.queryOverride ?? query,
           vibe: opts.vibeOverride ?? selectedVibe,
@@ -215,6 +250,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               ? opts.refBase64 || undefined
               : referencePreview || undefined,
           mimeType: opts.refMime || referenceMimeType,
+          locale,
         }),
       });
 
@@ -229,16 +265,19 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       setVisionUsed(Boolean(data.visionUsed));
       setPage(opts.targetPage);
 
-      if (opts.consumeQuota) {
+      if (data.notice) {
+        toast.info(data.notice);
+      } else if (opts.consumeQuota) {
         toast.success(
-          `Loaded ${data.items.length} vertical (9:16) backgrounds for "${data.resolvedQuery}"`
+          t("bg.toast.loadedBatch", {
+            count: data.items.length,
+            query: data.resolvedQuery,
+          })
         );
       }
     } catch (error) {
       console.error("Failed to fetch backgrounds:", error);
-      toast.error(
-        "Network error fetching backgrounds. Please try again in a moment."
-      );
+      toast.error(t("bg.toast.fetchError"));
     } finally {
       setIsLoading(false);
     }
@@ -260,7 +299,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       .then((data: BackgroundsApiResponse | null) => {
         if (!active || !data) return;
         setItems(data.items || []);
-        setResolvedQuery(data.resolvedQuery || "Luxury Travel candid vertical");
+        setResolvedQuery(
+          data.resolvedQuery || "Luxury Travel candid vertical"
+        );
         setExtractedTags(data.extractedTags || []);
         setVisionUsed(Boolean(data.visionUsed));
       })
@@ -300,12 +341,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
-      toast.error("Please upload a .JPG, .PNG, or .WEBP reference image.");
+      toast.error(t("bg.toast.invalidImageType"));
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("Reference image must be 5 MB or smaller.");
+      toast.error(t("bg.toast.imageTooLarge"));
       return;
     }
 
@@ -318,9 +359,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       setReferencePreview(base64);
       setReferenceMimeType(mimeType);
       setReferenceFileName(file.name);
-      toast.info(
-        "Analyzing Boss Reference Image aesthetic & matching 15 backgrounds..."
-      );
+      toast.info(t("bg.toast.analyzingReference"));
       void fetchBatch({
         targetPage: 1,
         refBase64: base64,
@@ -328,7 +367,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         consumeQuota: true,
       });
     } catch {
-      toast.error("Could not process reference image.");
+      toast.error(t("bg.toast.processImageError"));
     }
   };
 
@@ -339,13 +378,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-    toast.info("Cleared reference image filter.");
+    toast.info(t("bg.toast.clearedReference"));
   };
 
   const handleDownloadSingle = async (item: BackgroundItem, index: number) => {
     setDownloadingId(item.id);
     try {
-      const blob = await fetchImageBlobWithCorsProxy(item, index);
+      const blob = await fetchImageBlobWithCorsProxy(item, index, locale);
 
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -358,9 +397,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
-      toast.success(`Downloaded #${index + 1} (${item.photographer})`);
+      toast.success(
+        t("bg.toast.downloadedSingle", {
+          index: index + 1,
+          photographer: item.photographer,
+        })
+      );
     } catch {
-      toast.error("Could not download photo.");
+      toast.error(t("bg.toast.downloadSingleError"));
     } finally {
       setDownloadingId(null);
     }
@@ -368,7 +412,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
   const handleDownloadAllZip = async () => {
     if (items.length === 0) {
-      toast.warning("Generate a batch of 15 backgrounds first.");
+      toast.warning(t("bg.toast.generateFirst"));
       return;
     }
 
@@ -382,7 +426,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       await Promise.all(
         items.map(async (item, index) => {
-          const blob = await fetchImageBlobWithCorsProxy(item, index);
+          const blob = await fetchImageBlobWithCorsProxy(item, index, locale);
 
           const num = String(index + 1).padStart(2, "0");
           const cleanAuthor = item.photographer
@@ -401,15 +445,19 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       // Include commercial attribution & query metadata inside the ZIP archive
       const attributionLines = [
-        "VOKALOOM STUDIO — 15x AESTHETIC BACKGROUND BATCH",
-        `Generated Query: ${resolvedQuery}`,
-        `Vibe Preset: ${selectedVibe}`,
-        `Aspect Ratio: 9:16 Vertical (Instagram Reels / Stories / Posts)`,
+        t("bg.readme.header"),
+        t("bg.readme.query", { query: resolvedQuery }),
+        t("bg.readme.vibe", { vibe: selectedVibe }),
+        t("bg.readme.aspect"),
         "",
-        "PHOTOGRAPHER ATTRIBUTIONS (Pexels / Unsplash Commercial Safe):",
-        ...items.map(
-          (item, i) =>
-            `${String(i + 1).padStart(2, "0")}. "${item.title}" — Photo by ${item.photographer} (${item.source.toUpperCase()})`
+        t("bg.readme.attributionsHeader"),
+        ...items.map((item, i) =>
+          t("bg.readme.itemLine", {
+            num: String(i + 1).padStart(2, "0"),
+            title: item.title,
+            photographer: item.photographer,
+            source: item.source.toUpperCase(),
+          })
         ),
       ];
       folder?.file("README-ATTRIBUTION.txt", attributionLines.join("\n"));
@@ -426,10 +474,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success("Downloaded vokaloom-15-backgrounds.zip (15 HD photos)!");
+      toast.success(
+        t("bg.toast.downloadedZip", { count: items.length })
+      );
     } catch (error) {
       console.error("ZIP compression error:", error);
-      toast.error("Failed to package ZIP archive. Try individual downloads.");
+      toast.error(t("bg.toast.zipError"));
     } finally {
       setTimeout(() => {
         setIsZipping(false);
@@ -443,46 +493,46 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       {/* Left Inspector (4 Columns): Compact, Dense Ergonomic Controls */}
       <aside className="glass-panel overflow-hidden rounded-xl divide-y divide-white/[0.06] lg:sticky lg:top-20 lg:col-span-4">
         {/* Inspector Title Bar */}
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-violet-400" />
-            <h2 className="text-xs font-semibold tracking-tight text-white">
-              Aesthetic Inspector
+        <div className="flex items-center justify-between gap-2 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="size-3.5 shrink-0 text-violet-400" />
+            <h2 className="truncate text-xs font-semibold tracking-tight text-white">
+              {t("bg.inspectorTitle")}
             </h2>
           </div>
           <Badge
             variant="outline"
-            className="border-white/10 bg-white/[0.04] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300"
+            className="shrink-0 border-white/10 bg-white/[0.04] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300"
           >
-            15x · 9:16 HD
+            {t("bg.inspectorBadge")}
           </Badge>
         </div>
 
         {/* Section 1: Vibe Presets */}
         <div className="space-y-2 p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              Vibe Presets
+              {t("bg.vibePresets")}
             </span>
-            <span className="font-mono text-[10px] text-zinc-500">
-              {selectedVibe}
+            <span className="truncate font-mono text-[10px] text-zinc-500">
+              {t(selectedVibeMeta.labelKey)}
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {VIBE_PRESETS.map((vibe) => {
-              const isActive = selectedVibe === vibe;
+              const isActive = selectedVibe === vibe.value;
               return (
                 <button
-                  key={vibe}
+                  key={vibe.value}
                   type="button"
-                  onClick={() => handleVibeSelect(vibe)}
+                  onClick={() => handleVibeSelect(vibe.value)}
                   className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
                     isActive
                       ? "border-violet-500/60 bg-violet-500/20 text-white shadow-xs"
                       : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:bg-white/[0.05] hover:text-zinc-200"
                   }`}
                 >
-                  {vibe}
+                  {t(vibe.labelKey)}
                 </button>
               );
             })}
@@ -496,7 +546,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               htmlFor="aesthetic-search-input"
               className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400"
             >
-              Scene / Keyword Modifier
+              {t("bg.sceneLabel")}
             </label>
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
@@ -510,14 +560,15 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     handleGenerateClick();
                   }
                 }}
-                placeholder="Mediterranean balcony morning sunlight..."
+                placeholder={t("bg.searchPlaceholder")}
                 className="h-8 border-white/[0.08] bg-zinc-950/80 pl-8 pr-7 text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
               />
               {query && (
                 <button
                   type="button"
                   onClick={() => setQuery("")}
-                  aria-label="Clear search query"
+                  aria-label={t("bg.clearSearchAria")}
+                  title={t("bg.clearSearchAria")}
                   className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-zinc-500 hover:text-zinc-200"
                 >
                   <X className="size-3" />
@@ -526,20 +577,20 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
               onClick={handleGenerateClick}
               disabled={isLoading}
-              className="h-8 bg-violet-600 text-xs font-medium text-white hover:bg-violet-500"
+              className="h-8 min-w-0 flex-1 bg-violet-600 text-xs font-medium text-white hover:bg-violet-500"
             >
               {isLoading ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
               ) : (
-                <Sparkles className="mr-1.5 size-3.5" />
+                <Sparkles className="mr-1.5 size-3.5 shrink-0" />
               )}
-              Generate 15 Backgrounds
+              <span className="truncate">{t("bg.generateButton")}</span>
             </Button>
 
             <Button
@@ -548,25 +599,25 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               variant="outline"
               onClick={handleShuffleMore}
               disabled={isLoading}
-              title={`Load 15 more photos (Page #${page + 1})`}
-              className="h-8 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+              title={t("bg.shuffleTitle", { page: page + 1 })}
+              className="h-8 shrink-0 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
             >
-              <Shuffle className="mr-1.5 size-3.5 text-zinc-400" />
-              Shuffle #{page + 1}
+              <Shuffle className="mr-1.5 size-3.5 shrink-0 text-zinc-400" />
+              <span>{t("bg.shuffleButton", { page: page + 1 })}</span>
             </Button>
           </div>
         </div>
 
         {/* Section 3: Compact Boss Reference Matcher (Gemini 2.5 Flash Vision) */}
         <div className="space-y-2.5 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Eye className="size-3.5 text-violet-400" />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                Boss Reference Matcher
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Eye className="size-3.5 shrink-0 text-violet-400" />
+              <span className="truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                {t("bg.referenceTitle")}
               </span>
             </div>
-            <span className="rounded border border-white/[0.07] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+            <span className="shrink-0 rounded border border-white/[0.07] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
               Gemini 2.5
             </span>
           </div>
@@ -590,10 +641,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-zinc-200">
-                  Upload reference image
+                  {t("bg.uploadReference")}
                 </p>
                 <p className="text-[10px] text-zinc-500">
-                  JPG, PNG, WEBP · auto-matches 15 photos
+                  {t("bg.uploadReferenceHint")}
                 </p>
               </div>
             </label>
@@ -603,28 +654,27 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={referencePreview}
-                  alt="Boss Reference Preview"
+                  alt={t("bg.referencePreviewAlt")}
                   className="h-full w-full object-cover"
                 />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center justify-between gap-1.5">
                   <span className="truncate text-xs font-medium text-white">
-                    {referenceFileName || "Reference Image"}
+                    {referenceFileName || t("bg.referenceFallbackName")}
                   </span>
                   <button
                     type="button"
                     onClick={handleClearReference}
                     className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-                    title="Remove reference image"
+                    title={t("bg.removeReferenceTitle")}
+                    aria-label={t("bg.removeReferenceTitle")}
                   >
                     <X className="size-3" />
                   </button>
                 </div>
                 <p className="text-[10px] text-zinc-400">
-                  {visionUsed
-                    ? "Gemini 2.5 Vision DNA:"
-                    : "Extracted Search DNA:"}
+                  {visionUsed ? t("bg.visionDna") : t("bg.extractedDna")}
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {extractedTags.slice(0, 4).map((tag) => (
@@ -645,8 +695,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         <div className="space-y-2 bg-zinc-950/40 px-4 py-3">
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
             <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
-            <span className="shrink-0 text-zinc-500">Resolved:</span>
-            <span className="truncate font-medium text-zinc-200" title={resolvedQuery}>
+            <span className="shrink-0 text-zinc-500">
+              {t("bg.resolvedLabel")}
+            </span>
+            <span
+              className="truncate font-medium text-zinc-200"
+              title={resolvedQuery}
+            >
               &ldquo;{resolvedQuery}&rdquo;
             </span>
           </div>
@@ -672,7 +727,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               <h2 className="text-sm font-semibold tracking-tight text-white">
-                Aesthetic Canvas:{" "}
+                {t("bg.canvasTitle")}{" "}
                 <span className="font-mono tabular-nums text-zinc-300">
                   {items.length} / 15
                 </span>
@@ -682,7 +737,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 variant="outline"
                 className="border-white/10 bg-white/[0.05] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300 backdrop-blur-md"
               >
-                Page #{page}
+                {t("bg.pageBadge", { page })}
               </Badge>
 
               <div className="hidden items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[11px] text-zinc-400 sm:inline-flex">
@@ -699,23 +754,23 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               variant="secondary"
               onClick={handleDownloadAllZip}
               disabled={isZipping || items.length === 0}
-              className="h-8 shrink-0 border border-emerald-500/30 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 hover:text-white"
+              className="h-8 max-w-full shrink-0 border border-emerald-500/30 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 hover:text-white"
             >
               {isZipping ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
               ) : (
-                <FolderArchive className="mr-1.5 size-3.5" />
+                <FolderArchive className="mr-1.5 size-3.5 shrink-0" />
               )}
-              Download All (.ZIP)
+              <span className="truncate">{t("bg.downloadZipButton")}</span>
             </Button>
           </div>
 
           {/* Live ZIP Progress Bar */}
           {isZipping && (
             <div className="mt-2.5 space-y-1.5 border-t border-white/[0.06] pt-2.5">
-              <div className="flex items-center justify-between text-[11px] text-zinc-300">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-300">
                 <span>
-                  Packaging 15 vertical HD photos into{" "}
+                  {t("bg.zipPackaging", { count: items.length })}{" "}
                   <code className="text-violet-300">
                     vokaloom-15-backgrounds.zip
                   </code>
@@ -735,7 +790,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-black/40 pt-16 backdrop-blur-[2px]">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/75 px-3.5 py-1.5 text-xs font-medium text-zinc-200 backdrop-blur-md">
                 <Loader2 className="size-3.5 animate-spin text-violet-400" />
-                Curating 15 vertical backgrounds...
+                {t("bg.loadingOverlay")}
               </div>
             </div>
           )}
@@ -760,7 +815,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     #{index + 1} · {item.aspect}
                   </span>
                   <span className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-200 backdrop-blur-md">
-                    {item.source}
+                    {item.source === "curated"
+                      ? t("bg.sourceCurated")
+                      : item.source}
                   </span>
                 </div>
 
@@ -778,7 +835,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     variant="secondary"
                     onClick={() => handleDownloadSingle(item, index)}
                     disabled={downloadingId === item.id}
-                    title={`Download #${index + 1} HD`}
+                    title={t("bg.downloadSingleTitle", { index: index + 1 })}
+                    aria-label={t("bg.downloadSingleAria", {
+                      index: index + 1,
+                      photographer: item.photographer,
+                    })}
                     className="h-8 rounded-full border border-white/15 bg-black/70 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-white hover:text-zinc-950"
                   >
                     {downloadingId === item.id ? (
@@ -786,7 +847,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     ) : (
                       <Download className="mr-1.5 size-3" />
                     )}
-                    HD
+                    {t("bg.hdButton")}
                   </Button>
                 </div>
 
@@ -804,7 +865,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       type="button"
                       onClick={() => handleDownloadSingle(item, index)}
                       disabled={downloadingId === item.id}
-                      aria-label={`Download photo #${index + 1} by ${item.photographer}`}
+                      aria-label={t("bg.downloadSingleAria", {
+                        index: index + 1,
+                        photographer: item.photographer,
+                      })}
+                      title={t("bg.downloadSingleTitle", { index: index + 1 })}
                       className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/60 text-zinc-200 backdrop-blur-md transition-colors hover:bg-white hover:text-zinc-950 sm:hidden"
                     >
                       {downloadingId === item.id ? (

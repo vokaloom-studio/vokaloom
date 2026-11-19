@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
+import { resolveRequestLocale, translate } from "@/lib/i18n";
 
 export const maxDuration = 60;
 
@@ -9,6 +10,7 @@ interface VoiceRequestBody {
   voiceId?: string;
   language?: "es" | "en";
   referenceAudioBase64?: string;
+  locale?: unknown;
 }
 
 function isValidFalKey(val: string | undefined): boolean {
@@ -146,8 +148,12 @@ function extractFalAudioUrl(result: unknown): string | null {
 
 export async function POST(request: Request) {
   const startTime = Date.now();
+  let locale = resolveRequestLocale(request);
   try {
     const body = (await request.json()) as VoiceRequestBody;
+    if (body.locale !== undefined) {
+      locale = resolveRequestLocale(request, body.locale);
+    }
     const text = (body.text || "").trim();
     const voiceId = (body.voiceId || "mateo-es").trim();
     const language = body.language === "en" ? "en" : "es";
@@ -156,8 +162,7 @@ export async function POST(request: Request) {
     if (text.length < 1 || text.length > 1500) {
       return NextResponse.json(
         {
-          error:
-            "Script text must be between 1 and 1,500 characters in length.",
+          error: translate(locale, "api.voice.invalidLength"),
         },
         { status: 400 }
       );
@@ -300,7 +305,7 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({
       audioUrl: synth.dataUri,
-      engine: "Demo Fallback (Add FAL_KEY or GEMINI_API_KEY for Live Neural TTS)",
+      engine: translate(locale, "api.voice.demoFallbackEngine"),
       language,
       durationMs: synth.durationMs,
       isFallback: true,
@@ -308,7 +313,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error in /api/voice:", error);
     return NextResponse.json(
-      { error: "Unable to process voice synthesis request." },
+      { error: translate(locale, "api.voice.processError") },
       { status: 500 }
     );
   }

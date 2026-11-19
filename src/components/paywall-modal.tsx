@@ -22,6 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useLocale } from "@/components/locale-provider";
+import type { TranslationKey } from "@/lib/i18n";
 import {
   getBusinessConfig,
   verifyAndActivateAccessCode,
@@ -36,12 +38,12 @@ export interface PaywallModalProps {
   onQuotaChange?: (state: QuotaState) => void;
 }
 
-const PRO_BENEFITS = [
-  "Unlimited 15-Image Aesthetic Batches (9:16 Vertical HD + ZIP Export)",
-  "Unlimited Boss Reference Image Matching (Gemini 2.5 Flash Vision)",
-  "Unlimited Realistic AI Voiceovers (Spanish & English Neural TTS)",
-  "Unlimited Zero-Shot Custom Voice Cloning (10–20s Audio via MIT F5-TTS)",
-  "100% Commercial & Agency Service-Fulfillment License",
+const PRO_BENEFIT_KEYS: readonly TranslationKey[] = [
+  "paywall.benefit1",
+  "paywall.benefit2",
+  "paywall.benefit3",
+  "paywall.benefit4",
+  "paywall.benefit5",
 ];
 
 export function PaywallModal({
@@ -50,6 +52,7 @@ export function PaywallModal({
   quota,
   onQuotaChange,
 }: PaywallModalProps) {
+  const { locale, t } = useLocale();
   const [accessCode, setAccessCode] = useState<string>("");
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [businessConfig, setBusinessConfig] = useState<BusinessConfig>({
@@ -74,32 +77,30 @@ export function PaywallModal({
 
   const handleOpenCheckout = (url: string, label: string) => {
     window.open(url, "_blank", "noopener,noreferrer");
-    toast.info(`Opened ${label} checkout in a new tab.`);
+    toast.info(t("paywall.toast.openedCheckout", { label }));
   };
 
   const handleActivateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!accessCode.trim()) {
-      toast.error("Please enter your access code.");
+      toast.error(t("paywall.toast.enterCode"));
       return;
     }
 
     setIsVerifying(true);
     try {
-      const res = await verifyAndActivateAccessCode(accessCode);
+      const res = await verifyAndActivateAccessCode(accessCode, locale);
       if (res.success) {
         onQuotaChange?.(res.state);
         setAccessCode("");
         onOpenChange(false);
         toast.success(
           res.role === "operator"
-            ? "Operator Mode Activated! Unlimited generations unlocked."
-            : "Pro Pass Activated! Unlimited generations unlocked."
+            ? t("paywall.toast.operatorActivated")
+            : t("paywall.toast.proActivated")
         );
       } else {
-        toast.error(
-          "Invalid Access Code. Please verify your Pro Pass code or complete checkout above."
-        );
+        toast.error(t("paywall.toast.invalidCode"));
       }
     } finally {
       setIsVerifying(false);
@@ -127,7 +128,7 @@ export function PaywallModal({
                 className="border-violet-500/35 bg-violet-500/15 px-2.5 py-0.5 font-mono text-[11px] font-medium text-violet-200"
               >
                 <Sparkles className="mr-1.5 size-3 text-violet-300" />
-                Vokaloom Pro Pass
+                {t("paywall.badgeTitle")}
               </Badge>
               {quota.isOperator ? (
                 <Badge
@@ -135,26 +136,27 @@ export function PaywallModal({
                   className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[11px] text-emerald-300"
                 >
                   <ShieldCheck className="mr-1 size-3" />
-                  Active
+                  {t("paywall.badgeActive")}
                 </Badge>
               ) : (
                 <Badge
                   variant="outline"
                   className="border-amber-500/30 bg-amber-500/10 font-mono text-[11px] tabular-nums text-amber-300"
                 >
-                  Trial: {quota.creditsRemaining}/{quota.maxTrialCredits} left
+                  {t("paywall.badgeTrial", {
+                    remaining: quota.creditsRemaining,
+                    max: quota.maxTrialCredits,
+                  })}
                 </Badge>
               )}
             </div>
 
             <DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight text-white sm:text-xl">
               <Crown className="size-5 shrink-0 text-violet-400" />
-              Unlimited Aesthetic Batches &amp; AI Voiceovers
+              <span>{t("paywall.title")}</span>
             </DialogTitle>
             <DialogDescription className="text-xs leading-relaxed text-zinc-400">
-              Unlock full agency production speed with unlimited 15-image
-              vertical batches, Gemini Vision aesthetic matching, and neural
-              Spanish &amp; English voice synthesis.
+              {t("paywall.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -163,33 +165,37 @@ export function PaywallModal({
             <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] pb-3.5">
               <div className="space-y-0.5">
                 <span className="block text-xs font-semibold tracking-tight text-white">
-                  All-In-One Fulfillment Pass
+                  {t("paywall.planName")}
                 </span>
                 <span className="block font-mono text-[11px] text-zinc-400">
-                  Commercial &amp; Agency License
+                  {t("paywall.planSubtitle")}
                 </span>
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-right">
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-2xl font-semibold tracking-tight tabular-nums text-white">
                     {businessConfig.priceUsd}
                   </span>
-                  <span className="text-xs text-zinc-400">/ mo</span>
+                  <span className="text-xs text-zinc-400">
+                    {t("paywall.perMonthShort")}
+                  </span>
                 </div>
                 <span className="block font-mono text-[11px] tabular-nums text-zinc-400">
-                  ~{businessConfig.priceCop} · mes
+                  {t("paywall.approxCopPerMonth", {
+                    priceCop: businessConfig.priceCop,
+                  })}
                 </span>
               </div>
             </div>
 
             <ul className="space-y-2.5 pt-3.5">
-              {PRO_BENEFITS.map((benefit) => (
+              {PRO_BENEFIT_KEYS.map((benefitKey) => (
                 <li
-                  key={benefit}
+                  key={benefitKey}
                   className="flex items-start gap-2.5 text-xs text-zinc-200"
                 >
                   <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
-                  <span className="leading-snug">{benefit}</span>
+                  <span className="leading-snug">{t(benefitKey)}</span>
                 </li>
               ))}
             </ul>
@@ -202,15 +208,20 @@ export function PaywallModal({
               onClick={() =>
                 handleOpenCheckout(
                   businessConfig.checkoutUrlCop,
-                  `Wompi / Nequi / PSE (${businessConfig.priceCop})`
+                  t("paywall.checkoutCopLabel", {
+                    priceCop: businessConfig.priceCop,
+                  })
                 )
               }
-              className="h-10 w-full bg-violet-600 text-xs font-semibold tracking-tight text-white shadow-lg shadow-violet-600/20 hover:bg-violet-500 sm:text-sm"
+              className="h-auto min-h-10 w-full whitespace-normal bg-violet-600 px-3 py-2 text-center text-xs font-semibold tracking-tight text-white shadow-lg shadow-violet-600/20 hover:bg-violet-500 sm:text-sm"
             >
-              <CreditCard className="mr-2 size-4" />
-              Suscribirse por {businessConfig.priceCop} / mes (Nequi / PSE /
-              Wompi)
-              <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
+              <CreditCard className="mr-2 size-4 shrink-0" />
+              <span>
+                {t("paywall.checkoutCopButton", {
+                  priceCop: businessConfig.priceCop,
+                })}
+              </span>
+              <ExternalLink className="ml-1.5 size-3.5 shrink-0 opacity-80" />
             </Button>
 
             <Button
@@ -219,22 +230,28 @@ export function PaywallModal({
               onClick={() =>
                 handleOpenCheckout(
                   businessConfig.checkoutUrlUsd,
-                  `Stripe Global (${businessConfig.priceUsd})`
+                  t("paywall.checkoutUsdLabel", {
+                    priceUsd: businessConfig.priceUsd,
+                  })
                 )
               }
-              className="h-10 w-full border-white/[0.1] bg-white/[0.04] text-xs font-semibold tracking-tight text-zinc-100 hover:border-white/20 hover:bg-white/[0.08] hover:text-white sm:text-sm"
+              className="h-auto min-h-10 w-full whitespace-normal border-white/[0.1] bg-white/[0.04] px-3 py-2 text-center text-xs font-semibold tracking-tight text-zinc-100 hover:border-white/20 hover:bg-white/[0.08] hover:text-white sm:text-sm"
             >
-              <CreditCard className="mr-2 size-4 text-violet-400" />
-              Subscribe for {businessConfig.priceUsd} / month (Stripe Global)
-              <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
+              <CreditCard className="mr-2 size-4 shrink-0 text-violet-400" />
+              <span>
+                {t("paywall.checkoutUsdButton", {
+                  priceUsd: businessConfig.priceUsd,
+                })}
+              </span>
+              <ExternalLink className="ml-1.5 size-3.5 shrink-0 opacity-80" />
             </Button>
           </div>
 
           {/* Translucent Divider */}
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.07]" />
-            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              Or Instant Key Activation
+            <span className="text-center font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              {t("paywall.dividerLabel")}
             </span>
             <div className="h-px flex-1 bg-white/[0.07]" />
           </div>
@@ -245,17 +262,17 @@ export function PaywallModal({
               htmlFor="paywall-access-code"
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
             >
-              <KeyRound className="size-3.5 text-violet-400" />
-              Have a Pro Pass or Client Access Code?
+              <KeyRound className="size-3.5 shrink-0 text-violet-400" />
+              <span>{t("paywall.codeLabel")}</span>
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <Input
                 id="paywall-access-code"
                 value={accessCode}
                 onChange={(e) => setAccessCode(e.target.value)}
-                placeholder="Enter your access code..."
+                placeholder={t("paywall.codePlaceholder")}
                 disabled={isVerifying}
-                className="h-9 border-white/[0.08] bg-zinc-950/75 font-mono text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
+                className="h-9 min-w-0 flex-1 border-white/[0.08] bg-zinc-950/75 font-mono text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
               />
               <Button
                 type="submit"
@@ -266,7 +283,7 @@ export function PaywallModal({
                 {isVerifying ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  "Unlock Unlimited"
+                  t("paywall.unlockButton")
                 )}
               </Button>
             </div>
