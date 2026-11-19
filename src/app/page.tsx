@@ -179,11 +179,11 @@ export default function VokaloomStudioPage() {
                 <TabsTrigger
                   value="backgrounds"
                   data-testid="tab-backgrounds"
-                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
+                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#9CA3B2] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
                 >
                   <ImageIcon
                     className={`size-4 shrink-0 transition-colors duration-150 lg:size-3.5 ${
-                      isBackgroundsActive ? "text-amber-400" : "text-zinc-500"
+                      isBackgroundsActive ? "text-amber-400" : "text-[#9CA3B2]"
                     }`}
                   />
                   <span className="whitespace-normal text-center lg:whitespace-nowrap">
@@ -193,11 +193,11 @@ export default function VokaloomStudioPage() {
                 <TabsTrigger
                   value="voice"
                   data-testid="tab-voice"
-                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#8B8D98] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
+                  className="studio-segment flex h-auto min-w-0 flex-col items-center justify-center gap-0.5 rounded-[5px] border border-transparent px-2 py-1.5 text-[11px] leading-tight font-medium text-[#9CA3B2] hover:text-zinc-200 data-active:border-white/[0.12] data-active:bg-[#13151D] data-active:text-[#F4F4F5] dark:data-active:border-white/[0.12] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:flex-row lg:gap-1.5 lg:px-3.5 lg:py-1 lg:text-xs"
                 >
                   <Mic
                     className={`size-4 shrink-0 transition-colors duration-150 lg:size-3.5 ${
-                      isVoiceActive ? "text-amber-400" : "text-zinc-500"
+                      isVoiceActive ? "text-amber-400" : "text-[#9CA3B2]"
                     }`}
                   />
                   <span className="whitespace-normal text-center lg:whitespace-nowrap">
@@ -313,8 +313,8 @@ export default function VokaloomStudioPage() {
       {/* Minimal Bottom Studio Status Rail (40px tall, cleared above mobile bottom dock) */}
       <footer className="mb-[68px] border-t border-white/[0.08] bg-[#0E1016] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] lg:mb-0">
         <div className="mx-auto flex h-10 max-w-7xl flex-nowrap items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2 font-mono text-[10px] tracking-wide text-[#8B8D98] sm:text-[11px]">
-            <span className="size-1.5 shrink-0 rounded-full bg-zinc-500" />
+          <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] tracking-wide text-[#9CA3B2]">
+            <span className="size-1.5 shrink-0 rounded-full bg-[#8E95A5]" />
             <span className="truncate">{t("page.footerNotice")}</span>
           </div>
 

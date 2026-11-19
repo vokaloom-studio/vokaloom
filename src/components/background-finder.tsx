@@ -1271,7 +1271,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           </h2>
 
           <div className="space-y-1.5">
-            <span className="block font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+            <span className="block font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]">
               {t("bg.vibePresets")}
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -1286,7 +1286,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors md:min-h-0 md:px-2 md:py-1 md:text-[11px] ${
                       isActive
                         ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                        : "border-white/[0.08] bg-[#13151D]/70 text-[#8B8D98] hover:border-white/[0.15] hover:text-zinc-200"
+                        : "border-white/[0.08] bg-[#13151D]/70 text-[#9CA3B2] hover:border-white/[0.15] hover:text-[#F4F4F5]"
                     }`}
                   >
                     {t(vibe.labelKey)}
@@ -1299,12 +1299,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           <div className="space-y-1.5">
             <label
               htmlFor="aesthetic-search-input"
-              className="block font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]"
+              className="block font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]"
             >
               {t("bg.sceneLabel")}
             </label>
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8B8D98] md:left-2.5 md:size-3.5" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9CA3B2] md:left-2.5 md:size-3.5" />
               <Input
                 id="aesthetic-search-input"
                 data-testid="input-scene-query"
@@ -1317,7 +1317,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   }
                 }}
                 placeholder={t("bg.searchPlaceholder")}
-                className="h-11 border-white/[0.08] bg-[#050507] pl-9 pr-10 text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:h-8 md:pl-8 md:pr-7 md:text-xs"
+                className="h-11 border-white/[0.08] bg-[#050507] pl-9 pr-10 text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-[#8E95A5] focus-visible:border-ring md:h-8 md:pl-8 md:pr-7 md:text-xs"
               />
               {query && (
                 <button
@@ -1325,7 +1325,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   onClick={() => setQuery("")}
                   aria-label={t("bg.clearSearchAria")}
                   title={t("bg.clearSearchAria")}
-                  className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded text-[#8B8D98] hover:text-[#F4F4F5] md:right-2 md:size-5"
+                  className="absolute top-1/2 right-1.5 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded text-[#9CA3B2] hover:text-[#F4F4F5] md:right-2 md:size-5"
                 >
                   <X className="size-3.5 md:size-3" />
                 </button>
@@ -1365,7 +1365,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               })}
               className="h-11 shrink-0 border-white/[0.1] bg-[#13151D] px-3 text-xs font-medium text-zinc-200 hover:border-white/[0.2] hover:bg-[#191c26] md:h-8.5 md:px-2.5"
             >
-              <Shuffle className="mr-1.5 size-3.5 shrink-0 text-[#8B8D98]" />
+              <Shuffle className="mr-1.5 size-3.5 shrink-0 text-[#9CA3B2]" />
               <span>{t("bg.shuffleButton", { page: page + 1 })}</span>
             </Button>
           </div>
@@ -1383,7 +1383,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               <span className="font-medium text-zinc-200">
                 {t("bg.model.title")}
               </span>
-              <span className="font-mono text-[10px] text-emerald-400">
+              <span className="font-mono text-[11px] text-emerald-400">
                 9:16
               </span>
             </div>
@@ -1425,7 +1425,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <button
                   type="button"
                   onClick={handleClearMyModel}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#9CA3B2] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
                   title={t("bg.model.removeTitle")}
                   aria-label={t("bg.model.removeTitle")}
                 >
@@ -1476,14 +1476,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   <span className="block truncate text-xs font-medium text-[#F4F4F5]">
                     {referenceFileName || t("bg.referenceFallbackName")}
                   </span>
-                  <span className="block text-[10px] text-[#8B8D98]">
+                  <span className="block text-[11px] text-[#9CA3B2]">
                     {visionUsed ? t("bg.visionDna") : t("bg.extractedDna")}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={handleClearReference}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded text-[#9CA3B2] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5] md:size-6"
                   title={t("bg.removeReferenceTitle")}
                   aria-label={t("bg.removeReferenceTitle")}
                 >
@@ -1495,7 +1495,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         </div>
 
         {/* Section 3: Concise Active Query Readout */}
-        <div className="flex items-center gap-1.5 bg-[#050507]/80 px-4 py-2.5 text-[11px] text-[#8B8D98]">
+        <div className="flex items-center gap-1.5 bg-[#050507]/80 px-4 py-2.5 text-[11px] text-[#9CA3B2]">
           <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
           <span className="shrink-0">{t("bg.resolvedLabel")}</span>
           <span
@@ -1517,20 +1517,20 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 {t("bg.canvasTitle")}{" "}
                 <span
                   data-testid="canvas-count"
-                  className="font-mono tabular-nums text-[#8B8D98]"
+                  className="font-mono tabular-nums text-[#9CA3B2]"
                 >
                   {items.length}/{batchSize}
                 </span>
               </h2>
 
-              <span className="rounded border border-white/[0.08] bg-[#13151D] px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-zinc-300">
+              <span className="rounded border border-white/[0.08] bg-[#13151D] px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-zinc-300">
                 {t("bg.pageBadge", { page })}
               </span>
 
               {/* Single Clean Batch Source Indicator */}
               <span
                 data-testid="badge-batch-source"
-                className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] font-medium tracking-wide ${
+                className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px] font-medium tracking-wide ${
                   isLiveStock
                     ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
                     : "border-white/[0.08] bg-[#13151D] text-zinc-300"
@@ -1552,7 +1552,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               <div
                 role="group"
                 aria-label={t("bg.batch.label")}
-                className="studio-well inline-flex h-8 items-center rounded p-0.5 font-mono text-[11px] md:h-6 md:text-[10px]"
+                className="studio-well inline-flex h-8 items-center rounded p-0.5 font-mono text-[11px] md:h-6"
               >
                 <button
                   type="button"
@@ -1563,7 +1563,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   className={`inline-flex h-full items-center rounded-[3px] px-2 font-medium transition-colors md:px-1.5 ${
                     batchSize === 5
                       ? "bg-[#F4F4F5] text-[#09090B]"
-                      : "text-[#8B8D98] hover:text-[#F4F4F5]"
+                      : "text-[#9CA3B2] hover:text-[#F4F4F5]"
                   }`}
                 >
                   {t("bg.batch.short5")}
@@ -1577,7 +1577,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   className={`inline-flex h-full items-center rounded-[3px] px-2 font-medium transition-colors md:px-1.5 ${
                     batchSize === 15
                       ? "bg-[#F4F4F5] text-[#09090B]"
-                      : "text-[#8B8D98] hover:text-[#F4F4F5]"
+                      : "text-[#9CA3B2] hover:text-[#F4F4F5]"
                   }`}
                 >
                   {t("bg.batch.short15")}
@@ -1714,7 +1714,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   )}
 
                   {/* Calm Top Corner Index + Selection Toggle */}
-                  <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-1 font-mono text-[10px]">
+                  <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-1 font-mono text-[11px]">
                     <span className="rounded bg-black/75 px-1.5 py-0.5 tabular-nums text-zinc-100">
                       #{index + 1}
                     </span>
@@ -1810,7 +1810,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       {item.title}
                     </p>
                     <div className="mt-1 flex items-center justify-between gap-1.5">
-                      <span className="flex min-w-0 items-center gap-1 text-[10px] text-zinc-400">
+                      <span className="flex min-w-0 items-center gap-1 text-[11px] text-[#C4CAD6]">
                         <Camera className="size-3 shrink-0" />
                         <span className="truncate">{item.photographer}</span>
                       </span>
@@ -1824,7 +1824,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                             photographer: item.photographer,
                           })}
                           title={t("bg.placeModelTitle", { index: index + 1 })}
-                          className="studio-amber-cta inline-flex h-8 items-center gap-1 rounded border border-amber-400/60 bg-amber-500 px-2.5 text-[10px] font-semibold text-zinc-950 hover:bg-amber-400"
+                          className="studio-amber-cta inline-flex h-8 items-center gap-1 rounded border border-amber-400/60 bg-amber-500 px-2.5 text-[11px] font-semibold text-zinc-950 hover:bg-amber-400"
                         >
                           {swappingItemId === item.id ? (
                             <Loader2 className="size-3 animate-spin" />
@@ -1875,13 +1875,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <span>{t("bg.swapModal.title")}</span>
               </DialogTitle>
               {resolvedModalEngine && (
-                <span className="rounded border border-white/[0.1] bg-[#13151D] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                <span className="rounded border border-white/[0.1] bg-[#13151D] px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">
                   {resolvedModalEngine}
                 </span>
               )}
             </div>
             {swapTargetItem?.title && (
-              <DialogDescription className="text-xs text-[#8B8D98]">
+              <DialogDescription className="text-xs text-[#9CA3B2]">
                 {swapTargetItem.title}
               </DialogDescription>
             )}
@@ -1924,12 +1924,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   </div>
 
                   {comparePosition > 14 && (
-                    <span className="pointer-events-none absolute top-2.5 left-2.5 z-10 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-200">
+                    <span className="pointer-events-none absolute top-2.5 left-2.5 z-10 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wider text-zinc-200">
                       {t("bg.swapModal.beforeLabel")}
                     </span>
                   )}
                   {comparePosition < 86 && (
-                    <span className="pointer-events-none absolute top-2.5 right-2.5 z-10 rounded border border-emerald-400/40 bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+                    <span className="pointer-events-none absolute top-2.5 right-2.5 z-10 rounded border border-emerald-400/40 bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wider text-emerald-300">
                       {t("bg.swapModal.afterLabel")}
                     </span>
                   )}

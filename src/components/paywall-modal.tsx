@@ -146,7 +146,7 @@ export function PaywallModal({
           <DialogHeader className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 pr-10 font-mono text-[11px] md:pr-8">
               <span className="text-amber-400">{t("paywall.badgeTitle")}</span>
-              <span className="text-zinc-600">·</span>
+              <span className="text-[#9CA3B2]">·</span>
               {proActive ? (
                 <span className="inline-flex items-center gap-1 text-emerald-400">
                   <ShieldCheck className="size-3" />
@@ -209,13 +209,13 @@ export function PaywallModal({
               className={`studio-segment flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-center md:min-h-0 ${
                 currency === "cop"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
-                  : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
+                  : "border border-transparent text-[#9CA3B2] hover:text-zinc-200"
               }`}
             >
-              <span className="truncate font-mono text-[11px] font-semibold leading-tight">
+              <span className="truncate font-mono text-xs font-semibold leading-tight">
                 {t("paywall.currencyPrimary.cop")}
               </span>
-              <span className="truncate font-mono text-[9.5px] leading-tight opacity-75">
+              <span className="truncate font-mono text-[11px] leading-tight opacity-85">
                 {t("paywall.currencyNetwork.cop")}
               </span>
             </button>
@@ -227,13 +227,13 @@ export function PaywallModal({
               className={`studio-segment flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-center md:min-h-0 ${
                 currency === "usd"
                   ? "border border-white/[0.12] bg-[#13151D] text-[#F4F4F5]"
-                  : "border border-transparent text-[#8B8D98] hover:text-zinc-200"
+                  : "border border-transparent text-[#9CA3B2] hover:text-zinc-200"
               }`}
             >
-              <span className="truncate font-mono text-[11px] font-semibold leading-tight">
+              <span className="truncate font-mono text-xs font-semibold leading-tight">
                 {t("paywall.currencyPrimary.usd")}
               </span>
-              <span className="truncate font-mono text-[9.5px] leading-tight opacity-75">
+              <span className="truncate font-mono text-[11px] leading-tight opacity-85">
                 {t("paywall.currencyNetwork.usd")}
               </span>
             </button>
@@ -254,7 +254,7 @@ export function PaywallModal({
                   ? businessConfig.priceCop
                   : businessConfig.priceUsd}
               </span>
-              <span className="text-xs text-[#8B8D98]">
+              <span className="text-xs text-[#9CA3B2]">
                 {t("paywall.perMonthShort")}
               </span>
             </div>
@@ -305,7 +305,7 @@ export function PaywallModal({
                   secondaryCheckout.fallbackUrl
                 )
               }
-              className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#8B8D98] transition-colors hover:bg-white/[0.04] hover:text-zinc-200 md:h-8"
+              className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#9CA3B2] transition-colors hover:bg-white/[0.04] hover:text-zinc-200 md:h-8"
             >
               <span className="truncate">
                 {currency === "cop"
@@ -318,7 +318,7 @@ export function PaywallModal({
 
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.08]" />
-            <span className="text-center font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+            <span className="text-center font-mono text-[11px] font-medium uppercase tracking-widest text-[#9CA3B2]">
               {t("paywall.dividerLabel")}
             </span>
             <div className="h-px flex-1 bg-white/[0.08]" />
@@ -346,7 +346,7 @@ export function PaywallModal({
                   }}
                   placeholder={t("paywall.codePlaceholder")}
                   disabled={isVerifying}
-                  className={`h-11 w-full bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 md:h-9 md:text-xs ${
+                  className={`h-11 w-full bg-[#050507] font-mono text-base text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-[#8E95A5] md:h-9 md:text-xs ${
                     codeError
                       ? "border-destructive/85 focus-visible:border-destructive focus-visible:ring-destructive/30"
                       : "border-white/[0.08] focus-visible:border-ring"

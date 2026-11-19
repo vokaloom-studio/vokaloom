@@ -176,7 +176,7 @@
 }
 
 .studio-toast [data-description] {
-  color: #8b8d98;
+  color: #9ca3b2;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -283,7 +283,7 @@
   --secondary: var(--surface-elevated);
   --secondary-foreground: #E4E4E7;
   --muted: var(--surface-elevated);
-  --muted-foreground: #8B8D98;
+  --muted-foreground: #9CA3B2;
   --accent: #181B25;
   --accent-foreground: #F4F4F5;
   --destructive: oklch(0.64 0.21 25);

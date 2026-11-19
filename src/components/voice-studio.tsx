@@ -758,7 +758,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         {/* Script Templates & Textarea */}
         <div className="space-y-4 p-4">
           <div className="space-y-1.5">
-            <span className="block font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+            <span className="block font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]">
               {t("voice.templatesLabel")}
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -773,7 +773,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors md:min-h-0 md:py-1 md:text-[11px] ${
                       isSelected
                         ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                        : "border-white/[0.08] bg-[#13151D]/70 text-[#8B8D98] hover:border-white/[0.15] hover:text-zinc-200"
+                        : "border-white/[0.08] bg-[#13151D]/70 text-[#9CA3B2] hover:border-white/[0.15] hover:text-zinc-200"
                     }`}
                   >
                     {label}
@@ -787,13 +787,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label
                 htmlFor="voice-script-textarea"
-                className="font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]"
+                className="font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]"
               >
                 {t("voice.scriptLabel")}
               </label>
               <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
                 {estimatedReadSec > 0 && (
-                  <span className="text-[#8B8D98]">
+                  <span className="text-[#9CA3B2]">
                     {t("voice.readTime", { seconds: estimatedReadSec })}
                   </span>
                 )}
@@ -801,7 +801,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   className={
                     text.length > 1400
                       ? "font-semibold text-amber-400"
-                      : "text-[#8B8D98]"
+                      : "text-[#9CA3B2]"
                   }
                 >
                   {t("voice.charCount", { count: text.length, max: 1500 })}
@@ -815,7 +815,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               onChange={(e) => setText(e.target.value.slice(0, 1500))}
               rows={5}
               placeholder={t("voice.scriptPlaceholder")}
-              className="min-h-36 resize-y border-white/[0.08] bg-[#050507] text-base leading-relaxed text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-zinc-600 focus-visible:border-ring md:text-sm"
+              className="min-h-36 resize-y border-white/[0.08] bg-[#050507] text-base leading-relaxed text-[#F4F4F5] shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] placeholder:text-[#8E95A5] focus-visible:border-ring md:text-sm"
             />
           </div>
         </div>
@@ -828,7 +828,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 cloneMode && referenceAudioBase64 ? "opacity-45" : ""
               }`}
             >
-              <label className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+              <label className="block truncate font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]">
                 {t("voice.presetLabel")}
               </label>
               <Select
@@ -860,14 +860,14 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 </SelectContent>
               </Select>
               {cloneMode && referenceAudioBase64 && (
-                <p className="font-mono text-[10px] leading-snug text-amber-300/90">
+                <p className="font-mono text-[11px] leading-snug text-amber-300/95">
                   {t("voice.presetOverriddenNote")}
                 </p>
               )}
             </div>
 
             <div className="min-w-0 space-y-1.5">
-              <span className="block truncate font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+              <span className="block truncate font-mono text-[11px] font-medium uppercase tracking-wider text-[#9CA3B2]">
                 {t("voice.cloneSectionLabel")}
               </span>
               <button
@@ -884,7 +884,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 className={`studio-segment flex h-11 w-full items-center justify-between gap-2 rounded-md border px-3 text-sm font-medium md:h-9 md:text-xs ${
                   cloneMode
                     ? "border-white/[0.14] bg-[#13151D] text-[#F4F4F5]"
-                    : "border-white/[0.08] bg-[#050507] text-[#8B8D98] hover:border-white/[0.14] hover:text-zinc-200"
+                    : "border-white/[0.08] bg-[#050507] text-[#9CA3B2] hover:border-white/[0.14] hover:text-zinc-200"
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-2">
@@ -894,10 +894,10 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   </span>
                 </span>
                 <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                  className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-wide ${
                     cloneMode
                       ? "bg-[#F4F4F5] text-[#09090B]"
-                      : "bg-zinc-800/90 text-[#8B8D98]"
+                      : "bg-[#13151D] text-[#9CA3B2] ring-1 ring-white/[0.08]"
                   }`}
                 >
                   {cloneMode ? t("voice.toggleOn") : t("voice.toggleOff")}
@@ -936,13 +936,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 >
                   <Upload
                     className={`size-4 ${
-                      missingCloneHighlight ? "text-amber-400" : "text-[#8B8D98]"
+                      missingCloneHighlight ? "text-amber-400" : "text-[#9CA3B2]"
                     }`}
                   />
                   <p className="text-xs font-medium text-zinc-200">
                     {t("voice.dropzoneTitle")}
                   </p>
-                  <p className="font-mono text-[10px] leading-relaxed text-[#8B8D98]">
+                  <p className="font-mono text-[11px] leading-relaxed text-[#9CA3B2]">
                     {t("voice.dropzoneSubtitle")}
                   </p>
                   {missingCloneHighlight && (
@@ -980,7 +980,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         {referenceAudioName}
                       </p>
                       <p
-                        className={`truncate text-[10px] ${
+                        className={`truncate text-[11px] ${
                           isDraggingAudio ? "text-amber-300" : "text-emerald-400"
                         }`}
                       >
@@ -995,7 +995,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     onClick={handleClearAudioSample}
                     aria-label={t("voice.removeAudioAria")}
                     title={t("voice.removeAudioAria")}
-                    className="size-8 shrink-0 text-zinc-400 hover:bg-[#13151D] hover:text-[#F4F4F5] md:size-7"
+                    className="size-8 shrink-0 text-[#9CA3B2] hover:bg-[#13151D] hover:text-[#F4F4F5] md:size-7"
                   >
                     <X className="size-3.5" />
                   </Button>
@@ -1046,7 +1046,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               <span>{t("voice.outputTitle")}</span>
             </h2>
             {activeOutput && (
-              <span className="rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
+              <span className="rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-wide text-emerald-400">
                 {activeOutput.isClone ? "MIT" : "Apache-2.0"}
               </span>
             )}
@@ -1065,7 +1065,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         })
                       : selectedPreset.shortName}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-amber-300">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-wide text-amber-300">
                     <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />
                     {t("voice.synthesizingWaveformStatus")}
                   </span>
@@ -1102,7 +1102,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     {getDisplayVoiceLabel(activeOutput)}
                   </span>
                   <span
-                    className="min-w-0 max-w-full truncate font-mono text-[10px] text-[#8B8D98]"
+                    className="min-w-0 max-w-full truncate font-mono text-[11px] text-[#9CA3B2]"
                     title={getDisplayEngine(activeOutput)}
                   >
                     {getDisplayEngine(activeOutput)}
@@ -1193,7 +1193,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         onClick={() => handleSkipSeconds(-5)}
                         aria-label={t("voice.skipBackAria")}
                         title={t("voice.skipBackAria")}
-                        className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2 md:text-[10px]"
+                        className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2"
                       >
                         <RotateCcw className="size-3.5 md:size-3" />
                         <span>{t("voice.skipBackLabel")}</span>
@@ -1224,7 +1224,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         onClick={() => handleSkipSeconds(5)}
                         aria-label={t("voice.skipForwardAria")}
                         title={t("voice.skipForwardAria")}
-                        className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2 md:text-[10px]"
+                        className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded border border-white/[0.08] bg-[#13151D] px-2.5 font-mono text-[11px] font-medium tabular-nums text-zinc-300 transition-colors hover:border-white/[0.18] hover:text-[#F4F4F5] md:h-7 md:px-2"
                       >
                         <span>{t("voice.skipForwardLabel")}</span>
                         <RotateCw className="size-3.5 md:size-3" />
@@ -1248,7 +1248,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                             ""
                           ),
                         })}
-                        className={`inline-flex h-9.5 shrink-0 items-center justify-center rounded border px-2.5 font-mono text-[11px] font-semibold tabular-nums transition-colors md:h-7 md:px-2 md:text-[10px] ${
+                        className={`inline-flex h-9.5 shrink-0 items-center justify-center rounded border px-2.5 font-mono text-[11px] font-semibold tabular-nums transition-colors md:h-7 md:px-2 ${
                           playbackSpeed !== 1.0
                             ? "border-amber-500/45 bg-amber-500/15 text-amber-300"
                             : "border-white/[0.08] bg-[#13151D] text-zinc-200 hover:border-white/[0.18]"
@@ -1370,7 +1370,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   <p className="text-xs font-medium text-zinc-300">
                     {t("voice.emptyTitle")}
                   </p>
-                  <p className="max-w-[260px] text-[11px] leading-snug text-[#8B8D98]">
+                  <p className="max-w-[260px] text-[11px] leading-snug text-[#9CA3B2]">
                     {t("voice.emptyHelper")}
                   </p>
                 </div>
@@ -1386,11 +1386,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         >
           <div className="flex items-center justify-between gap-2 px-4 py-2.5">
             <h3 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
-              <History className="size-3.5 shrink-0 text-[#8B8D98]" />
+              <History className="size-3.5 shrink-0 text-[#9CA3B2]" />
               <span>{t("voice.historyTitle")}</span>
               <span
                 data-testid="voice-history-count"
-                className="font-mono text-[11px] font-normal tabular-nums text-[#8B8D98]"
+                className="font-mono text-[11px] font-normal tabular-nums text-[#9CA3B2]"
               >
                 ({history.length}/10)
               </span>
@@ -1402,7 +1402,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 variant="ghost"
                 size="xs"
                 onClick={handleClearHistory}
-                className="h-8 px-2.5 text-[11px] text-[#8B8D98] hover:bg-[#13151D] hover:text-[#F4F4F5] md:h-6 md:px-2"
+                className="h-8 px-2.5 text-[11px] text-[#9CA3B2] hover:bg-[#13151D] hover:text-[#F4F4F5] md:h-6 md:px-2"
               >
                 <Trash2 className="mr-1 size-3" />
                 {t("voice.clearHistory")}
@@ -1412,7 +1412,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
           <div className="p-4">
             {history.length === 0 ? (
-              <p className="py-1 text-xs text-[#8B8D98]">
+              <p className="py-1 text-xs text-[#9CA3B2]">
                 {t("voice.historyEmpty")}
               </p>
             ) : (
@@ -1437,7 +1437,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                             {getDisplayVoiceLabel(item)}
                           </span>
                           <span
-                            className={`shrink-0 rounded border px-1.5 py-px font-mono text-[9px] font-medium uppercase tracking-wider ${
+                            className={`shrink-0 rounded border px-1.5 py-px font-mono text-[11px] font-medium uppercase tracking-wider ${
                               item.isClone
                                 ? "border-violet-500/35 bg-violet-500/10 text-violet-300"
                                 : "border-white/[0.08] bg-[#13151D] text-zinc-400"
@@ -1447,11 +1447,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                               ? t("voice.historyPillClone")
                               : t("voice.historyPillPreset")}
                           </span>
-                          <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#8B8D98]">
+                          <span className="shrink-0 font-mono text-[11px] tabular-nums text-[#9CA3B2]">
                             {getDisplayTimestamp(item)} · {clipDurationLabel}
                           </span>
                         </div>
-                        <p className="truncate text-[11px] text-[#8B8D98]">
+                        <p className="truncate text-[11px] text-[#9CA3B2]">
                           {item.text}
                         </p>
                       </div>
@@ -1483,8 +1483,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                           </Button>
                         </div>
                       ) : (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.07] bg-[#0B0C10] px-2 py-1 font-mono text-[10px] text-[#8B8D98]">
-                          <Clock className="size-3 shrink-0 text-zinc-500" />
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.07] bg-[#0E1016] px-2 py-1 font-mono text-[11px] text-[#9CA3B2]">
+                          <Clock className="size-3 shrink-0 text-[#9CA3B2]" />
                           <span>{t("voice.historyAudioExpired")}</span>
                         </span>
                       )}

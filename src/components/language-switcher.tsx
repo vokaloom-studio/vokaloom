@@ -26,7 +26,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           "studio-segment inline-flex h-full min-w-6.5 items-center justify-center rounded-[4px] border px-1.5 font-medium tracking-tight md:min-w-0",
           locale === "en"
             ? "border-white/[0.11] bg-[#13151D] text-[#F4F4F5]"
-            : "border-transparent text-[#8B8D98] hover:text-zinc-200"
+            : "border-transparent text-[#9CA3B2] hover:text-zinc-200"
         )}
       >
         EN
@@ -41,7 +41,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           "studio-segment inline-flex h-full min-w-6.5 items-center justify-center rounded-[4px] border px-1.5 font-medium tracking-tight md:min-w-0",
           locale === "es"
             ? "border-white/[0.11] bg-[#13151D] text-[#F4F4F5]"
-            : "border-transparent text-[#8B8D98] hover:text-zinc-200"
+            : "border-transparent text-[#9CA3B2] hover:text-zinc-200"
         )}
       >
         ES
