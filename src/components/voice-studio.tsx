@@ -11,13 +11,11 @@ import {
   Play,
   Pause,
   Volume2,
-  ShieldCheck,
   Loader2,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -485,424 +483,412 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         : 0;
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-12">
-      {/* Left Column (7 Cols): Script Editor, Hook Templates, Preset Selector & Zero-Shot Dropzone */}
-      <section className="space-y-5 rounded-xl border border-white/[0.07] bg-zinc-900/40 p-5 backdrop-blur-xl lg:col-span-7">
-        {/* Workstation Panel Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-4">
-          <div className="space-y-1">
-            <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white">
-              <Mic className="size-4 shrink-0 text-violet-400" />
-              {t("voice.configTitle")}
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+      {/* Left Column (7 Cols): Script Editor, Voice Presets & Zero-Shot Clone Uploader */}
+      <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80 lg:col-span-7">
+        {/* Panel Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100 sm:text-sm">
+              <Mic className="size-3.5 shrink-0 text-violet-400" />
+              <span>{t("voice.configTitle")}</span>
             </h2>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-[#8a8a95]">
               {t("voice.configSubtitle")}
             </p>
           </div>
-          <Badge
-            variant="outline"
-            className="shrink-0 border-emerald-500/30 bg-emerald-500/10 font-mono text-[10px] text-emerald-300"
-          >
-            <ShieldCheck className="mr-1 size-3" />
+          <span className="font-mono text-[10px] text-[#8a8a95]">
             {t("voice.licenseBadge")}
-          </Badge>
-        </div>
-
-        {/* Quick Viral Hook Templates */}
-        <div className="space-y-2">
-          <span className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-            {t("voice.templatesLabel")}
           </span>
-          <div className="flex flex-wrap gap-1.5">
-            {SAMPLE_SCRIPTS.map((sample) => {
-              const isSelected = text === sample.text;
-              const label = t(sample.labelKey);
-              return (
-                <button
-                  key={sample.labelKey}
-                  type="button"
-                  onClick={() => handleSampleClick(sample)}
-                  className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    isSelected
-                      ? "border-violet-500/50 bg-violet-500/15 text-violet-100"
-                      : "border-white/[0.07] bg-zinc-950/60 text-zinc-300 hover:border-white/15 hover:bg-zinc-900/80 hover:text-white"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
-        {/* Script Editor Textarea & Live Counter */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label
-              htmlFor="voice-script-textarea"
-              className="text-[11px] font-medium uppercase tracking-wider text-zinc-400"
-            >
-              {t("voice.scriptLabel")}
-            </label>
-            <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
-              {estimatedReadSec > 0 && (
-                <span className="text-zinc-500">
-                  {t("voice.readTime", { seconds: estimatedReadSec })}
-                </span>
-              )}
-              <span
-                className={
-                  text.length > 1400
-                    ? "font-semibold text-amber-400"
-                    : "text-zinc-400"
-                }
-              >
-                {t("voice.charCount", { count: text.length, max: 1500 })}
-              </span>
+        {/* Script Templates & Textarea */}
+        <div className="space-y-4 p-4">
+          <div className="space-y-1.5">
+            <span className="block text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+              {t("voice.templatesLabel")}
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {SAMPLE_SCRIPTS.map((sample) => {
+                const isSelected = text === sample.text;
+                const label = t(sample.labelKey);
+                return (
+                  <button
+                    key={sample.labelKey}
+                    type="button"
+                    onClick={() => handleSampleClick(sample)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      isSelected
+                        ? "border-zinc-500 bg-[#1a1a22] text-zinc-100"
+                        : "border-zinc-800/80 bg-[#131318] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <Textarea
-            id="voice-script-textarea"
-            value={text}
-            onChange={(e) => setText(e.target.value.slice(0, 1500))}
-            rows={5}
-            placeholder={t("voice.scriptPlaceholder")}
-            className="min-h-36 resize-y border-white/[0.08] bg-zinc-950/75 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-500 focus-visible:border-violet-500/60"
-          />
-        </div>
 
-        {/* Neural Voice Preset Selector & Zero-Shot Clone Toggle */}
-        <div className="grid gap-3.5 sm:grid-cols-2">
-          <div className="min-w-0 space-y-1.5">
-            <label className="block truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              {t("voice.presetLabel")}
-            </label>
-            <Select
-              value={selectedVoiceId}
-              onValueChange={(val) => {
-                if (val) setSelectedVoiceId(String(val));
-              }}
-            >
-              <SelectTrigger className="h-9 w-full border-white/[0.08] bg-zinc-950/80 text-xs text-white focus-visible:border-violet-500/60">
-                <SelectValue>
-                  {(val: string | null) => {
-                    const preset =
-                      VOICE_PRESETS.find((v) => v.id === val) ?? selectedPreset;
-                    return `${t(preset.labelKey)} (${t(preset.badgeKey)})`;
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="border-white/10 bg-[#0b0b10] text-zinc-100 backdrop-blur-xl">
-                {VOICE_PRESETS.map((voice) => (
-                  <SelectItem
-                    key={voice.id}
-                    value={voice.id}
-                    className="text-xs"
-                  >
-                    {t(voice.labelKey)} ({t(voice.badgeKey)})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="min-w-0 space-y-1.5">
-            <span className="block truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              {t("voice.cloneSectionLabel")}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCloneMode((prev) => !prev)}
-              aria-expanded={cloneMode}
-              className={`flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-xs font-medium transition-all ${
-                cloneMode
-                  ? "border-violet-500/60 bg-violet-500/15 text-violet-100"
-                  : "border-white/[0.08] bg-zinc-950/75 text-zinc-400 hover:border-white/15 hover:text-zinc-200"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <Sparkles className="size-3.5 shrink-0 text-violet-400" />
-                <span className="truncate">
-                  {t("voice.cloneToggleLabel")}
-                </span>
-              </span>
-              <span
-                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
-                  cloneMode
-                    ? "border-violet-400/60 bg-violet-600 text-white"
-                    : "border-white/[0.08] bg-white/[0.04] text-zinc-400"
-                }`}
-              >
-                {cloneMode ? t("voice.toggleOn") : t("voice.toggleOff")}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Expandable Zero-Shot Reference Audio Dropzone */}
-        {cloneMode && (
-          <div className="rounded-xl border border-violet-500/25 bg-zinc-950/60 p-3.5 transition-all">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".ogg,.mp3,.wav,.m4a,audio/ogg,audio/opus,audio/mpeg,audio/wav"
-              onChange={handleAudioUpload}
-              className="hidden"
-              id="reference-voice-upload"
-            />
-
-            {!referenceAudioBase64 ? (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label
-                htmlFor="reference-voice-upload"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDraggingAudio(true);
+                htmlFor="voice-script-textarea"
+                className="text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]"
+              >
+                {t("voice.scriptLabel")}
+              </label>
+              <div className="flex items-center gap-2 font-mono text-[11px] tabular-nums">
+                {estimatedReadSec > 0 && (
+                  <span className="text-zinc-500">
+                    {t("voice.readTime", { seconds: estimatedReadSec })}
+                  </span>
+                )}
+                <span
+                  className={
+                    text.length > 1400
+                      ? "font-semibold text-amber-400"
+                      : "text-[#8a8a95]"
+                  }
+                >
+                  {t("voice.charCount", { count: text.length, max: 1500 })}
+                </span>
+              </div>
+            </div>
+            <Textarea
+              id="voice-script-textarea"
+              value={text}
+              onChange={(e) => setText(e.target.value.slice(0, 1500))}
+              rows={5}
+              placeholder={t("voice.scriptPlaceholder")}
+              className="min-h-36 resize-y border-zinc-800/80 bg-[#070709] text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-500 focus-visible:border-zinc-600"
+            />
+          </div>
+        </div>
+
+        {/* Voice Preset, Zero-Shot Cloning & Primary Synthesize Action */}
+        <div className="space-y-4 p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="min-w-0 space-y-1.5">
+              <label className="block truncate text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+                {t("voice.presetLabel")}
+              </label>
+              <Select
+                value={selectedVoiceId}
+                onValueChange={(val) => {
+                  if (val) setSelectedVoiceId(String(val));
                 }}
-                onDragLeave={() => setIsDraggingAudio(false)}
-                onDrop={handleAudioDrop}
-                className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed py-4 px-3 text-center transition-colors ${
-                  isDraggingAudio
-                    ? "border-violet-400 bg-violet-500/10"
-                    : "border-white/[0.14] bg-zinc-950/60 hover:border-violet-500/60 hover:bg-zinc-950/90"
+              >
+                <SelectTrigger className="h-9 w-full border-zinc-800/80 bg-[#070709] text-xs text-zinc-100 focus-visible:border-zinc-600">
+                  <SelectValue>
+                    {(val: string | null) => {
+                      const preset =
+                        VOICE_PRESETS.find((v) => v.id === val) ??
+                        selectedPreset;
+                      return `${t(preset.labelKey)} (${t(preset.badgeKey)})`;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="border-zinc-800 bg-[#0e0e13] text-zinc-100">
+                  {VOICE_PRESETS.map((voice) => (
+                    <SelectItem
+                      key={voice.id}
+                      value={voice.id}
+                      className="text-xs"
+                    >
+                      {t(voice.labelKey)} ({t(voice.badgeKey)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-0 space-y-1.5">
+              <span className="block truncate text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
+                {t("voice.cloneSectionLabel")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCloneMode((prev) => !prev)}
+                aria-expanded={cloneMode}
+                className={`flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                  cloneMode
+                    ? "border-zinc-600 bg-[#131318] text-zinc-100"
+                    : "border-zinc-800/80 bg-[#070709] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                 }`}
               >
-                <div className="flex size-8 items-center justify-center rounded-md border border-violet-500/25 bg-violet-500/10 text-violet-400">
-                  <Upload className="size-4" />
-                </div>
-                <p className="text-xs font-medium text-zinc-200">
-                  {t("voice.dropzoneTitle")}
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  {t("voice.dropzoneHint")}
-                </p>
-              </label>
-            ) : (
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
-                    <Volume2 className="size-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-white">
-                      {referenceAudioName}
-                    </p>
-                    <p className="text-[10px] text-emerald-400">
-                      {t("voice.sampleReady")}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={handleClearAudioSample}
-                  aria-label={t("voice.removeAudioAria")}
-                  title={t("voice.removeAudioAria")}
-                  className="text-zinc-400 hover:bg-white/10 hover:text-white"
+                <span className="flex min-w-0 items-center gap-2">
+                  <Sparkles className="size-3.5 shrink-0 text-violet-400" />
+                  <span className="truncate">
+                    {t("voice.cloneToggleLabel")}
+                  </span>
+                </span>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                    cloneMode
+                      ? "bg-zinc-100 text-zinc-950"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
                 >
-                  <X className="size-3.5" />
-                </Button>
-              </div>
-            )}
+                  {cloneMode ? t("voice.toggleOn") : t("voice.toggleOff")}
+                </span>
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Primary Synthesize Button */}
-        <Button
-          type="button"
-          onClick={handleSynthesize}
-          disabled={isGenerating}
-          className="h-10 w-full bg-violet-600 px-3 text-xs font-semibold tracking-tight text-white hover:bg-violet-500 sm:text-sm"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
-              <span className="truncate">{t("voice.synthesizingButton")}</span>
-            </>
-          ) : (
-            <>
-              <Wand2 className="mr-2 size-4 shrink-0" />
-              <span className="truncate">
-                {cloneMode
-                  ? t("voice.generateCloneButton")
-                  : t("voice.generatePresetButton", {
-                      name: selectedPreset.shortName,
-                    })}
-              </span>
-            </>
+          {cloneMode && (
+            <div className="rounded-md border border-zinc-800/80 bg-[#070709] p-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".ogg,.mp3,.wav,.m4a,audio/ogg,audio/opus,audio/mpeg,audio/wav"
+                onChange={handleAudioUpload}
+                className="hidden"
+                id="reference-voice-upload"
+              />
+
+              {!referenceAudioBase64 ? (
+                <label
+                  htmlFor="reference-voice-upload"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingAudio(true);
+                  }}
+                  onDragLeave={() => setIsDraggingAudio(false)}
+                  onDrop={handleAudioDrop}
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded border border-dashed py-4 px-3 text-center transition-colors ${
+                    isDraggingAudio
+                      ? "border-zinc-500 bg-[#131318]"
+                      : "border-zinc-800 bg-[#070709] hover:border-zinc-600 hover:bg-[#0c0c10]"
+                  }`}
+                >
+                  <Upload className="size-4 text-zinc-400" />
+                  <p className="text-xs font-medium text-zinc-200">
+                    {t("voice.dropzoneTitle")}
+                  </p>
+                  <p className="text-[11px] text-[#8a8a95]">
+                    {t("voice.dropzoneHint")}
+                  </p>
+                </label>
+              ) : (
+                <div className="flex items-center justify-between gap-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Volume2 className="size-4 shrink-0 text-emerald-400" />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-zinc-100">
+                        {referenceAudioName}
+                      </p>
+                      <p className="text-[10px] text-emerald-400">
+                        {t("voice.sampleReady")}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={handleClearAudioSample}
+                    aria-label={t("voice.removeAudioAria")}
+                    title={t("voice.removeAudioAria")}
+                    className="text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
-        </Button>
+
+          <Button
+            type="button"
+            onClick={handleSynthesize}
+            disabled={isGenerating}
+            className="h-9 w-full bg-violet-600 px-3 text-xs font-semibold text-white hover:bg-violet-500 sm:text-sm"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 size-4 shrink-0 animate-spin" />
+                <span className="truncate">
+                  {t("voice.synthesizingButton")}
+                </span>
+              </>
+            ) : (
+              <>
+                <Wand2 className="mr-2 size-4 shrink-0" />
+                <span className="truncate">
+                  {cloneMode
+                    ? t("voice.generateCloneButton")
+                    : t("voice.generatePresetButton", {
+                        name: selectedPreset.shortName,
+                      })}
+                </span>
+              </>
+            )}
+          </Button>
+        </div>
       </section>
 
-      {/* Right Column (5 Cols): Master Audio Output & Session History Log */}
-      <aside className="space-y-5 lg:col-span-5">
+      {/* Right Column (5 Cols): Master Audio Output & Session History */}
+      <aside className="min-w-0 space-y-5 lg:col-span-5">
         {/* Panel 1: Master Audio Output */}
-        <div className="space-y-4 rounded-xl border border-white/[0.07] bg-zinc-900/40 p-5 backdrop-blur-xl">
-          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.06] pb-3.5">
+        <div className="overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <div className="min-w-0 space-y-0.5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white">
-                <Volume2 className="size-4 shrink-0 text-violet-400" />
-                {t("voice.outputTitle")}
+              <h2 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100 sm:text-sm">
+                <Volume2 className="size-3.5 shrink-0 text-violet-400" />
+                <span>{t("voice.outputTitle")}</span>
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-[#8a8a95]">
                 {t("voice.outputSubtitle")}
               </p>
             </div>
             {activeOutput && (
-              <Badge
-                variant="outline"
-                className="shrink-0 border-emerald-500/30 bg-emerald-500/10 font-mono text-[10px] text-emerald-300"
-              >
+              <span className="shrink-0 font-mono text-[10px] text-emerald-400">
                 {activeOutput.isClone
                   ? t("voice.licenseMitSafe")
                   : "Apache-2.0"}
-              </Badge>
+              </span>
             )}
           </div>
 
-          {activeOutput ? (
-            <div className="space-y-3.5 rounded-xl border border-white/[0.07] bg-zinc-950/75 p-3.5">
-              {/* Output Metadata Header */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 truncate text-xs font-semibold text-white">
-                  {getDisplayVoiceLabel(activeOutput)}
-                </span>
-                <Badge
-                  variant="outline"
-                  className="max-w-full shrink-0 truncate border-white/10 bg-white/[0.04] font-mono text-[10px] text-zinc-300"
-                  title={getDisplayEngine(activeOutput)}
-                >
-                  {getDisplayEngine(activeOutput)}
-                </Badge>
-              </div>
-
-              {/* Interactive Waveform Visualizer Mockup */}
-              <div className="space-y-2 rounded-lg border border-white/[0.06] bg-zinc-900/60 p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTogglePlayPause}
-                    aria-label={
-                      isPlaying ? t("voice.pauseAria") : t("voice.playAria")
-                    }
-                    title={
-                      isPlaying ? t("voice.pauseAria") : t("voice.playAria")
-                    }
-                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-white transition-colors hover:border-violet-500 hover:bg-violet-600"
+          <div className="p-4">
+            {activeOutput ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-semibold text-zinc-100">
+                    {getDisplayVoiceLabel(activeOutput)}
+                  </span>
+                  <span
+                    className="min-w-0 max-w-full truncate font-mono text-[10px] text-[#8a8a95]"
+                    title={getDisplayEngine(activeOutput)}
                   >
-                    {isPlaying ? (
-                      <Pause className="size-3.5" />
-                    ) : (
-                      <Play className="size-3.5" />
-                    )}
-                  </button>
-
-                  <div
-                    className="flex h-11 flex-1 items-center justify-between gap-[3px] px-1"
-                    role="group"
-                    aria-label={t("voice.waveformAria")}
-                  >
-                    {WAVEFORM_BARS.map((heightPct, i) => {
-                      const barRatio = (i + 1) / WAVEFORM_BARS.length;
-                      const isActive = barRatio <= playbackProgress;
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => handleWaveformSeek(i)}
-                          aria-label={t("voice.seekAria", {
-                            percent: Math.round(barRatio * 100),
-                          })}
-                          style={{ height: `${heightPct}%` }}
-                          className={`w-1 flex-1 rounded-full transition-all duration-150 hover:opacity-100 ${
-                            isActive
-                              ? "bg-gradient-to-t from-violet-600 to-indigo-400 opacity-100"
-                              : "bg-white/[0.15] opacity-75 hover:bg-white/[0.35]"
-                          } ${isPlaying && isActive ? "animate-pulse" : ""}`}
-                        />
-                      );
-                    })}
-                  </div>
-
-                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-400">
-                    {formatSeconds(audioCurrentTime)} /{" "}
-                    {formatSeconds(effectiveDurationSec)}
+                    {getDisplayEngine(activeOutput)}
                   </span>
                 </div>
+
+                {/* Clean Flat Waveform Bar Scrubber */}
+                <div className="min-w-0 overflow-hidden rounded-md border border-zinc-800/80 bg-[#070709] p-2.5">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTogglePlayPause}
+                      aria-label={
+                        isPlaying ? t("voice.pauseAria") : t("voice.playAria")
+                      }
+                      title={
+                        isPlaying ? t("voice.pauseAria") : t("voice.playAria")
+                      }
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded border border-zinc-700 bg-[#131318] text-zinc-100 transition-colors hover:bg-zinc-800"
+                    >
+                      {isPlaying ? (
+                        <Pause className="size-3.5" />
+                      ) : (
+                        <Play className="size-3.5" />
+                      )}
+                    </button>
+
+                    <div
+                      className="flex h-10 min-w-0 flex-1 items-center justify-between gap-[2px] px-0.5 sm:gap-[3px] sm:px-1"
+                      role="group"
+                      aria-label={t("voice.waveformAria")}
+                    >
+                      {WAVEFORM_BARS.map((heightPct, i) => {
+                        const barRatio = (i + 1) / WAVEFORM_BARS.length;
+                        const isActive = barRatio <= playbackProgress;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => handleWaveformSeek(i)}
+                            aria-label={t("voice.seekAria", {
+                              percent: Math.round(barRatio * 100),
+                            })}
+                            style={{ height: `${heightPct}%` }}
+                            className={`min-w-[2px] flex-1 rounded-full transition-colors duration-100 ${
+                              isActive
+                                ? "bg-zinc-100"
+                                : "bg-zinc-800 hover:bg-zinc-600"
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#8a8a95]">
+                      {formatSeconds(audioCurrentTime)} /{" "}
+                      {formatSeconds(effectiveDurationSec)}
+                    </span>
+                  </div>
+                </div>
+
+                <audio
+                  ref={audioPlayerRef}
+                  controls
+                  src={activeOutput.audioUrl}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => {
+                    setIsPlaying(false);
+                    setPlaybackProgress(1);
+                  }}
+                  onLoadedMetadata={(e) => {
+                    const el = e.currentTarget;
+                    if (Number.isFinite(el.duration) && el.duration > 0) {
+                      setAudioDuration(el.duration);
+                    }
+                  }}
+                  onTimeUpdate={(e) => {
+                    const el = e.currentTarget;
+                    setAudioCurrentTime(el.currentTime);
+                    if (Number.isFinite(el.duration) && el.duration > 0) {
+                      setAudioDuration(el.duration);
+                      setPlaybackProgress(el.currentTime / el.duration);
+                    }
+                  }}
+                  className="h-9 w-full rounded"
+                />
+
+                <p className="line-clamp-2 text-xs text-[#8a8a95]">
+                  &ldquo;{activeOutput.text}&rdquo;
+                </p>
+
+                <Button
+                  type="button"
+                  onClick={() => handleDownloadAudio(activeOutput)}
+                  className="h-9 w-full bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  <Download className="mr-1.5 size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {t("voice.downloadAudioButton")}
+                  </span>
+                </Button>
               </div>
-
-              {/* Native HTML5 Audio Player */}
-              <audio
-                ref={audioPlayerRef}
-                controls
-                src={activeOutput.audioUrl}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => {
-                  setIsPlaying(false);
-                  setPlaybackProgress(1);
-                }}
-                onLoadedMetadata={(e) => {
-                  const el = e.currentTarget;
-                  if (Number.isFinite(el.duration) && el.duration > 0) {
-                    setAudioDuration(el.duration);
-                  }
-                }}
-                onTimeUpdate={(e) => {
-                  const el = e.currentTarget;
-                  setAudioCurrentTime(el.currentTime);
-                  if (Number.isFinite(el.duration) && el.duration > 0) {
-                    setAudioDuration(el.duration);
-                    setPlaybackProgress(el.currentTime / el.duration);
-                  }
-                }}
-                className="h-9 w-full rounded-lg"
-              />
-
-              <p className="line-clamp-2 text-xs italic text-zinc-400">
-                &ldquo;{activeOutput.text}&rdquo;
-              </p>
-
-              <Button
-                type="button"
-                onClick={() => handleDownloadAudio(activeOutput)}
-                className="h-9 w-full bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500"
-              >
-                <Download className="mr-1.5 size-3.5 shrink-0" />
-                <span className="truncate">
-                  {t("voice.downloadAudioButton")}
-                </span>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-white/[0.1] bg-zinc-950/50 px-4 py-10 text-center">
-              <div className="flex size-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-zinc-500">
-                <Mic className="size-5" />
-              </div>
-              <div className="space-y-1">
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-zinc-800 bg-[#070709] px-4 py-8 text-center">
+                <Mic className="size-5 text-zinc-500" />
                 <p className="text-xs font-medium text-zinc-300">
                   {t("voice.emptyTitle")}
                 </p>
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-[#8a8a95]">
                   {t("voice.emptyDescBefore")}{" "}
-                  <strong className="font-medium text-zinc-300">
+                  <strong className="font-medium text-zinc-200">
                     {t("voice.emptyDescAction")}
                   </strong>{" "}
                   {t("voice.emptyDescAfter")}
                 </p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Panel 2: Scrollable Session History Log (Last 10 Clips) */}
-        <div className="space-y-3.5 rounded-xl border border-white/[0.07] bg-zinc-900/40 p-5 backdrop-blur-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-            <h3 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-white">
-              <History className="size-3.5 shrink-0 text-violet-400" />
+        {/* Panel 2: Session History (Last 10 Clips) */}
+        <div className="overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80">
+          <div className="flex items-center justify-between gap-2 px-4 py-3">
+            <h3 className="flex items-center gap-2 text-xs font-semibold tracking-tight text-zinc-100">
+              <History className="size-3.5 shrink-0 text-zinc-400" />
               <span>{t("voice.historyTitle")}</span>
-              <span className="font-mono text-[11px] font-normal tabular-nums text-zinc-400">
-                ({history.length} / 10)
+              <span className="font-mono text-[11px] font-normal tabular-nums text-[#8a8a95]">
+                ({history.length}/10)
               </span>
             </h3>
             {history.length > 0 && (
@@ -911,7 +897,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                 variant="ghost"
                 size="xs"
                 onClick={handleClearHistory}
-                className="h-6 px-2 text-[11px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+                className="h-6 px-2 text-[11px] text-[#8a8a95] hover:bg-[#131318] hover:text-zinc-100"
               >
                 <Trash2 className="mr-1 size-3" />
                 {t("voice.clearHistory")}
@@ -919,65 +905,67 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             )}
           </div>
 
-          {history.length === 0 ? (
-            <p className="py-2 text-xs text-zinc-500">
-              {t("voice.historyEmpty")}
-            </p>
-          ) : (
-            <div className="no-scrollbar max-h-64 space-y-2 overflow-y-auto pr-0.5">
-              {history.map((item) => {
-                const isCurrent = activeOutput?.id === item.id;
-                return (
-                  <div
-                    key={item.id}
-                    className={`flex items-center justify-between gap-2.5 rounded-lg border p-2.5 text-xs transition-colors ${
-                      isCurrent
-                        ? "border-violet-500/40 bg-violet-500/[0.08]"
-                        : "border-white/[0.06] bg-zinc-950/60 hover:border-white/15"
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-xs font-medium text-zinc-100">
-                          {getDisplayVoiceLabel(item)}
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
-                          · {getDisplayTimestamp(item)}
-                        </span>
+          <div className="p-4">
+            {history.length === 0 ? (
+              <p className="py-1 text-xs text-[#8a8a95]">
+                {t("voice.historyEmpty")}
+              </p>
+            ) : (
+              <div className="no-scrollbar max-h-64 space-y-2 overflow-y-auto">
+                {history.map((item) => {
+                  const isCurrent = activeOutput?.id === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center justify-between gap-2.5 rounded-md border p-2.5 text-xs transition-colors ${
+                        isCurrent
+                          ? "border-zinc-600 bg-[#131318]"
+                          : "border-zinc-800/80 bg-[#070709] hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-xs font-medium text-zinc-100">
+                            {getDisplayVoiceLabel(item)}
+                          </span>
+                          <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
+                            · {getDisplayTimestamp(item)}
+                          </span>
+                        </div>
+                        <p className="truncate text-[11px] text-[#8a8a95]">
+                          {item.text}
+                        </p>
                       </div>
-                      <p className="truncate text-[11px] text-zinc-400">
-                        {item.text}
-                      </p>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="outline"
+                          onClick={() => handleReplayItem(item)}
+                          title={t("voice.replayClipTitle")}
+                          aria-label={t("voice.replayClipTitle")}
+                          className="border-zinc-800 bg-[#131318] text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
+                        >
+                          <Play className="size-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="outline"
+                          onClick={() => handleDownloadAudio(item)}
+                          title={t("voice.downloadClipTitle")}
+                          aria-label={t("voice.downloadClipTitle")}
+                          className="border-zinc-800 bg-[#131318] text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800"
+                        >
+                          <Download className="size-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="outline"
-                        onClick={() => handleReplayItem(item)}
-                        title={t("voice.replayClipTitle")}
-                        aria-label={t("voice.replayClipTitle")}
-                        className="border-white/[0.08] bg-white/[0.04] text-zinc-200 hover:border-white/20 hover:bg-white/10 hover:text-white"
-                      >
-                        <Play className="size-3" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="outline"
-                        onClick={() => handleDownloadAudio(item)}
-                        title={t("voice.downloadClipTitle")}
-                        aria-label={t("voice.downloadClipTitle")}
-                        className="border-white/[0.08] bg-white/[0.04] text-zinc-200 hover:border-white/20 hover:bg-white/10 hover:text-white"
-                      >
-                        <Download className="size-3" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </aside>
     </div>

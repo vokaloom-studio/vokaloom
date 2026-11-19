@@ -12,7 +12,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       role="group"
       aria-label={t("switcher.ariaLabel")}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 font-mono text-[11px]",
+        "inline-flex h-7 shrink-0 items-center rounded-md border border-zinc-800/80 bg-[#0c0c10] p-0.5 font-mono text-[11px]",
         className
       )}
     >
@@ -22,26 +22,23 @@ export function LanguageSwitcher({ className }: { className?: string }) {
         aria-pressed={locale === "en"}
         title={t("switcher.enTitle")}
         className={cn(
-          "inline-flex h-6 items-center justify-center rounded-md px-1.5 font-semibold tracking-tight transition-colors",
+          "inline-flex h-5.5 items-center justify-center rounded-[4px] px-1.5 font-medium tracking-tight transition-colors",
           locale === "en"
-            ? "bg-violet-600 text-white shadow-xs"
+            ? "bg-zinc-100 text-zinc-950"
             : "text-zinc-400 hover:text-zinc-100"
         )}
       >
         EN
       </button>
-      <span aria-hidden="true" className="px-0.5 text-[10px] text-zinc-600">
-        |
-      </span>
       <button
         type="button"
         onClick={() => setLocale("es")}
         aria-pressed={locale === "es"}
         title={t("switcher.esTitle")}
         className={cn(
-          "inline-flex h-6 items-center justify-center rounded-md px-1.5 font-semibold tracking-tight transition-colors",
+          "inline-flex h-5.5 items-center justify-center rounded-[4px] px-1.5 font-medium tracking-tight transition-colors",
           locale === "es"
-            ? "bg-violet-600 text-white shadow-xs"
+            ? "bg-zinc-100 text-zinc-950"
             : "text-zinc-400 hover:text-zinc-100"
         )}
       >

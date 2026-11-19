@@ -7,12 +7,10 @@ import {
   KeyRound,
   ExternalLink,
   ShieldCheck,
-  Sparkles,
   CreditCard,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -109,78 +107,57 @@ export function PaywallModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="relative overflow-hidden border border-white/[0.09] bg-[#08080c]/90 p-0 text-zinc-100 shadow-[0_24px_80px_-16px_rgba(0,0,0,0.9)] backdrop-blur-2xl ring-1 ring-white/[0.06] sm:max-w-lg">
-        {/* Subtle Purple Ambient Glow & Top Specular Edge */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/45 to-transparent"
-        />
-
-        <div className="relative space-y-5 p-6">
-          <DialogHeader className="space-y-2.5">
-            <div className="flex flex-wrap items-center gap-2 pr-8">
-              <Badge
-                variant="outline"
-                className="border-violet-500/35 bg-violet-500/15 px-2.5 py-0.5 font-mono text-[11px] font-medium text-violet-200"
-              >
-                <Sparkles className="mr-1.5 size-3 text-violet-300" />
-                {t("paywall.badgeTitle")}
-              </Badge>
+      <DialogContent className="relative overflow-hidden border border-zinc-800/90 border-t-2 border-t-violet-500/60 bg-[#0c0c10] p-0 text-[#f4f4f6] shadow-2xl sm:max-w-lg">
+        <div className="space-y-4 p-5 sm:p-6">
+          <DialogHeader className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 pr-8 font-mono text-[11px]">
+              <span className="text-violet-400">{t("paywall.badgeTitle")}</span>
+              <span className="text-zinc-600">·</span>
               {quota.isOperator ? (
-                <Badge
-                  variant="outline"
-                  className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[11px] text-emerald-300"
-                >
-                  <ShieldCheck className="mr-1 size-3" />
+                <span className="inline-flex items-center gap-1 text-emerald-400">
+                  <ShieldCheck className="size-3" />
                   {t("paywall.badgeActive")}
-                </Badge>
+                </span>
               ) : (
-                <Badge
-                  variant="outline"
-                  className="border-amber-500/30 bg-amber-500/10 font-mono text-[11px] tabular-nums text-amber-300"
-                >
+                <span className="tabular-nums text-amber-400">
                   {t("paywall.badgeTrial", {
                     remaining: quota.creditsRemaining,
                     max: quota.maxTrialCredits,
                   })}
-                </Badge>
+                </span>
               )}
             </div>
 
-            <DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight text-white sm:text-xl">
-              <Crown className="size-5 shrink-0 text-violet-400" />
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-100 sm:text-lg">
+              <Crown className="size-4 shrink-0 text-violet-400" />
               <span>{t("paywall.title")}</span>
             </DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed text-zinc-400">
+            <DialogDescription className="text-xs leading-relaxed text-[#8a8a95]">
               {t("paywall.description")}
             </DialogDescription>
           </DialogHeader>
 
-          {/* High-End Obsidian Pricing Card */}
-          <div className="rounded-xl border border-white/[0.08] bg-zinc-900/50 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
-            <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] pb-3.5">
+          {/* Pricing & Benefit Summary */}
+          <div className="rounded-lg border border-zinc-800/80 bg-[#131318] p-4">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800/80 pb-3">
               <div className="space-y-0.5">
-                <span className="block text-xs font-semibold tracking-tight text-white">
+                <span className="block text-xs font-semibold text-zinc-100">
                   {t("paywall.planName")}
                 </span>
-                <span className="block font-mono text-[11px] text-zinc-400">
+                <span className="block font-mono text-[11px] text-[#8a8a95]">
                   {t("paywall.planSubtitle")}
                 </span>
               </div>
               <div className="shrink-0 text-right">
                 <div className="flex items-baseline justify-end gap-1">
-                  <span className="text-2xl font-semibold tracking-tight tabular-nums text-white">
+                  <span className="text-xl font-semibold tracking-tight tabular-nums text-zinc-100">
                     {businessConfig.priceUsd}
                   </span>
-                  <span className="text-xs text-zinc-400">
+                  <span className="text-xs text-[#8a8a95]">
                     {t("paywall.perMonthShort")}
                   </span>
                 </div>
-                <span className="block font-mono text-[11px] tabular-nums text-zinc-400">
+                <span className="block font-mono text-[11px] tabular-nums text-[#8a8a95]">
                   {t("paywall.approxCopPerMonth", {
                     priceCop: businessConfig.priceCop,
                   })}
@@ -188,11 +165,11 @@ export function PaywallModal({
               </div>
             </div>
 
-            <ul className="space-y-2.5 pt-3.5">
+            <ul className="space-y-2 pt-3">
               {PRO_BENEFIT_KEYS.map((benefitKey) => (
                 <li
                   key={benefitKey}
-                  className="flex items-start gap-2.5 text-xs text-zinc-200"
+                  className="flex items-start gap-2 text-xs text-zinc-300"
                 >
                   <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
                   <span className="leading-snug">{t(benefitKey)}</span>
@@ -201,7 +178,7 @@ export function PaywallModal({
             </ul>
           </div>
 
-          {/* Local (COP) & Global (USD) Payment Buttons */}
+          {/* Local (COP) & Global (USD) Checkout Actions */}
           <div className="space-y-2">
             <Button
               type="button"
@@ -213,15 +190,15 @@ export function PaywallModal({
                   })
                 )
               }
-              className="h-auto min-h-10 w-full whitespace-normal bg-violet-600 px-3 py-2 text-center text-xs font-semibold tracking-tight text-white shadow-lg shadow-violet-600/20 hover:bg-violet-500 sm:text-sm"
+              className="h-auto min-h-9 w-full whitespace-normal bg-violet-600 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-violet-500"
             >
-              <CreditCard className="mr-2 size-4 shrink-0" />
+              <CreditCard className="mr-2 size-3.5 shrink-0" />
               <span>
                 {t("paywall.checkoutCopButton", {
                   priceCop: businessConfig.priceCop,
                 })}
               </span>
-              <ExternalLink className="ml-1.5 size-3.5 shrink-0 opacity-80" />
+              <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
             </Button>
 
             <Button
@@ -235,25 +212,24 @@ export function PaywallModal({
                   })
                 )
               }
-              className="h-auto min-h-10 w-full whitespace-normal border-white/[0.1] bg-white/[0.04] px-3 py-2 text-center text-xs font-semibold tracking-tight text-zinc-100 hover:border-white/20 hover:bg-white/[0.08] hover:text-white sm:text-sm"
+              className="h-auto min-h-9 w-full whitespace-normal border-zinc-800 bg-[#131318] px-3 py-2 text-center text-xs font-semibold text-zinc-100 hover:border-zinc-700 hover:bg-zinc-800"
             >
-              <CreditCard className="mr-2 size-4 shrink-0 text-violet-400" />
+              <CreditCard className="mr-2 size-3.5 shrink-0 text-zinc-400" />
               <span>
                 {t("paywall.checkoutUsdButton", {
                   priceUsd: businessConfig.priceUsd,
                 })}
               </span>
-              <ExternalLink className="ml-1.5 size-3.5 shrink-0 opacity-80" />
+              <ExternalLink className="ml-1.5 size-3 shrink-0 opacity-80" />
             </Button>
           </div>
 
-          {/* Translucent Divider */}
           <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.07]" />
+            <div className="h-px flex-1 bg-zinc-800/80" />
             <span className="text-center font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               {t("paywall.dividerLabel")}
             </span>
-            <div className="h-px flex-1 bg-white/[0.07]" />
+            <div className="h-px flex-1 bg-zinc-800/80" />
           </div>
 
           {/* Pro Pass / Client Access Code Form */}
@@ -262,7 +238,7 @@ export function PaywallModal({
               htmlFor="paywall-access-code"
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
             >
-              <KeyRound className="size-3.5 shrink-0 text-violet-400" />
+              <KeyRound className="size-3.5 shrink-0 text-zinc-400" />
               <span>{t("paywall.codeLabel")}</span>
             </label>
             <div className="flex flex-wrap gap-2 sm:flex-nowrap">
@@ -272,13 +248,13 @@ export function PaywallModal({
                 onChange={(e) => setAccessCode(e.target.value)}
                 placeholder={t("paywall.codePlaceholder")}
                 disabled={isVerifying}
-                className="h-9 min-w-0 flex-1 border-white/[0.08] bg-zinc-950/75 font-mono text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
+                className="h-9 min-w-0 flex-1 border-zinc-800 bg-[#070709] font-mono text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-zinc-600"
               />
               <Button
                 type="submit"
                 variant="secondary"
                 disabled={isVerifying}
-                className="h-9 shrink-0 border border-violet-500/35 bg-violet-500/15 px-4 text-xs font-semibold text-violet-100 hover:border-violet-400/50 hover:bg-violet-500/25 hover:text-white"
+                className="h-9 shrink-0 border border-zinc-700 bg-[#131318] px-4 text-xs font-semibold text-zinc-100 hover:bg-zinc-800"
               >
                 {isVerifying ? (
                   <Loader2 className="size-3.5 animate-spin" />

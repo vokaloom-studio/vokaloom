@@ -6,7 +6,6 @@ import {
   Sparkles,
   Shuffle,
   Download,
-  Upload,
   X,
   Camera,
   Eye,
@@ -20,7 +19,6 @@ import {
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -82,10 +80,6 @@ interface SavedModelData {
   name: string;
 }
 
-/**
- * Compresses any uploaded photo (up to 5 MB) down to ~120 KB JPEG
- * using an HTML5 Canvas so Vercel's 4.5 MB body limit and localStorage limits are respected.
- */
 async function compressImageFileToBase64(
   file: File,
   maxDim = 1024,
@@ -148,13 +142,13 @@ async function generateOfflineVerticalFallbackBlob(
   const ctx = canvas.getContext("2d");
   if (ctx) {
     const grad = ctx.createLinearGradient(0, 0, 1080, 1920);
-    grad.addColorStop(0, "#1e1b4b");
-    grad.addColorStop(0.5, "#311042");
-    grad.addColorStop(1, "#09090b");
+    grad.addColorStop(0, "#14141d");
+    grad.addColorStop(0.5, "#1a1824");
+    grad.addColorStop(1, "#070709");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 1080, 1920);
 
-    ctx.fillStyle = "rgba(255,255,255,0.88)";
+    ctx.fillStyle = "rgba(244,244,246,0.9)";
     ctx.font = "bold 46px sans-serif";
     ctx.fillText(
       translate(locale, "bg.fallbackCanvasTitle", { index: index + 1 }),
@@ -162,7 +156,7 @@ async function generateOfflineVerticalFallbackBlob(
       880
     );
     ctx.font = "34px sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.fillStyle = "rgba(161,161,170,0.85)";
     ctx.fillText(item.title.slice(0, 42), 80, 950);
     ctx.fillText(
       translate(locale, "bg.fallbackCanvasCredit", {
@@ -224,7 +218,6 @@ async function generateClientCanvasComposite(
   const ctx = canvas.getContext("2d");
   if (!ctx) return modelBase64;
 
-  // 1. Draw same-origin proxied 9:16 background cover
   const bgBlob = await fetchImageBlobWithCorsProxy(item, index, locale);
   const bgObjectUrl = URL.createObjectURL(bgBlob);
   try {
@@ -242,14 +235,12 @@ async function generateClientCanvasComposite(
     URL.revokeObjectURL(bgObjectUrl);
   }
 
-  // Subtle ambient grounding shadow near lower half
   const bottomGrad = ctx.createLinearGradient(0, 1000, 0, 1920);
   bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
-  bottomGrad.addColorStop(1, "rgba(5,5,7,0.45)");
+  bottomGrad.addColorStop(1, "rgba(7,7,9,0.5)");
   ctx.fillStyle = bottomGrad;
   ctx.fillRect(0, 1000, 1080, 920);
 
-  // 2. Draw Model Reference cleanly integrated into lower-center portrait stage
   const modelImg = await loadImageElement(modelBase64);
   const targetH = 980;
   const targetW = Math.min(
@@ -258,12 +249,12 @@ async function generateClientCanvasComposite(
   );
   const x = Math.round((canvas.width - targetW) / 2);
   const y = canvas.height - targetH - 90;
-  const radius = 36;
+  const radius = 32;
 
   ctx.save();
   ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
-  ctx.shadowBlur = 48;
-  ctx.shadowOffsetY = 18;
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 16;
   ctx.beginPath();
   ctx.roundRect(x, y, targetW, targetH, radius);
   ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -276,7 +267,6 @@ async function generateClientCanvasComposite(
   ctx.clip();
   ctx.drawImage(modelImg, x, y, targetW, targetH);
 
-  // Soft edge shading for scene integration
   const edgeShade = ctx.createLinearGradient(0, y + targetH - 220, 0, y + targetH);
   edgeShade.addColorStop(0, "rgba(0,0,0,0)");
   edgeShade.addColorStop(1, "rgba(0,0,0,0.28)");
@@ -284,7 +274,6 @@ async function generateClientCanvasComposite(
   ctx.fillRect(x, y, targetW, targetH);
   ctx.restore();
 
-  // Subtle border highlight
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(x, y, targetW, targetH, radius);
@@ -422,7 +411,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
     }
   };
 
-  // Load saved My Model reference + initial showcase batch on mount
   useEffect(() => {
     queueMicrotask(() => {
       try {
@@ -750,7 +738,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         })
       );
 
-      // Include commercial attribution & query metadata inside the ZIP archive
       const attributionLines = [
         t("bg.readme.header", { count: items.length }),
         t("bg.readme.query", { query: resolvedQuery }),
@@ -781,9 +768,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success(
-        t("bg.toast.downloadedZip", { count: items.length })
-      );
+      toast.success(t("bg.toast.downloadedZip", { count: items.length }));
     } catch (error) {
       console.error("ZIP compression error:", error);
       toast.error(t("bg.toast.zipError"));
@@ -796,68 +781,52 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   };
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-12">
-      {/* Left Inspector (4 Columns): Compact, Dense Ergonomic Controls */}
-      <aside className="glass-panel overflow-hidden rounded-xl divide-y divide-white/[0.06] lg:sticky lg:top-20 lg:col-span-4">
-        {/* Inspector Title Bar */}
-        <div className="flex items-center justify-between gap-2 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="size-3.5 shrink-0 text-violet-400" />
-            <h2 className="truncate text-xs font-semibold tracking-tight text-white">
-              {t("bg.inspectorTitle")}
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+      {/* Left Workbench Rail (4 Columns): 3 Crisp Hairline-Separated Sections */}
+      <aside className="min-w-0 overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] divide-y divide-zinc-800/80 lg:sticky lg:top-18 lg:col-span-4">
+        {/* Section 1: Query & Vibe */}
+        <div className="space-y-3.5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold tracking-tight text-zinc-100">
+              {t("bg.section.queryVibe")}
             </h2>
-          </div>
-          <Badge
-            variant="outline"
-            className="shrink-0 border-white/10 bg-white/[0.04] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300"
-          >
-            {t("bg.inspectorBadge", { count: batchSize })}
-          </Badge>
-        </div>
-
-        {/* Section 1: Batch Size Toggle (5x Mobile Fast vs 15x Full Pack) & Vibe Presets */}
-        <div className="space-y-3 p-4">
-          <div className="space-y-1.5">
-            <span className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-              {t("bg.batch.label")}
-            </span>
             <div
               role="group"
               aria-label={t("bg.batch.label")}
-              className="grid grid-cols-2 gap-1.5 rounded-lg border border-white/[0.08] bg-zinc-950/70 p-1"
+              className="inline-flex items-center rounded-md border border-zinc-800/80 bg-[#070709] p-0.5 font-mono text-[10px]"
             >
               <button
                 type="button"
                 onClick={() => handleBatchSizeChange(5)}
                 aria-pressed={batchSize === 5}
-                className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all ${
+                className={`inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-medium transition-colors ${
                   batchSize === 5
-                    ? "bg-violet-600 text-white shadow-xs"
-                    : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                    ? "bg-zinc-100 text-zinc-950"
+                    : "text-zinc-400 hover:text-zinc-100"
                 }`}
               >
-                <Smartphone className="size-3 shrink-0" />
-                <span className="truncate">{t("bg.batch.fast5")}</span>
+                <Smartphone className="size-2.5 shrink-0" />
+                <span>{t("bg.batch.fast5")}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleBatchSizeChange(15)}
                 aria-pressed={batchSize === 15}
-                className={`flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all ${
+                className={`inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-medium transition-colors ${
                   batchSize === 15
-                    ? "bg-violet-600 text-white shadow-xs"
-                    : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                    ? "bg-zinc-100 text-zinc-950"
+                    : "text-zinc-400 hover:text-zinc-100"
                 }`}
               >
-                <Layers className="size-3 shrink-0" />
-                <span className="truncate">{t("bg.batch.full15")}</span>
+                <Layers className="size-2.5 shrink-0" />
+                <span>{t("bg.batch.full15")}</span>
               </button>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]">
                 {t("bg.vibePresets")}
               </span>
               <span className="truncate font-mono text-[10px] text-zinc-500">
@@ -872,10 +841,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     key={vibe.value}
                     type="button"
                     onClick={() => handleVibeSelect(vibe.value)}
-                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                       isActive
-                        ? "border-violet-500/60 bg-violet-500/20 text-white shadow-xs"
-                        : "border-white/[0.07] bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:bg-white/[0.05] hover:text-zinc-200"
+                        ? "border-zinc-500 bg-[#1a1a22] text-zinc-100"
+                        : "border-zinc-800/80 bg-[#131318] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                     }`}
                   >
                     {t(vibe.labelKey)}
@@ -884,14 +853,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               })}
             </div>
           </div>
-        </div>
 
-        {/* Section 2: Custom Scene Search & Generation Actions */}
-        <div className="space-y-3 p-4">
           <div className="space-y-1.5">
             <label
               htmlFor="aesthetic-search-input"
-              className="block text-[11px] font-medium uppercase tracking-wider text-zinc-400"
+              className="block text-[11px] font-medium uppercase tracking-wider text-[#8a8a95]"
             >
               {t("bg.sceneLabel")}
             </label>
@@ -908,7 +874,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   }
                 }}
                 placeholder={t("bg.searchPlaceholder")}
-                className="h-8 border-white/[0.08] bg-zinc-950/80 pl-8 pr-7 text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
+                className="h-8 border-zinc-800/80 bg-[#070709] pl-8 pr-7 text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-zinc-600"
               />
               {query && (
                 <button
@@ -952,7 +918,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 count: batchSize,
                 page: page + 1,
               })}
-              className="h-8 shrink-0 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+              className="h-8 shrink-0 border-zinc-800 bg-[#131318] px-2.5 text-xs font-medium text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800"
             >
               <Shuffle className="mr-1.5 size-3.5 shrink-0 text-zinc-400" />
               <span>{t("bg.shuffleButton", { page: page + 1 })}</span>
@@ -960,174 +926,173 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
           </div>
         </div>
 
-        {/* Section 3: My Model Reference (Saved once in localStorage for 1-tap scene placement) */}
-        <div className="space-y-2.5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <UserPlus className="size-3.5 shrink-0 text-emerald-400" />
-              <span className="truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+        {/* Section 2: Model & Reference */}
+        <div className="space-y-3 p-4">
+          <h3 className="text-xs font-semibold tracking-tight text-zinc-100">
+            {t("bg.section.modelReference")}
+          </h3>
+
+          {/* My Model Reference Slot */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-medium text-zinc-300">
                 {t("bg.model.title")}
               </span>
-            </div>
-            <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
-              {t("bg.model.badge")}
-            </span>
-          </div>
-
-          <input
-            ref={myModelInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleMyModelFileChange}
-            className="hidden"
-            id="my-model-upload"
-          />
-
-          {!myModelPreview ? (
-            <label
-              htmlFor="my-model-upload"
-              className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/[0.12] bg-zinc-950/60 p-2.5 transition-colors hover:border-emerald-500/50 hover:bg-zinc-950/90"
-            >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 transition-colors group-hover:bg-emerald-500/20">
-                <UserPlus className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-zinc-200">
-                  {t("bg.model.uploadTitle")}
-                </p>
-                <p className="text-[10px] text-zinc-500">
-                  {t("bg.model.uploadHint")}
-                </p>
-              </div>
-            </label>
-          ) : (
-            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-2.5">
-              <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-900">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={myModelPreview}
-                  alt={t("bg.model.previewAlt")}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="truncate text-xs font-medium text-white">
-                    {myModelName || t("bg.model.fallbackName")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleClearMyModel}
-                    className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-                    title={t("bg.model.removeTitle")}
-                    aria-label={t("bg.model.removeTitle")}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-                <p className="text-[10px] text-emerald-400">
-                  {t("bg.model.savedStatus")}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Section 4: Compact Boss Reference Matcher (Gemini 2.5 Flash Vision) */}
-        <div className="space-y-2.5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <Eye className="size-3.5 shrink-0 text-violet-400" />
-              <span className="truncate text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                {t("bg.referenceTitle")}
+              <span className="font-mono text-[10px] text-emerald-400">
+                9:16
               </span>
             </div>
-            <span className="shrink-0 rounded border border-white/[0.07] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
-              Gemini 2.5
-            </span>
+
+            <input
+              ref={myModelInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleMyModelFileChange}
+              className="hidden"
+              id="my-model-upload"
+            />
+
+            {!myModelPreview ? (
+              <label
+                htmlFor="my-model-upload"
+                className="group flex cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-zinc-800 bg-[#070709] p-2 transition-colors hover:border-zinc-600 hover:bg-[#131318]"
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded border border-zinc-800 bg-[#131318] text-emerald-400">
+                  <UserPlus className="size-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-zinc-200">
+                    {t("bg.model.uploadTitle")}
+                  </p>
+                  <p className="truncate text-[10px] text-[#8a8a95]">
+                    {t("bg.model.uploadHint")}
+                  </p>
+                </div>
+              </label>
+            ) : (
+              <div className="flex items-center gap-2.5 rounded-md border border-zinc-800 bg-[#131318] p-2">
+                <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded border border-zinc-700 bg-zinc-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={myModelPreview}
+                    alt={t("bg.model.previewAlt")}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-xs font-medium text-zinc-100">
+                      {myModelName || t("bg.model.fallbackName")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearMyModel}
+                      className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                      title={t("bg.model.removeTitle")}
+                      aria-label={t("bg.model.removeTitle")}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                  <p className="truncate text-[10px] text-emerald-400">
+                    {t("bg.model.savedStatus")}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleReferenceFileChange}
-            className="hidden"
-            id="boss-reference-upload"
-          />
-
-          {!referencePreview ? (
-            <label
-              htmlFor="boss-reference-upload"
-              className="group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-white/[0.12] bg-zinc-950/60 p-2.5 transition-colors hover:border-violet-500/50 hover:bg-zinc-950/90"
-            >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-violet-500/25 bg-violet-500/10 text-violet-400 transition-colors group-hover:bg-violet-500/20">
-                <Upload className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-zinc-200">
-                  {t("bg.uploadReference")}
-                </p>
-                <p className="text-[10px] text-zinc-500">
-                  {t("bg.uploadReferenceHint", { count: batchSize })}
-                </p>
-              </div>
-            </label>
-          ) : (
-            <div className="flex items-start gap-2.5 rounded-lg border border-violet-500/30 bg-zinc-950/80 p-2.5">
-              <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-900">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={referencePreview}
-                  alt={t("bg.referencePreviewAlt")}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="truncate text-xs font-medium text-white">
-                    {referenceFileName || t("bg.referenceFallbackName")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleClearReference}
-                    className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-                    title={t("bg.removeReferenceTitle")}
-                    aria-label={t("bg.removeReferenceTitle")}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-                <p className="text-[10px] text-zinc-400">
-                  {visionUsed ? t("bg.visionDna") : t("bg.extractedDna")}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {extractedTags.slice(0, 4).map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 font-mono text-[10px] text-violet-200"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
+          {/* Boss Reference Image Slot */}
+          <div className="space-y-1.5 border-t border-zinc-800/70 pt-3">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-medium text-zinc-300">
+                {t("bg.referenceTitle")}
+              </span>
+              <span className="font-mono text-[10px] text-zinc-500">
+                Gemini 2.5
+              </span>
             </div>
-          )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleReferenceFileChange}
+              className="hidden"
+              id="boss-reference-upload"
+            />
+
+            {!referencePreview ? (
+              <label
+                htmlFor="boss-reference-upload"
+                className="group flex cursor-pointer items-center gap-2.5 rounded-md border border-dashed border-zinc-800 bg-[#070709] p-2 transition-colors hover:border-zinc-600 hover:bg-[#131318]"
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded border border-zinc-800 bg-[#131318] text-violet-400">
+                  <Eye className="size-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-zinc-200">
+                    {t("bg.uploadReference")}
+                  </p>
+                  <p className="truncate text-[10px] text-[#8a8a95]">
+                    {t("bg.uploadReferenceHint", { count: batchSize })}
+                  </p>
+                </div>
+              </label>
+            ) : (
+              <div className="flex items-start gap-2.5 rounded-md border border-zinc-800 bg-[#131318] p-2">
+                <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded border border-zinc-700 bg-zinc-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={referencePreview}
+                    alt={t("bg.referencePreviewAlt")}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-xs font-medium text-zinc-100">
+                      {referenceFileName || t("bg.referenceFallbackName")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearReference}
+                      className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                      title={t("bg.removeReferenceTitle")}
+                      aria-label={t("bg.removeReferenceTitle")}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[#8a8a95]">
+                    {visionUsed ? t("bg.visionDna") : t("bg.extractedDna")}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {extractedTags.slice(0, 3).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded border border-zinc-800 bg-[#070709] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Section 5: Active Aesthetic DNA Telemetry */}
-        <div className="space-y-2 bg-zinc-950/40 px-4 py-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-            <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
-            <span className="shrink-0 text-zinc-500">
-              {t("bg.resolvedLabel")}
-            </span>
+        {/* Section 3: Active Query Readout */}
+        <div className="space-y-2 bg-[#09090d] px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-[#8a8a95]">
+            <CheckCircle2 className="size-3 shrink-0 text-emerald-500" />
+            <span className="shrink-0">{t("bg.resolvedLabel")}</span>
             <span
-              className="truncate font-medium text-zinc-200"
+              className="truncate font-mono text-zinc-200"
               title={resolvedQuery}
             >
-              &ldquo;{resolvedQuery}&rdquo;
+              {resolvedQuery}
             </span>
           </div>
           {extractedTags.length > 0 && (
@@ -1135,7 +1100,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               {extractedTags.slice(0, 5).map((tag) => (
                 <span
                   key={tag}
-                  className="rounded border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400"
+                  className="rounded border border-zinc-800/80 bg-[#131318] px-1.5 py-0.5 font-mono text-[10px] text-[#8a8a95]"
                 >
                   #{tag}
                 </span>
@@ -1145,40 +1110,36 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         </div>
       </aside>
 
-      {/* Right Canvas (8 Columns): Floating Header + Elevated 9:16 Photo Grid */}
-      <section className="space-y-4 lg:col-span-8">
-        {/* Floating Canvas Header */}
-        <div className="glass-panel rounded-xl px-4 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Right Canvas Grid (8 Columns) */}
+      <section className="min-w-0 space-y-3.5 lg:col-span-8">
+        {/* Clean Toolbar Header */}
+        <div className="rounded-lg border border-zinc-800/80 bg-[#0c0c10] px-3.5 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-white">
+              <h2 className="text-xs font-semibold tracking-tight text-zinc-100 sm:text-sm">
                 {t("bg.canvasTitle")}{" "}
-                <span className="font-mono tabular-nums text-zinc-300">
-                  {items.length} / {batchSize}
+                <span className="font-mono tabular-nums text-[#8a8a95]">
+                  {items.length}/{batchSize}
                 </span>
               </h2>
 
-              <Badge
-                variant="outline"
-                className="border-white/10 bg-white/[0.05] px-2 py-0 font-mono text-[10px] font-medium text-zinc-300 backdrop-blur-md"
-              >
+              <span className="rounded border border-zinc-800 bg-[#131318] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
                 {t("bg.pageBadge", { page })}
-              </Badge>
+              </span>
 
-              {/* Quick 5x / 15x Canvas Header Switcher */}
               <div
                 role="group"
                 aria-label={t("bg.batch.label")}
-                className="inline-flex h-6 items-center rounded-md border border-white/10 bg-zinc-950/70 p-0.5 font-mono text-[10px]"
+                className="inline-flex h-6 items-center rounded border border-zinc-800 bg-[#070709] p-0.5 font-mono text-[10px]"
               >
                 <button
                   type="button"
                   onClick={() => handleBatchSizeChange(5)}
                   aria-pressed={batchSize === 5}
-                  className={`rounded px-1.5 py-0.5 font-semibold transition-colors ${
+                  className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
                     batchSize === 5
-                      ? "bg-violet-600 text-white"
-                      : "text-zinc-400 hover:text-white"
+                      ? "bg-zinc-100 text-zinc-950"
+                      : "text-zinc-400 hover:text-zinc-100"
                   }`}
                 >
                   {t("bg.batch.short5")}
@@ -1187,21 +1148,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   type="button"
                   onClick={() => handleBatchSizeChange(15)}
                   aria-pressed={batchSize === 15}
-                  className={`rounded px-1.5 py-0.5 font-semibold transition-colors ${
+                  className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
                     batchSize === 15
-                      ? "bg-violet-600 text-white"
-                      : "text-zinc-400 hover:text-white"
+                      ? "bg-zinc-100 text-zinc-950"
+                      : "text-zinc-400 hover:text-zinc-100"
                   }`}
                 >
                   {t("bg.batch.short15")}
                 </button>
-              </div>
-
-              <div className="hidden items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[11px] text-zinc-400 sm:inline-flex">
-                <span className="size-1.5 rounded-full bg-emerald-400" />
-                <span className="max-w-[200px] truncate" title={resolvedQuery}>
-                  {resolvedQuery}
-                </span>
               </div>
             </div>
 
@@ -1211,7 +1165,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               variant="secondary"
               onClick={handleDownloadAllZip}
               disabled={isZipping || items.length === 0}
-              className="h-8 max-w-full shrink-0 border border-emerald-500/30 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 hover:text-white"
+              className="h-7 max-w-full shrink-0 border border-emerald-500/35 bg-emerald-500/10 px-2.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200"
             >
               {isZipping ? (
                 <Loader2 className="mr-1.5 size-3.5 shrink-0 animate-spin" />
@@ -1222,13 +1176,12 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             </Button>
           </div>
 
-          {/* Live ZIP Progress Bar */}
           {isZipping && (
-            <div className="mt-2.5 space-y-1.5 border-t border-white/[0.06] pt-2.5">
+            <div className="mt-2.5 space-y-1.5 border-t border-zinc-800/80 pt-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-300">
                 <span>
                   {t("bg.zipPackaging", { count: items.length })}{" "}
-                  <code className="text-violet-300">
+                  <code className="text-zinc-100">
                     vokaloom-{items.length}-backgrounds.zip
                   </code>
                 </span>
@@ -1244,8 +1197,8 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         {/* 9:16 Photo Grid */}
         <div className="relative">
           {isLoading && items.length > 0 && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-black/40 pt-16 backdrop-blur-[2px]">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/75 px-3.5 py-1.5 text-xs font-medium text-zinc-200 backdrop-blur-md">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-lg bg-black/45 pt-16 backdrop-blur-[1px]">
+              <div className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-[#0c0c10] px-3 py-1.5 text-xs font-medium text-zinc-200">
                 <Loader2 className="size-3.5 animate-spin text-violet-400" />
                 {t("bg.loadingOverlay", { count: batchSize })}
               </div>
@@ -1256,34 +1209,34 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             {items.map((item, index) => (
               <div
                 key={item.id}
-                className="group relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/[0.08] transition-all duration-300 hover:ring-white/25"
+                className="group relative aspect-[9/16] w-full overflow-hidden rounded-lg border border-zinc-800/80 bg-[#0c0c10] transition-colors hover:border-zinc-600"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.previewUrl}
                   alt={item.title}
                   loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+                  className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
                 />
 
-                {/* Top Glassmorphic Telemetry Badges */}
-                <div className="pointer-events-none absolute inset-x-2 top-2 flex items-center justify-between gap-1">
-                  <span className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white/90 tabular-nums backdrop-blur-md">
-                    #{index + 1} · {item.aspect}
+                {/* Minimal Top Telemetry */}
+                <div className="pointer-events-none absolute inset-x-2 top-2 flex items-center justify-between gap-1 font-mono text-[10px]">
+                  <span className="rounded bg-black/70 px-1.5 py-0.5 text-zinc-100 tabular-nums">
+                    #{index + 1}
                   </span>
-                  <span className="inline-flex items-center rounded-md border border-white/10 bg-black/60 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-200 backdrop-blur-md">
+                  <span className="rounded bg-black/70 px-1.5 py-0.5 uppercase text-zinc-300">
                     {item.source === "curated"
                       ? t("bg.sourceCurated")
                       : item.source}
                   </span>
                 </div>
 
-                {/* Desktop Hover/Focus Action Pills (Place Model + HD Download) */}
+                {/* Desktop Hover/Focus Actions */}
                 <div
-                  className={`absolute top-1/2 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 transition-all duration-200 sm:flex ${
+                  className={`absolute top-1/2 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 transition-opacity duration-150 sm:flex ${
                     downloadingId === item.id || swappingItemId === item.id
-                      ? "opacity-100 scale-100"
-                      : "opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                   }`}
                 >
                   <Button
@@ -1296,7 +1249,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       index: index + 1,
                       photographer: item.photographer,
                     })}
-                    className="h-8 rounded-full border border-violet-400/40 bg-violet-600/90 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-violet-500"
+                    className="h-7 rounded-md bg-violet-600 px-2.5 text-[11px] font-medium text-white shadow-md hover:bg-violet-500"
                   >
                     {swappingItemId === item.id ? (
                       <Loader2 className="mr-1.5 size-3 animate-spin" />
@@ -1317,7 +1270,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       index: index + 1,
                       photographer: item.photographer,
                     })}
-                    className="h-8 rounded-full border border-white/15 bg-black/75 px-3 text-[11px] font-medium text-white shadow-lg backdrop-blur-md hover:bg-white hover:text-zinc-950"
+                    className="h-7 rounded-md border border-zinc-700 bg-[#0c0c10]/90 px-2.5 text-[11px] font-medium text-zinc-100 shadow-md hover:bg-zinc-100 hover:text-zinc-950"
                   >
                     {downloadingId === item.id ? (
                       <Loader2 className="mr-1.5 size-3 animate-spin" />
@@ -1328,14 +1281,14 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   </Button>
                 </div>
 
-                {/* Bottom Attribution & Mobile-First Touch Actions */}
-                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-2.5 pt-10">
-                  <p className="line-clamp-1 text-[11px] font-medium tracking-tight text-white/95">
+                {/* Minimal Bottom Metadata + Mobile Touch Controls */}
+                <div className="absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/65 to-transparent p-2 pt-9">
+                  <p className="line-clamp-1 text-[11px] font-medium text-zinc-100">
                     {item.title}
                   </p>
                   <div className="mt-1 flex items-center justify-between gap-1.5">
-                    <span className="flex min-w-0 items-center gap-1 text-[10px] text-zinc-300/90">
-                      <Camera className="size-3 shrink-0 text-violet-400" />
+                    <span className="flex min-w-0 items-center gap-1 text-[10px] text-zinc-400">
+                      <Camera className="size-3 shrink-0" />
                       <span className="truncate">{item.photographer}</span>
                     </span>
                     <div className="flex shrink-0 items-center gap-1 sm:hidden">
@@ -1348,7 +1301,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                           photographer: item.photographer,
                         })}
                         title={t("bg.placeModelTitle", { index: index + 1 })}
-                        className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-400/40 bg-violet-600/85 px-2 text-[10px] font-semibold text-white backdrop-blur-md active:scale-95"
+                        className="inline-flex h-7 items-center gap-1 rounded bg-violet-600 px-2 text-[10px] font-medium text-white active:scale-95"
                       >
                         {swappingItemId === item.id ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -1368,7 +1321,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                         title={t("bg.downloadSingleTitle", {
                           index: index + 1,
                         })}
-                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-white/15 bg-black/70 text-zinc-100 backdrop-blur-md transition-colors hover:bg-white hover:text-zinc-950"
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded border border-zinc-700 bg-[#0c0c10]/90 text-zinc-100 hover:bg-zinc-100 hover:text-zinc-950"
                       >
                         {downloadingId === item.id ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -1387,41 +1340,38 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       {/* Model-in-Scene Compositor Preview Dialog */}
       <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
-        <DialogContent className="border border-white/[0.09] bg-[#08080c]/95 p-5 text-zinc-100 backdrop-blur-2xl sm:max-w-md">
+        <DialogContent className="border border-zinc-800/90 bg-[#0c0c10] p-5 text-[#f4f4f6] shadow-2xl sm:max-w-md">
           <DialogHeader className="space-y-1.5 pr-6">
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-white">
+              <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-zinc-100 sm:text-base">
                 <Wand2 className="size-4 shrink-0 text-violet-400" />
                 <span>{t("bg.swapModal.title")}</span>
               </DialogTitle>
               {swapEngine && (
-                <Badge
-                  variant="outline"
-                  className="border-violet-500/35 bg-violet-500/15 font-mono text-[10px] text-violet-200"
-                >
+                <span className="rounded border border-zinc-800 bg-[#131318] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
                   {swapEngine}
-                </Badge>
+                </span>
               )}
             </div>
-            <DialogDescription className="text-xs text-zinc-400">
+            <DialogDescription className="text-xs text-[#8a8a95]">
               {swapTargetItem?.title || t("bg.swapModal.subtitle")}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {isSwapping ? (
-              <div className="flex aspect-[9/16] max-h-[58vh] w-full flex-col items-center justify-center gap-3 rounded-xl border border-white/10 bg-zinc-950/80 p-6 text-center">
-                <Loader2 className="size-8 animate-spin text-violet-400" />
-                <p className="text-xs font-semibold text-white">
+              <div className="flex aspect-[9/16] max-h-[58vh] w-full flex-col items-center justify-center gap-3 rounded-lg border border-zinc-800 bg-[#070709] p-6 text-center">
+                <Loader2 className="size-7 animate-spin text-violet-400" />
+                <p className="text-xs font-semibold text-zinc-100">
                   {t("bg.swapModal.generating")}
                 </p>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[11px] text-[#8a8a95]">
                   {t("bg.swapModal.generatingHint")}
                 </p>
               </div>
             ) : swapResultUrl ? (
               <div className="space-y-3">
-                <div className="mx-auto aspect-[9/16] max-h-[58vh] overflow-hidden rounded-xl border border-white/15 bg-zinc-950 shadow-2xl">
+                <div className="mx-auto aspect-[9/16] max-h-[58vh] overflow-hidden rounded-lg border border-zinc-800 bg-[#070709]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={swapResultUrl}
@@ -1430,7 +1380,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                   />
                 </div>
                 {swapIsFallback && (
-                  <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                  <p className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
                     {t("bg.swapModal.fallbackNote")}
                   </p>
                 )}

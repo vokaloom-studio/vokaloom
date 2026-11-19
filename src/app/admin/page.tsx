@@ -432,13 +432,13 @@ export default function VokaloomAdminPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen flex flex-col bg-[#070709] text-[#f4f4f6]">
       {/* Top Admin Header */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-[#070709]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
-              <ShieldCheck className="size-5" />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <ShieldCheck className="size-4" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -546,7 +546,7 @@ export default function VokaloomAdminPage() {
           </div>
         ) : (
           /* 5 Administrative Control Cards */
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Card 1: API & AI Engine Health Status */}
             <Card className="border-zinc-800/90 bg-zinc-900/50 text-zinc-100">
               <CardHeader className="pb-3">
