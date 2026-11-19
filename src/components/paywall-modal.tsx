@@ -108,146 +108,170 @@ export function PaywallModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-zinc-800 bg-zinc-950 p-6 text-zinc-100 sm:max-w-lg">
-        <DialogHeader className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Badge className="border border-violet-500/40 bg-violet-500/15 px-2.5 py-0.5 text-xs font-semibold text-violet-300">
-              <Sparkles className="mr-1 size-3" />
-              Vokaloom Pro Pass
-            </Badge>
-            {quota.isOperator ? (
-              <Badge className="border border-emerald-500/40 bg-emerald-500/15 text-xs text-emerald-300">
-                <ShieldCheck className="mr-1 size-3" />
-                Pro Pass Active
-              </Badge>
-            ) : (
+      <DialogContent className="relative overflow-hidden border border-white/[0.09] bg-[#08080c]/90 p-0 text-zinc-100 shadow-[0_24px_80px_-16px_rgba(0,0,0,0.9)] backdrop-blur-2xl ring-1 ring-white/[0.06] sm:max-w-lg">
+        {/* Subtle Purple Ambient Glow & Top Specular Edge */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/45 to-transparent"
+        />
+
+        <div className="relative space-y-5 p-6">
+          <DialogHeader className="space-y-2.5">
+            <div className="flex flex-wrap items-center gap-2 pr-8">
               <Badge
                 variant="outline"
-                className="border-amber-500/40 bg-amber-500/10 text-xs text-amber-300"
+                className="border-violet-500/35 bg-violet-500/15 px-2.5 py-0.5 font-mono text-[11px] font-medium text-violet-200"
               >
-                Trial Credits: {quota.creditsRemaining}/{quota.maxTrialCredits}{" "}
-                left
+                <Sparkles className="mr-1.5 size-3 text-violet-300" />
+                Vokaloom Pro Pass
               </Badge>
-            )}
-          </div>
-
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold text-white">
-            <Crown className="size-5 text-violet-400" />
-            Unlimited Aesthetic Batches &amp; AI Voiceovers
-          </DialogTitle>
-          <DialogDescription className="text-xs leading-relaxed text-zinc-400">
-            Unlock full agency production speed with unlimited 15-image
-            aesthetic background batches, Gemini Vision reference matching, and
-            realistic Spanish &amp; English neural voiceovers.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Value Proposition Checklist */}
-        <div className="my-2 space-y-2 rounded-xl border border-zinc-800/90 bg-zinc-900/60 p-4">
-          <div className="flex items-baseline justify-between border-b border-zinc-800 pb-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              All-In-One Fulfillment Pass
-            </span>
-            <div className="text-right">
-              <span className="text-lg font-bold text-white">
-                {businessConfig.priceUsd}
-              </span>
-              <span className="text-xs text-zinc-400">
-                {" "}
-                / ~{businessConfig.priceCop} · mes
-              </span>
-            </div>
-          </div>
-
-          <ul className="space-y-2 pt-1">
-            {PRO_BENEFITS.map((benefit) => (
-              <li
-                key={benefit}
-                className="flex items-start gap-2 text-xs text-zinc-200"
-              >
-                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Two Primary Checkout Buttons (COP & USD) */}
-        <div className="space-y-2.5">
-          <Button
-            type="button"
-            onClick={() =>
-              handleOpenCheckout(
-                businessConfig.checkoutUrlCop,
-                `Wompi / Nequi / PSE (${businessConfig.priceCop})`
-              )
-            }
-            className="h-10 w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-xs font-semibold text-white shadow-md shadow-violet-600/20 hover:from-violet-500 hover:to-indigo-500 sm:text-sm"
-          >
-            <CreditCard className="mr-2 size-4" />
-            Suscribirse por {businessConfig.priceCop} / mes (Nequi / PSE /
-            Wompi)
-            <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              handleOpenCheckout(
-                businessConfig.checkoutUrlUsd,
-                `Stripe Global (${businessConfig.priceUsd})`
-              )
-            }
-            className="h-10 w-full border-zinc-700 bg-zinc-900 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 hover:text-white sm:text-sm"
-          >
-            <CreditCard className="mr-2 size-4 text-violet-400" />
-            Subscribe for {businessConfig.priceUsd} / month (Stripe Global)
-            <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
-          </Button>
-        </div>
-
-        {/* Divider */}
-        <div className="relative my-1 flex items-center justify-center">
-          <div className="w-full border-t border-zinc-800" />
-          <span className="bg-zinc-950 px-3 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-            Or Instant Key Activation
-          </span>
-          <div className="w-full border-t border-zinc-800" />
-        </div>
-
-        {/* Pro Pass / Client Access Code Form */}
-        <form onSubmit={handleActivateKey} className="space-y-2.5">
-          <label
-            htmlFor="paywall-access-code"
-            className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
-          >
-            <KeyRound className="size-3.5 text-violet-400" />
-            Have a Pro Pass or Client Access Code?
-          </label>
-          <div className="flex gap-2">
-            <Input
-              id="paywall-access-code"
-              value={accessCode}
-              onChange={(e) => setAccessCode(e.target.value)}
-              placeholder="Enter your access code..."
-              disabled={isVerifying}
-              className="h-9 border-zinc-800 bg-zinc-900 font-mono text-xs text-white placeholder:text-zinc-500"
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              disabled={isVerifying}
-              className="h-9 shrink-0 border border-violet-500/40 bg-violet-500/20 px-4 text-xs font-semibold text-violet-200 hover:bg-violet-500/30 hover:text-white"
-            >
-              {isVerifying ? (
-                <Loader2 className="size-3.5 animate-spin" />
+              {quota.isOperator ? (
+                <Badge
+                  variant="outline"
+                  className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[11px] text-emerald-300"
+                >
+                  <ShieldCheck className="mr-1 size-3" />
+                  Active
+                </Badge>
               ) : (
-                "Unlock Unlimited"
+                <Badge
+                  variant="outline"
+                  className="border-amber-500/30 bg-amber-500/10 font-mono text-[11px] tabular-nums text-amber-300"
+                >
+                  Trial: {quota.creditsRemaining}/{quota.maxTrialCredits} left
+                </Badge>
               )}
+            </div>
+
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight text-white sm:text-xl">
+              <Crown className="size-5 shrink-0 text-violet-400" />
+              Unlimited Aesthetic Batches &amp; AI Voiceovers
+            </DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed text-zinc-400">
+              Unlock full agency production speed with unlimited 15-image
+              vertical batches, Gemini Vision aesthetic matching, and neural
+              Spanish &amp; English voice synthesis.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* High-End Obsidian Pricing Card */}
+          <div className="rounded-xl border border-white/[0.08] bg-zinc-900/50 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+            <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] pb-3.5">
+              <div className="space-y-0.5">
+                <span className="block text-xs font-semibold tracking-tight text-white">
+                  All-In-One Fulfillment Pass
+                </span>
+                <span className="block font-mono text-[11px] text-zinc-400">
+                  Commercial &amp; Agency License
+                </span>
+              </div>
+              <div className="text-right">
+                <div className="flex items-baseline justify-end gap-1">
+                  <span className="text-2xl font-semibold tracking-tight tabular-nums text-white">
+                    {businessConfig.priceUsd}
+                  </span>
+                  <span className="text-xs text-zinc-400">/ mo</span>
+                </div>
+                <span className="block font-mono text-[11px] tabular-nums text-zinc-400">
+                  ~{businessConfig.priceCop} · mes
+                </span>
+              </div>
+            </div>
+
+            <ul className="space-y-2.5 pt-3.5">
+              {PRO_BENEFITS.map((benefit) => (
+                <li
+                  key={benefit}
+                  className="flex items-start gap-2.5 text-xs text-zinc-200"
+                >
+                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
+                  <span className="leading-snug">{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Local (COP) & Global (USD) Payment Buttons */}
+          <div className="space-y-2">
+            <Button
+              type="button"
+              onClick={() =>
+                handleOpenCheckout(
+                  businessConfig.checkoutUrlCop,
+                  `Wompi / Nequi / PSE (${businessConfig.priceCop})`
+                )
+              }
+              className="h-10 w-full bg-violet-600 text-xs font-semibold tracking-tight text-white shadow-lg shadow-violet-600/20 hover:bg-violet-500 sm:text-sm"
+            >
+              <CreditCard className="mr-2 size-4" />
+              Suscribirse por {businessConfig.priceCop} / mes (Nequi / PSE /
+              Wompi)
+              <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                handleOpenCheckout(
+                  businessConfig.checkoutUrlUsd,
+                  `Stripe Global (${businessConfig.priceUsd})`
+                )
+              }
+              className="h-10 w-full border-white/[0.1] bg-white/[0.04] text-xs font-semibold tracking-tight text-zinc-100 hover:border-white/20 hover:bg-white/[0.08] hover:text-white sm:text-sm"
+            >
+              <CreditCard className="mr-2 size-4 text-violet-400" />
+              Subscribe for {businessConfig.priceUsd} / month (Stripe Global)
+              <ExternalLink className="ml-1.5 size-3.5 opacity-80" />
             </Button>
           </div>
-        </form>
+
+          {/* Translucent Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.07]" />
+            <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              Or Instant Key Activation
+            </span>
+            <div className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          {/* Pro Pass / Client Access Code Form */}
+          <form onSubmit={handleActivateKey} className="space-y-2">
+            <label
+              htmlFor="paywall-access-code"
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-300"
+            >
+              <KeyRound className="size-3.5 text-violet-400" />
+              Have a Pro Pass or Client Access Code?
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="paywall-access-code"
+                value={accessCode}
+                onChange={(e) => setAccessCode(e.target.value)}
+                placeholder="Enter your access code..."
+                disabled={isVerifying}
+                className="h-9 border-white/[0.08] bg-zinc-950/75 font-mono text-xs text-white placeholder:text-zinc-500 focus-visible:border-violet-500/60"
+              />
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={isVerifying}
+                className="h-9 shrink-0 border border-violet-500/35 bg-violet-500/15 px-4 text-xs font-semibold text-violet-100 hover:border-violet-400/50 hover:bg-violet-500/25 hover:text-white"
+              >
+                {isVerifying ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  "Unlock Unlimited"
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

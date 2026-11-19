@@ -105,78 +105,81 @@ export default function VokaloomStudioPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
-      {/* Top Studio Header Bar */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* Top Minimalist Command Bar */}
+      <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#050507]/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           {/* Brand Identity */}
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/20">
-              <Sparkles className="size-5" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-violet-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+              <Sparkles className="size-3.5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold tracking-tight text-white sm:text-lg">
-                  Vokaloom Studio
-                </h1>
-                <Badge
-                  variant="outline"
-                  className="hidden border-zinc-700 bg-zinc-900 text-[10px] font-medium text-zinc-400 sm:inline-flex"
-                >
-                  MIT Commercial Safe
-                </Badge>
-              </div>
-              <p className="text-xs text-zinc-400">
-                15x Aesthetic Background Engine &amp; Realistic AI Voiceover
-                Workstation
-              </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-sm font-semibold tracking-tight text-white">
+                Vokaloom Studio
+              </h1>
+              <Badge
+                variant="outline"
+                className="hidden border-white/[0.08] bg-white/[0.03] px-1.5 py-0 font-mono text-[10px] font-medium text-zinc-400 sm:inline-flex"
+              >
+                MIT
+              </Badge>
             </div>
           </div>
 
-          {/* Right Status & Action Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Live Credit Badge */}
+          {/* Right Status & Grouped Actions */}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Live Quota / Mode Status Pill */}
             {quota.isOperator ? (
-              <Badge className="border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
-                <ShieldCheck className="mr-1.5 size-3.5" />
-                {quota.role === "operator"
-                  ? "Operator Mode: Unlimited"
-                  : "Pro Pass: Unlimited"}
+              <Badge
+                variant="outline"
+                className="h-7 border-emerald-500/30 bg-emerald-500/10 px-2.5 font-mono text-[11px] font-medium text-emerald-300"
+              >
+                <ShieldCheck className="mr-1.5 size-3" />
+                {quota.role === "operator" ? "Operator" : "Pro Pass"}
               </Badge>
             ) : (
               <Badge
-                variant="secondary"
-                className={`border px-2.5 py-1 text-xs font-semibold ${
+                variant="outline"
+                className={`h-7 px-2.5 font-mono text-[11px] font-medium tabular-nums ${
                   quota.creditsRemaining > 0
-                    ? "border-violet-500/30 bg-violet-500/15 text-violet-300"
-                    : "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                    ? "border-white/[0.08] bg-white/[0.03] text-zinc-300"
+                    : "border-amber-500/35 bg-amber-500/10 text-amber-300"
                 }`}
               >
-                Trial Credits: {quota.creditsRemaining}/{quota.maxTrialCredits}{" "}
-                left
+                <span
+                  className={`mr-1.5 size-1.5 rounded-full ${
+                    quota.creditsRemaining > 0
+                      ? "bg-violet-400"
+                      : "bg-amber-400"
+                  }`}
+                />
+                {quota.creditsRemaining}/{quota.maxTrialCredits} credits
               </Badge>
             )}
+
+            <div className="hidden h-4 w-px bg-white/[0.08] sm:block" />
 
             {/* Admin Panel Link (visible when Operator / Pro Mode is active) */}
             {quota.isOperator && (
               <Link
                 href="/admin"
-                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 text-xs font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
               >
-                <Settings className="size-3.5" />
-                Admin Panel
+                <Settings className="size-3.5 text-zinc-400" />
+                <span className="hidden sm:inline">Admin</span>
               </Link>
             )}
 
-            {/* Upgrade to Pro Button */}
+            {/* Upgrade to Pro CTA */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsPaywallOpen(true)}
-              className="border-violet-500/40 bg-violet-500/10 text-xs font-medium text-violet-200 hover:bg-violet-500/20 hover:text-white"
+              className="h-7 border-violet-500/35 bg-violet-500/15 px-2.5 text-xs font-medium text-violet-200 hover:border-violet-400/50 hover:bg-violet-500/25 hover:text-white"
             >
-              <Crown className="mr-1.5 size-3.5" />
-              Upgrade to Pro
+              <Crown className="mr-1.5 size-3.5 text-violet-300" />
+              <span>Upgrade</span>
             </Button>
 
             {/* Install App PWA Hint */}
@@ -184,10 +187,10 @@ export default function VokaloomStudioPage() {
               variant="outline"
               size="sm"
               onClick={handleInstallPwa}
-              className="border-zinc-800 bg-zinc-900/90 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              className="h-7 border-white/[0.08] bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-300 hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
             >
-              <Download className="mr-1.5 size-3.5" />
-              Install App
+              <Download className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Install App</span>
             </Button>
           </div>
         </div>
@@ -202,39 +205,28 @@ export default function VokaloomStudioPage() {
           }}
           className="flex flex-1 flex-col gap-6"
         >
-          <div className="flex flex-col items-start justify-between gap-4 border-b border-zinc-800/80 pb-4 sm:flex-row sm:items-center">
-            <TabsList className="h-10 w-full bg-zinc-900/90 p-1 sm:w-auto">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+            {/* Floating Pill-Style Segmented Control Switcher */}
+            <TabsList className="inline-flex h-10 w-full items-center rounded-full border border-white/[0.08] bg-zinc-900/60 p-1 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] sm:w-auto">
               <TabsTrigger
                 value="backgrounds"
-                className="flex items-center gap-2 px-4 py-1.5 text-xs font-semibold sm:text-sm data-active:bg-violet-600 data-active:text-white"
+                className="flex items-center gap-2 rounded-full border border-transparent px-4 py-1.5 text-xs font-medium text-zinc-400 transition-all hover:text-zinc-200 data-active:border-white/10 data-active:bg-white/[0.1] data-active:text-white data-active:shadow-sm dark:data-active:border-white/10 dark:data-active:bg-white/[0.1] dark:data-active:text-white"
               >
-                <ImageIcon className="size-4" />
+                <ImageIcon className="size-3.5 text-violet-400" />
                 Aesthetic Backgrounds (15x)
               </TabsTrigger>
               <TabsTrigger
                 value="voice"
-                className="flex items-center gap-2 px-4 py-1.5 text-xs font-semibold sm:text-sm data-active:bg-violet-600 data-active:text-white"
+                className="flex items-center gap-2 rounded-full border border-transparent px-4 py-1.5 text-xs font-medium text-zinc-400 transition-all hover:text-zinc-200 data-active:border-white/10 data-active:bg-white/[0.1] data-active:text-white data-active:shadow-sm dark:data-active:border-white/10 dark:data-active:bg-white/[0.1] dark:data-active:text-white"
               >
-                <Mic className="size-4" />
+                <Mic className="size-3.5 text-violet-400" />
                 Realistic Voice Studio
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-              <span>Commercial-Safe Pipeline:</span>
-              <Badge
-                variant="outline"
-                className="border-zinc-800 bg-zinc-900/60 text-[11px] text-zinc-300"
-              >
-                Pexels + Unsplash + Gemini 2.5 Flash
-              </Badge>
-              <Badge
-                variant="outline"
-                className="border-zinc-800 bg-zinc-900/60 text-[11px] text-zinc-300"
-              >
-                Gemini Neural TTS + Kokoro-82M + F5-TTS
-              </Badge>
-            </div>
+            <p className="hidden font-mono text-[11px] text-zinc-500 md:block">
+              Pexels · Unsplash · Gemini 2.5 · Kokoro-82M · F5-TTS
+            </p>
           </div>
 
           {/* Tab 1: Aesthetic Backgrounds (15x) */}
