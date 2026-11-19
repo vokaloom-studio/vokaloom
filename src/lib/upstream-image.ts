@@ -87,21 +87,49 @@ export function parseAllowedBackgroundUrl(
   return parsed;
 }
 
-interface SemaphoreWaiter {
-  resolve: (release: () => void) => void;
-  reject: (err: Error) => void;
-  cleanup: () => void;
+function toAbortError(signal: AbortSignal | undefined, fallbackMessage: string): Error {
+  if (signal?.reason instanceof Error) {
+    return signal.reason;
+  }
+  const err = new Error(
+    typeof signal?.reason === "string" && signal.reason.trim()
+      ? signal.reason
+      : fallbackMessage
+  );
+  err.name = "AbortError";
+  return err;
 }
 
+interface SemaphoreWaiter {
+  readonly signal?: AbortSignal;
+  readonly expiresAt: number;
+  readonly settled: boolean;
+  claim: () => boolean;
+  grant: (release: () => void) => void;
+  fail: (err: Error) => void;
+}
+
+/**
+ * Bounded concurrency semaphore with FIFO queuing, per-waiter deadline/abort
+ * settlement guards, and atomic slot accounting on release and cleanup.
+ */
 export class AsyncSemaphore {
   private active = 0;
+  private draining = false;
+  private readonly maxConcurrent: number;
+  private readonly maxQueueSize: number;
+  private readonly queueTimeoutMs: number;
   private readonly waiters: SemaphoreWaiter[] = [];
 
   constructor(
-    private readonly maxConcurrent: number,
-    private readonly maxQueueSize: number,
-    private readonly queueTimeoutMs: number
-  ) {}
+    maxConcurrent: number,
+    maxQueueSize: number,
+    queueTimeoutMs: number
+  ) {
+    this.maxConcurrent = Math.max(1, Math.floor(maxConcurrent));
+    this.maxQueueSize = Math.max(0, Math.floor(maxQueueSize));
+    this.queueTimeoutMs = Math.max(0, queueTimeoutMs);
+  }
 
   get activeCount(): number {
     return this.active;
@@ -111,33 +139,113 @@ export class AsyncSemaphore {
     return this.waiters.length;
   }
 
+  private isWaiterExpired(waiter: SemaphoreWaiter, now: number): boolean {
+    return this.queueTimeoutMs > 0
+      ? now >= waiter.expiresAt
+      : now > waiter.expiresAt;
+  }
+
   private createRelease(): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
-
-      while (this.waiters.length > 0) {
-        const next = this.waiters.shift()!;
-        next.cleanup();
-        next.resolve(this.createRelease());
-        return;
-      }
-
       this.active = Math.max(0, this.active - 1);
+      this.drain();
     };
+  }
+
+  private pruneStaleWaiters(now: number): void {
+    let i = 0;
+    while (i < this.waiters.length) {
+      const waiter = this.waiters[i];
+      if (waiter.settled) {
+        this.waiters.splice(i, 1);
+        continue;
+      }
+      if (waiter.signal?.aborted) {
+        waiter.fail(
+          toAbortError(
+            waiter.signal,
+            "Request aborted while queued for upstream fetch."
+          )
+        );
+        continue;
+      }
+      if (this.isWaiterExpired(waiter, now)) {
+        waiter.fail(
+          new UpstreamConcurrencyLimitError(
+            "Timed out waiting for upstream image fetch capacity."
+          )
+        );
+        continue;
+      }
+      i += 1;
+    }
+  }
+
+  private drain(): void {
+    if (this.draining) return;
+    this.draining = true;
+
+    try {
+      const now = Date.now();
+      this.pruneStaleWaiters(now);
+
+      while (this.active < this.maxConcurrent && this.waiters.length > 0) {
+        const next = this.waiters.shift()!;
+        if (next.settled) {
+          continue;
+        }
+        if (next.signal?.aborted) {
+          next.fail(
+            toAbortError(
+              next.signal,
+              "Request aborted while queued for upstream fetch."
+            )
+          );
+          continue;
+        }
+        if (this.isWaiterExpired(next, now)) {
+          next.fail(
+            new UpstreamConcurrencyLimitError(
+              "Timed out waiting for upstream image fetch capacity."
+            )
+          );
+          continue;
+        }
+
+        if (!next.claim()) {
+          continue;
+        }
+
+        this.active += 1;
+        const release = this.createRelease();
+        try {
+          next.grant(release);
+        } catch {
+          release();
+        }
+      }
+    } finally {
+      this.draining = false;
+    }
   }
 
   acquire(signal?: AbortSignal): Promise<() => void> {
     if (signal?.aborted) {
+      this.drain();
       return Promise.reject(
-        signal.reason instanceof Error
-          ? signal.reason
-          : new Error("Request aborted before acquiring upstream fetch slot.")
+        toAbortError(
+          signal,
+          "Request aborted before acquiring upstream fetch slot."
+        )
       );
     }
 
-    if (this.active < this.maxConcurrent) {
+    this.drain();
+
+    if (this.active < this.maxConcurrent && this.waiters.length === 0) {
       this.active += 1;
       return Promise.resolve(this.createRelease());
     }
@@ -147,6 +255,7 @@ export class AsyncSemaphore {
     }
 
     return new Promise<() => void>((resolve, reject) => {
+      let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       const removeSelf = () => {
@@ -166,38 +275,86 @@ export class AsyncSemaphore {
         }
       };
 
-      const onAbort = () => {
+      const settle = (): boolean => {
+        if (settled) return false;
+        settled = true;
         removeSelf();
         cleanup();
-        reject(
-          signal?.reason instanceof Error
-            ? signal.reason
-            : new Error("Request aborted while queued for upstream fetch.")
+        return true;
+      };
+
+      const fail = (err: Error) => {
+        if (!settle()) return;
+        reject(err);
+      };
+
+      const claim = (): boolean => settle();
+
+      const grant = (release: () => void) => {
+        resolve(release);
+      };
+
+      const onAbort = () => {
+        fail(
+          toAbortError(
+            signal,
+            "Request aborted while queued for upstream fetch."
+          )
         );
+        this.drain();
       };
 
       const onTimeout = () => {
-        removeSelf();
-        cleanup();
-        reject(
+        fail(
           new UpstreamConcurrencyLimitError(
             "Timed out waiting for upstream image fetch capacity."
           )
         );
+        this.drain();
       };
 
       const waiter: SemaphoreWaiter = {
-        resolve,
-        reject,
-        cleanup,
+        signal,
+        expiresAt: Date.now() + this.queueTimeoutMs,
+        get settled() {
+          return settled;
+        },
+        claim,
+        grant,
+        fail,
       };
 
       this.waiters.push(waiter);
       timer = setTimeout(onTimeout, this.queueTimeoutMs);
       if (signal) {
         signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) {
+          onAbort();
+        }
       }
     });
+  }
+
+  /**
+   * Executes a task under an acquired semaphore permit and guarantees permit
+   * release and immediate queue draining if the task throws, rejects, or aborts.
+   */
+  async run<T>(
+    fn: (signal?: AbortSignal) => Promise<T> | T,
+    signal?: AbortSignal
+  ): Promise<T> {
+    const release = await this.acquire(signal);
+    try {
+      if (signal?.aborted) {
+        throw toAbortError(
+          signal,
+          "Request aborted before running upstream fetch."
+        );
+      }
+      return await fn(signal);
+    } finally {
+      release();
+    }
   }
 }
 
@@ -302,11 +459,10 @@ export async function fetchAllowedBackgroundImage(
   const timeoutMs = options.timeoutMs ?? DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
   const semaphore = options.semaphore ?? upstreamImageSemaphore;
 
-  const release = await semaphore.acquire(options.signal);
-  try {
+  return semaphore.run(async (signal) => {
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
-    const fetchSignal = options.signal
-      ? AbortSignal.any([options.signal, timeoutSignal])
+    const fetchSignal = signal
+      ? AbortSignal.any([signal, timeoutSignal])
       : timeoutSignal;
 
     let currentUrl = initialUrl;
@@ -365,7 +521,5 @@ export async function fetchAllowedBackgroundImage(
     }
 
     throw new DisallowedRedirectError();
-  } finally {
-    release();
-  }
+  }, options.signal);
 }
