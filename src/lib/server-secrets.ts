@@ -19,9 +19,11 @@ export const SECRET_KEY_NAMES: readonly SecretKeyName[] = [
 export const VAULT_COOKIE_NAME = "vokaloom_vault_v1";
 export const ADMIN_SESSION_COOKIE_NAME = "vokaloom_admin_session";
 export const ENTITLEMENT_COOKIE_NAME = "vokaloom_entitlement_v1";
+export const TRIAL_COOKIE_NAME = "vokaloom_trial_v1";
 
 export const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const ENTITLEMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const TRIAL_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type EntitlementRole = "operator" | "pro_client";
 
@@ -211,32 +213,155 @@ export function verifyEntitlementToken(
   }
 }
 
-export async function resolveServerEntitlement(): Promise<{
+function readCookieFromHeader(
+  cookieHeader: string | undefined,
+  cookieName: string
+): string | undefined {
+  if (!cookieHeader) return undefined;
+  const pairs = cookieHeader.split(";");
+  for (const pair of pairs) {
+    const eqIndex = pair.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const name = pair.slice(0, eqIndex).trim();
+    if (name === cookieName) {
+      const rawValue = pair.slice(eqIndex + 1).trim();
+      try {
+        return decodeURIComponent(rawValue);
+      } catch {
+        return rawValue;
+      }
+    }
+  }
+  return undefined;
+}
+
+export async function resolveServerEntitlement(
+  fallbackCookieHeader?: string
+): Promise<{
   role: EntitlementRole | "guest";
   isPro: boolean;
   isOperator: boolean;
 }> {
+  let adminToken: string | undefined;
+  let entitlementToken: string | undefined;
+
   try {
     const cookieStore = await cookies();
-    const adminToken = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
-    if (verifyAdminSessionToken(adminToken)) {
-      return { role: "operator", isPro: true, isOperator: true };
-    }
-
-    const entitlementToken = cookieStore.get(ENTITLEMENT_COOKIE_NAME)?.value;
-    const verified = verifyEntitlementToken(entitlementToken);
-    if (verified.valid) {
-      return {
-        role: verified.role,
-        isPro: verified.isPro,
-        isOperator: verified.isOperator,
-      };
-    }
+    adminToken = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+    entitlementToken = cookieStore.get(ENTITLEMENT_COOKIE_NAME)?.value;
   } catch {
-    // Ignore cookie read issues outside request context
+    adminToken = readCookieFromHeader(
+      fallbackCookieHeader,
+      ADMIN_SESSION_COOKIE_NAME
+    );
+    entitlementToken = readCookieFromHeader(
+      fallbackCookieHeader,
+      ENTITLEMENT_COOKIE_NAME
+    );
+  }
+
+  if (verifyAdminSessionToken(adminToken)) {
+    return { role: "operator", isPro: true, isOperator: true };
+  }
+
+  const verified = verifyEntitlementToken(entitlementToken);
+  if (verified.valid) {
+    return {
+      role: verified.role,
+      isPro: verified.isPro,
+      isOperator: verified.isOperator,
+    };
   }
 
   return { role: "guest", isPro: false, isOperator: false };
+}
+
+export function signTrialToken(
+  used: number,
+  resetAtMs: number,
+  nowMs = Date.now()
+): string | null {
+  const hmacKey = deriveHmacKey("trial-quota");
+  if (!hmacKey) return null;
+  const payload = Buffer.from(
+    JSON.stringify({ used, resetAt: resetAtMs, iat: nowMs }),
+    "utf8"
+  ).toString("base64url");
+  const sig = crypto
+    .createHmac("sha256", hmacKey)
+    .update(payload)
+    .digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+export function verifyTrialToken(
+  token: string | undefined,
+  nowMs = Date.now()
+): { valid: boolean; used: number; resetAt: number } | null {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return null;
+
+  const hmacKey = deriveHmacKey("trial-quota");
+  if (!hmacKey) return null;
+
+  const expected = crypto
+    .createHmac("sha256", hmacKey)
+    .update(payloadB64)
+    .digest();
+  const provided = Buffer.from(sigB64, "base64url");
+  if (
+    provided.length !== expected.length ||
+    !crypto.timingSafeEqual(provided, expected)
+  ) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payloadB64, "base64url").toString("utf8")
+    ) as { used?: unknown; resetAt?: unknown; iat?: unknown };
+
+    const used = Number(parsed.used);
+    const resetAt = Number(parsed.resetAt);
+    const iat = Number(parsed.iat);
+
+    if (
+      !Number.isInteger(used) ||
+      used < 0 ||
+      !Number.isFinite(resetAt) ||
+      !Number.isFinite(iat) ||
+      iat <= 0 ||
+      iat > nowMs + 60_000 ||
+      nowMs > resetAt ||
+      resetAt > nowMs + TRIAL_TTL_MS + 60_000
+    ) {
+      return null;
+    }
+
+    return { valid: true, used, resetAt };
+  } catch {
+    return null;
+  }
+}
+
+export async function getVerifiedTrialUsageFromCookie(
+  nowMs = Date.now(),
+  fallbackCookieHeader?: string
+): Promise<{ used: number; resetAt: number } | null> {
+  let rawToken: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    rawToken = cookieStore.get(TRIAL_COOKIE_NAME)?.value;
+  } catch {
+    rawToken = readCookieFromHeader(fallbackCookieHeader, TRIAL_COOKIE_NAME);
+  }
+  const verified = verifyTrialToken(rawToken, nowMs);
+  if (!verified || !verified.valid) return null;
+  return { used: verified.used, resetAt: verified.resetAt };
 }
 
 export function isValidSecretValue(

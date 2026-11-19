@@ -334,16 +334,28 @@ const en = {
   "admin.vault.toast.clearError": "Could not clear API Keys Vault.",
 
   // API Route Messages
+  "api.quota.exhausted":
+    "Free trial credits exhausted. Unlock Vokaloom Pro or sign in as Operator to continue.",
   "api.bg.invalidProxyOrigin": "Invalid or disallowed proxyUrl origin.",
   "api.bg.upstreamStatus": "Upstream image returned {status}",
   "api.bg.proxyFailed": "Failed to proxy image download.",
   "api.bg.proxyTooLarge": "Upstream image exceeds 15 MB proxy limit.",
+  "api.bg.invalidUpstreamContentType":
+    "Upstream resource did not return a supported image Content-Type.",
+  "api.bg.invalidReferenceImage":
+    "Reference image must be a valid base64 JPEG, PNG, or WebP payload.",
+  "api.bg.referenceImageTooLarge":
+    "Reference image exceeds the 5 MB maximum size limit.",
   "api.bg.fallbackNotice":
     "Curated fallback batch served because live search encountered an issue.",
   "api.modelSwap.missingInputs":
     "Both model reference image and background URL are required.",
   "api.modelSwap.invalidBackgroundOrigin":
     "Invalid or disallowed backgroundUrl origin.",
+  "api.modelSwap.invalidModelImage":
+    "Model image must be a valid base64 JPEG, PNG, or WebP payload.",
+  "api.modelSwap.modelImageTooLarge":
+    "Model image exceeds the 5 MB maximum size limit.",
   "api.modelSwap.geminiEngine": "Gemini 2.5 Visual Compositor",
   "api.modelSwap.fallbackEngine": "Client Canvas Compositor",
   "api.modelSwap.processError": "Unable to process model scene placement.",
@@ -723,17 +735,29 @@ const es: Record<TranslationKey, string> = {
     "No se pudo vaciar la bóveda de claves API.",
 
   // API Route Messages
+  "api.quota.exhausted":
+    "Créditos de prueba agotados. Desbloquea Vokaloom Pro o inicia sesión como Operador para continuar.",
   "api.bg.invalidProxyOrigin": "Origen de proxyUrl no válido o no permitido.",
   "api.bg.upstreamStatus": "La imagen de origen devolvió el estado {status}",
   "api.bg.proxyFailed": "No se pudo obtener la imagen a través del proxy.",
   "api.bg.proxyTooLarge":
     "La imagen de origen supera el límite de 15 MB del proxy.",
+  "api.bg.invalidUpstreamContentType":
+    "El recurso de origen no devolvió un Content-Type de imagen válido.",
+  "api.bg.invalidReferenceImage":
+    "La imagen de referencia debe ser un payload base64 JPEG, PNG o WebP válido.",
+  "api.bg.referenceImageTooLarge":
+    "La imagen de referencia supera el límite máximo de 5 MB.",
   "api.bg.fallbackNotice":
     "Se sirvió el lote curado de respaldo porque la búsqueda en vivo tuvo un problema.",
   "api.modelSwap.missingInputs":
     "Se requieren tanto la foto del modelo como la URL de fondo.",
   "api.modelSwap.invalidBackgroundOrigin":
     "Origen de backgroundUrl no válido o no permitido.",
+  "api.modelSwap.invalidModelImage":
+    "La foto del modelo debe ser un payload base64 JPEG, PNG o WebP válido.",
+  "api.modelSwap.modelImageTooLarge":
+    "La foto del modelo supera el límite máximo de 5 MB.",
   "api.modelSwap.geminiEngine": "Compositor Visual Gemini 2.5",
   "api.modelSwap.fallbackEngine": "Compositor Canvas Local",
   "api.modelSwap.processError":

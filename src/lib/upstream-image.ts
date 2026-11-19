@@ -3,14 +3,36 @@ export const ALLOWED_BACKGROUND_IMAGE_HOSTS = new Set<string>([
   "images.unsplash.com",
 ]);
 
+export const ALLOWED_PROXY_IMAGE_CONTENT_TYPES = new Set<string>([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+]);
+
+export const ALLOWED_INPUT_IMAGE_MIME_TYPES = new Set<string>([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
 export const DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+export const MAX_INPUT_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_CONCURRENT_IMAGE_FETCHES = 6;
 export const MAX_QUEUED_IMAGE_FETCHES = 48;
 export const UPSTREAM_QUEUE_TIMEOUT_MS = 10_000;
 
 const MAX_REDIRECT_HOPS = 3;
 const MAX_IMAGE_URL_LENGTH = 4096;
+const MAX_INPUT_IMAGE_BASE64_CHARS = Math.ceil(MAX_INPUT_IMAGE_BYTES / 3) * 4;
+const MAX_INPUT_IMAGE_HEADER_CHARS = 128;
+const MAX_INPUT_IMAGE_DATA_URL_LENGTH =
+  MAX_INPUT_IMAGE_BASE64_CHARS + MAX_INPUT_IMAGE_HEADER_CHARS;
+const INPUT_IMAGE_DATA_URI_REGEX =
+  /^data:(image\/(?:jpeg|jpg|png|webp))(?:;[^,;]+)*;base64,([A-Za-z0-9+/=]+)$/i;
+const BARE_BASE64_REGEX = /^[A-Za-z0-9+/=]+$/;
 
 export class UpstreamImageTooLargeError extends Error {
   constructor(maxBytes: number) {
@@ -36,11 +58,138 @@ export class DisallowedRedirectError extends Error {
   }
 }
 
+export class InvalidUpstreamContentTypeError extends Error {
+  readonly receivedContentType: string | null;
+
+  constructor(receivedContentType: string | null) {
+    super(
+      `Upstream response Content-Type is not an allowed image type: ${receivedContentType ?? "missing"}`
+    );
+    this.name = "InvalidUpstreamContentTypeError";
+    this.receivedContentType = receivedContentType;
+  }
+}
+
 export class UpstreamConcurrencyLimitError extends Error {
   constructor(message = "Too many concurrent upstream image requests.") {
     super(message);
     this.name = "UpstreamConcurrencyLimitError";
   }
+}
+
+export function parseAllowedImageContentType(
+  rawHeader: string | null | undefined
+): string | null {
+  if (!rawHeader || typeof rawHeader !== "string") {
+    return null;
+  }
+  const mimeType = rawHeader.split(";")[0]?.trim().toLowerCase();
+  if (!mimeType) return null;
+  const normalized = mimeType === "image/jpg" ? "image/jpeg" : mimeType;
+  return ALLOWED_PROXY_IMAGE_CONTENT_TYPES.has(normalized)
+    ? normalized
+    : null;
+}
+
+export type Base64ImageValidationResult =
+  | { valid: true; data: string; mimeType: string }
+  | { valid: false; reason: "invalid" | "tooLarge" };
+
+function normalizeInputImageMime(rawMime: unknown): string | null {
+  if (rawMime === undefined || rawMime === null || rawMime === "") {
+    return "image/jpeg";
+  }
+  if (typeof rawMime !== "string") return null;
+  const lower = rawMime.split(";")[0]?.trim().toLowerCase();
+  if (!lower) return "image/jpeg";
+  const normalized = lower === "image/jpg" ? "image/jpeg" : lower;
+  return ALLOWED_INPUT_IMAGE_MIME_TYPES.has(normalized) ? normalized : null;
+}
+
+/**
+ * Validates and bounds incoming base64 / data-URI image payloads (JPEG, PNG, WebP)
+ * against the 5 MB decoded limit before allocating buffers or calling Gemini.
+ */
+export function validateBase64ImagePayload(
+  rawInput: unknown,
+  fallbackMime: unknown = "image/jpeg"
+): Base64ImageValidationResult {
+  if (typeof rawInput !== "string") {
+    return { valid: false, reason: "invalid" };
+  }
+
+  const trimmed = rawInput.trim();
+  if (!trimmed) {
+    return { valid: false, reason: "invalid" };
+  }
+
+  if (trimmed.length > MAX_INPUT_IMAGE_DATA_URL_LENGTH) {
+    return { valid: false, reason: "tooLarge" };
+  }
+
+  let mimeType: string | null;
+  let base64Payload: string;
+
+  if (
+    trimmed.toLowerCase().startsWith("data:") ||
+    trimmed.includes(",") ||
+    trimmed.includes(":")
+  ) {
+    const commaIdx = trimmed.indexOf(",");
+    if (commaIdx === -1 || commaIdx > MAX_INPUT_IMAGE_HEADER_CHARS) {
+      return { valid: false, reason: "invalid" };
+    }
+    const match = INPUT_IMAGE_DATA_URI_REGEX.exec(trimmed);
+    if (!match) {
+      return { valid: false, reason: "invalid" };
+    }
+    mimeType = normalizeInputImageMime(match[1]);
+    base64Payload = match[2];
+  } else {
+    mimeType = normalizeInputImageMime(fallbackMime);
+    if (!BARE_BASE64_REGEX.test(trimmed)) {
+      return { valid: false, reason: "invalid" };
+    }
+    base64Payload = trimmed;
+  }
+
+  if (!mimeType) {
+    return { valid: false, reason: "invalid" };
+  }
+
+  if (base64Payload.length > MAX_INPUT_IMAGE_BASE64_CHARS) {
+    return { valid: false, reason: "tooLarge" };
+  }
+  if (base64Payload.length % 4 === 1) {
+    return { valid: false, reason: "invalid" };
+  }
+
+  const firstPaddingIndex = base64Payload.indexOf("=");
+  if (firstPaddingIndex !== -1) {
+    const trailing = base64Payload.slice(firstPaddingIndex);
+    if (
+      (trailing !== "=" && trailing !== "==") ||
+      base64Payload.length % 4 !== 0
+    ) {
+      return { valid: false, reason: "invalid" };
+    }
+  }
+
+  const paddingBytes = base64Payload.endsWith("==")
+    ? 2
+    : base64Payload.endsWith("=")
+      ? 1
+      : 0;
+  const decodedBytes =
+    Math.floor((base64Payload.length * 3) / 4) - paddingBytes;
+  if (decodedBytes <= 0) {
+    return { valid: false, reason: "invalid" };
+  }
+  if (decodedBytes > MAX_INPUT_IMAGE_BYTES) {
+    return { valid: false, reason: "tooLarge" };
+  }
+
+  return { valid: true, data: base64Payload, mimeType };
 }
 
 /**
@@ -514,10 +663,18 @@ export async function fetchAllowedBackgroundImage(
         throw new UpstreamStatusError(response.status);
       }
 
+      const validatedContentType = parseAllowedImageContentType(
+        response.headers.get("content-type")
+      );
+      if (!validatedContentType) {
+        await response.body?.cancel().catch(() => {});
+        throw new InvalidUpstreamContentTypeError(
+          response.headers.get("content-type")
+        );
+      }
+
       const bytes = await readResponseBytesWithLimit(response, maxBytes);
-      const contentType =
-        response.headers.get("Content-Type") || "image/jpeg";
-      return { bytes, contentType };
+      return { bytes, contentType: validatedContentType };
     }
 
     throw new DisallowedRedirectError();

@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import {
+  attachServerTrialCookie,
+  enforceServerGenerationQuota,
+} from "@/lib/server-quota";
 import { resolveApiKey } from "@/lib/server-secrets";
 import {
   DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
+  InvalidUpstreamContentTypeError,
   UpstreamConcurrencyLimitError,
   UpstreamImageTooLargeError,
   UpstreamStatusError,
   fetchAllowedBackgroundImage,
   parseAllowedBackgroundUrl,
+  validateBase64ImagePayload,
 } from "@/lib/upstream-image";
 
 export const maxDuration = 60;
@@ -32,8 +38,9 @@ interface BackgroundsRequest {
   vibe?: string;
   page?: number;
   batchSize?: 5 | 15;
-  referenceImageBase64?: string;
-  mimeType?: string;
+  preload?: boolean;
+  referenceImageBase64?: unknown;
+  mimeType?: unknown;
   locale?: unknown;
 }
 
@@ -499,9 +506,16 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {
+    if (error instanceof InvalidUpstreamContentTypeError) {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.invalidUpstreamContentType") },
+        { status: 502 }
+      );
+    }
     if (error instanceof UpstreamImageTooLargeError) {
       return NextResponse.json(
         { error: translate(locale, "api.bg.proxyTooLarge") },
@@ -534,18 +548,102 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let locale = resolveRequestLocale(request);
+  let body: BackgroundsRequest;
   try {
-    const body = (await request.json()) as BackgroundsRequest;
-    if (body.locale !== undefined) {
-      locale = resolveRequestLocale(request, body.locale);
+    body = (await request.json()) as BackgroundsRequest;
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { error: translate(locale, "api.bg.invalidReferenceImage") },
+        { status: 400 }
+      );
     }
-    const rawQuery = (body.query || "").trim();
-    const vibe = (body.vibe || "Luxury Travel").trim();
-    const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
-    const targetCount = body.batchSize === 5 ? 5 : 15;
-    const pexelsLimit = targetCount === 5 ? 3 : 8;
-    const unsplashLimit = targetCount === 5 ? 2 : 7;
+  } catch {
+    return NextResponse.json(
+      { error: translate(locale, "api.bg.invalidReferenceImage") },
+      { status: 400 }
+    );
+  }
 
+  if (body.locale !== undefined) {
+    locale = resolveRequestLocale(request, body.locale);
+  }
+
+  const rawQuery = typeof body.query === "string" ? body.query.trim() : "";
+  const vibe =
+    typeof body.vibe === "string" && body.vibe.trim()
+      ? body.vibe.trim()
+      : "Luxury Travel";
+  const page = typeof body.page === "number" && body.page > 0 ? body.page : 1;
+  const targetCount = body.batchSize === 5 ? 5 : 15;
+  const pexelsLimit = targetCount === 5 ? 3 : 8;
+  const unsplashLimit = targetCount === 5 ? 2 : 7;
+
+  let validatedRefImage: { data: string; mimeType: string } | null = null;
+  const hasRefImageInput =
+    body.referenceImageBase64 !== undefined &&
+    body.referenceImageBase64 !== null &&
+    !(
+      typeof body.referenceImageBase64 === "string" &&
+      body.referenceImageBase64.trim() === ""
+    );
+
+  if (hasRefImageInput) {
+    const refValidation = validateBase64ImagePayload(
+      body.referenceImageBase64,
+      body.mimeType
+    );
+    if (!refValidation.valid) {
+      return NextResponse.json(
+        {
+          error: translate(
+            locale,
+            refValidation.reason === "tooLarge"
+              ? "api.bg.referenceImageTooLarge"
+              : "api.bg.invalidReferenceImage"
+          ),
+        },
+        { status: refValidation.reason === "tooLarge" ? 413 : 400 }
+      );
+    }
+    validatedRefImage = {
+      data: refValidation.data,
+      mimeType: refValidation.mimeType,
+    };
+  }
+
+  const isShowcasePreload =
+    body.preload === true &&
+    !rawQuery &&
+    !validatedRefImage &&
+    page === 1;
+
+  if (isShowcasePreload) {
+    const showcaseItems = buildCuratedBatch(targetCount, vibe, "", 1);
+    const resolvedQuery = `${vibe} candid vertical`.trim();
+    return NextResponse.json({
+      items: showcaseItems,
+      count: showcaseItems.length,
+      resolvedQuery,
+      extractedTags: resolvedQuery
+        .split(/\s+/)
+        .map((w) => w.toLowerCase().replace(/[^a-z0-9-]/g, ""))
+        .filter((w) => w.length >= 3)
+        .slice(0, 6),
+      visionUsed: false,
+      isCuratedFallback: true,
+      page: 1,
+    });
+  }
+
+  const quota = await enforceServerGenerationQuota(request, locale);
+  if (!quota.allowed) {
+    return quota.response;
+  }
+
+  const withQuotaCookie = (res: NextResponse) =>
+    attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+
+  try {
     const baseSearchTerms =
       [vibe, rawQuery].filter(Boolean).join(" ").trim() ||
       "aesthetic travel lifestyle candid vertical";
@@ -554,10 +652,10 @@ export async function POST(request: Request) {
     let resolvedQuery = baseSearchTerms;
     let visionUsed = false;
 
-    if (body.referenceImageBase64) {
+    if (validatedRefImage) {
       const visionResult = await analyzeReferenceImageWithGemini(
-        body.referenceImageBase64,
-        body.mimeType || "image/jpeg",
+        validatedRefImage.data,
+        validatedRefImage.mimeType,
         baseSearchTerms
       );
       resolvedQuery = visionResult.resolvedQuery;
@@ -597,27 +695,31 @@ export async function POST(request: Request) {
       .filter((w) => w.length >= 3)
       .slice(0, 6);
 
-    return NextResponse.json({
-      items: finalBatch,
-      count: finalBatch.length,
-      resolvedQuery,
-      extractedTags,
-      visionUsed,
-      isCuratedFallback: combined.length === 0,
-      page,
-    });
+    return withQuotaCookie(
+      NextResponse.json({
+        items: finalBatch,
+        count: finalBatch.length,
+        resolvedQuery,
+        extractedTags,
+        visionUsed,
+        isCuratedFallback: combined.length === 0,
+        page,
+      })
+    );
   } catch (error) {
     console.error("Error in /api/backgrounds:", error);
     const fallbackItems = buildCuratedBatch(15, "Luxury Travel", "", 1);
-    return NextResponse.json({
-      items: fallbackItems,
-      count: fallbackItems.length,
-      resolvedQuery: "aesthetic travel lifestyle candid vertical",
-      extractedTags: ["aesthetic", "travel", "lifestyle", "candid", "vertical"],
-      visionUsed: false,
-      isCuratedFallback: true,
-      notice: translate(locale, "api.bg.fallbackNotice"),
-      page: 1,
-    });
+    return withQuotaCookie(
+      NextResponse.json({
+        items: fallbackItems,
+        count: fallbackItems.length,
+        resolvedQuery: "aesthetic travel lifestyle candid vertical",
+        extractedTags: ["aesthetic", "travel", "lifestyle", "candid", "vertical"],
+        visionUsed: false,
+        isCuratedFallback: true,
+        notice: translate(locale, "api.bg.fallbackNotice"),
+        page: 1,
+      })
+    );
   }
 }

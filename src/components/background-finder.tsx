@@ -448,7 +448,13 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errPayload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (response.status === 402) {
+          onRequirePaywall();
+        }
+        throw new Error(errPayload.error || `HTTP ${response.status}`);
       }
 
       const data = (await response.json()) as BackgroundsApiResponse;
@@ -502,6 +508,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         vibe: "Luxury Travel",
         page: 1,
         batchSize: 15,
+        preload: true,
       }),
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -707,6 +714,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       const data = (await res.json()) as ModelSwapApiResponse;
       if (!res.ok) {
+        if (res.status === 402) {
+          onRequirePaywall();
+        }
         throw new Error(data.error || t("bg.toast.modelSwapError"));
       }
 

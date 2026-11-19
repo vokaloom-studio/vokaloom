@@ -424,6 +424,9 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
       };
 
       if (!response.ok || !data.audioUrl) {
+        if (response.status === 402) {
+          onRequirePaywall();
+        }
         throw new Error(data.error || t("voice.toast.synthFailed"));
       }
 

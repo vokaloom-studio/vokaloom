@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
-import { fal } from "@fal-ai/client";
+import { createFalClient, type FalClient } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import {
+  attachServerTrialCookie,
+  enforceServerGenerationQuota,
+} from "@/lib/server-quota";
 import { resolveApiKey } from "@/lib/server-secrets";
 
 export const maxDuration = 60;
@@ -99,14 +103,13 @@ function validateReferenceAudioDataUri(
 }
 
 /**
- * Wraps `fal.subscribe` with an explicit AbortController and deadline race so
- * hung GPU jobs or disconnected clients never hold serverless workers open.
+ * Wraps a per-request `FalClient.subscribe` call with an explicit AbortController and
+ * deadline race so hung GPU jobs or disconnected clients never hold serverless workers open.
  */
-async function subscribeFalWithTimeout<
-  Id extends Parameters<typeof fal.subscribe>[0],
->(
-  endpointId: Id,
-  options: Parameters<typeof fal.subscribe<Id>>[1],
+async function subscribeFalWithTimeout(
+  falClient: FalClient,
+  endpointId: Parameters<FalClient["subscribe"]>[0],
+  options: Parameters<FalClient["subscribe"]>[1],
   requestSignal?: AbortSignal,
   timeoutMs = FAL_SUBSCRIBE_TIMEOUT_MS
 ) {
@@ -147,7 +150,7 @@ async function subscribeFalWithTimeout<
   });
 
   try {
-    const subscribePromise = fal.subscribe(endpointId, {
+    const subscribePromise = falClient.subscribe(endpointId, {
       ...options,
       timeout: timeoutMs,
       abortSignal: controller.signal,
@@ -329,16 +332,28 @@ export async function POST(request: Request) {
       ? refAudioValidation.dataUri
       : undefined;
 
+    const quota = await enforceServerGenerationQuota(request, locale);
+    if (!quota.allowed) {
+      return quota.response;
+    }
+
+    const withQuotaCookie = (res: NextResponse) =>
+      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+
     const [falKey, geminiKey] = await Promise.all([
       resolveApiKey("FAL_KEY"),
       resolveApiKey("GEMINI_API_KEY"),
     ]);
 
+    const falClient = falKey
+      ? createFalClient({ credentials: falKey })
+      : null;
+
     // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
-    if (validatedReferenceAudio && falKey) {
+    if (validatedReferenceAudio && falClient) {
       try {
-        fal.config({ credentials: falKey });
         const result = await subscribeFalWithTimeout(
+          falClient,
           "fal-ai/f5-tts",
           {
             input: {
@@ -352,13 +367,15 @@ export async function POST(request: Request) {
         );
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
-          return NextResponse.json({
-            audioUrl,
-            engine: translate(locale, "api.voice.engine.f5tts"),
-            language,
-            durationMs: Date.now() - startTime,
-            isFallback: false,
-          });
+          return withQuotaCookie(
+            NextResponse.json({
+              audioUrl,
+              engine: translate(locale, "api.voice.engine.f5tts"),
+              language,
+              durationMs: Date.now() - startTime,
+              isFallback: false,
+            })
+          );
         }
       } catch (err) {
         if (request.signal?.aborted) {
@@ -369,12 +386,12 @@ export async function POST(request: Request) {
     }
 
     // Mode B: Standard Realistic TTS via Apache-2.0 Kokoro-82M
-    if (!validatedReferenceAudio && falKey) {
+    if (!validatedReferenceAudio && falClient) {
       try {
-        fal.config({ credentials: falKey });
         const result =
           language === "es"
             ? await subscribeFalWithTimeout(
+                falClient,
                 "fal-ai/kokoro/spanish",
                 {
                   input: {
@@ -391,6 +408,7 @@ export async function POST(request: Request) {
                 request.signal
               )
             : await subscribeFalWithTimeout(
+                falClient,
                 "fal-ai/kokoro/american-english",
                 {
                   input: {
@@ -403,13 +421,15 @@ export async function POST(request: Request) {
               );
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
-          return NextResponse.json({
-            audioUrl,
-            engine: translate(locale, "api.voice.engine.kokoro"),
-            language,
-            durationMs: Date.now() - startTime,
-            isFallback: false,
-          });
+          return withQuotaCookie(
+            NextResponse.json({
+              audioUrl,
+              engine: translate(locale, "api.voice.engine.kokoro"),
+              language,
+              durationMs: Date.now() - startTime,
+              isFallback: false,
+            })
+          );
         }
       } catch (err) {
         if (request.signal?.aborted) {
@@ -465,13 +485,15 @@ export async function POST(request: Request) {
             500,
             Math.round((pcmBuffer.length / (24000 * 2)) * 1000)
           );
-          return NextResponse.json({
-            audioUrl: "data:audio/wav;base64," + wavBuffer.toString("base64"),
-            engine: translate(locale, "api.voice.engine.geminiTts"),
-            language,
-            durationMs,
-            isFallback: false,
-          });
+          return withQuotaCookie(
+            NextResponse.json({
+              audioUrl: "data:audio/wav;base64," + wavBuffer.toString("base64"),
+              engine: translate(locale, "api.voice.engine.geminiTts"),
+              language,
+              durationMs,
+              isFallback: false,
+            })
+          );
         }
       } catch (err) {
         console.warn("Gemini 2.5 Native TTS call failed, falling back to demo synth:", err);
@@ -484,13 +506,15 @@ export async function POST(request: Request) {
       voiceId,
       Boolean(validatedReferenceAudio)
     );
-    return NextResponse.json({
-      audioUrl: synth.dataUri,
-      engine: translate(locale, "api.voice.demoFallbackEngine"),
-      language,
-      durationMs: synth.durationMs,
-      isFallback: true,
-    });
+    return withQuotaCookie(
+      NextResponse.json({
+        audioUrl: synth.dataUri,
+        engine: translate(locale, "api.voice.demoFallbackEngine"),
+        language,
+        durationMs: synth.durationMs,
+        isFallback: true,
+      })
+    );
   } catch (error) {
     console.error("Error in /api/voice:", error);
     return NextResponse.json(

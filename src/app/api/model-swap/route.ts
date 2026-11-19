@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
+import {
+  attachServerTrialCookie,
+  enforceServerGenerationQuota,
+} from "@/lib/server-quota";
 import { resolveApiKey } from "@/lib/server-secrets";
 import {
   DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
+  InvalidUpstreamContentTypeError,
   UpstreamConcurrencyLimitError,
   UpstreamImageTooLargeError,
   UpstreamStatusError,
   fetchAllowedBackgroundImage,
   parseAllowedBackgroundUrl,
+  validateBase64ImagePayload,
 } from "@/lib/upstream-image";
 
 export const maxDuration = 60;
@@ -18,7 +24,7 @@ const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
 const MAX_BACKGROUND_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
 
 interface ModelSwapRequestBody {
-  modelImageBase64?: string;
+  modelImageBase64?: unknown;
   backgroundUrl?: string;
   sceneTitle?: string;
   locale?: unknown;
@@ -26,22 +32,6 @@ interface ModelSwapRequestBody {
 
 const COMPOSITE_PROMPT =
   "Place the exact person/model from the first image naturally into the real environment of the second vertical 9:16 background image. Match lighting, shadows, color grading, and candid smartphone photography realism. Keep 9:16 vertical framing.";
-
-function parseBase64DataUrl(
-  input: string,
-  defaultMime = "image/jpeg"
-): { data: string; mimeType: string } {
-  const trimmed = input.trim();
-  if (trimmed.startsWith("data:")) {
-    const commaIdx = trimmed.indexOf(",");
-    if (commaIdx > 0) {
-      const header = trimmed.slice(5, commaIdx);
-      const mime = header.split(";")[0]?.trim() || defaultMime;
-      return { data: trimmed.slice(commaIdx + 1), mimeType: mime };
-    }
-  }
-  return { data: trimmed, mimeType: defaultMime };
-}
 
 function extractImagePart(response: {
   candidates?: Array<{
@@ -96,14 +86,39 @@ export async function POST(request: Request) {
       );
     }
 
+    const modelPart = validateBase64ImagePayload(body.modelImageBase64);
+    if (!modelPart.valid) {
+      return NextResponse.json(
+        {
+          error: translate(
+            locale,
+            modelPart.reason === "tooLarge"
+              ? "api.modelSwap.modelImageTooLarge"
+              : "api.modelSwap.invalidModelImage"
+          ),
+        },
+        { status: modelPart.reason === "tooLarge" ? 413 : 400 }
+      );
+    }
+
+    const quota = await enforceServerGenerationQuota(request, locale);
+    if (!quota.allowed) {
+      return quota.response;
+    }
+
+    const withQuotaCookie = (res: NextResponse) =>
+      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+
     const geminiKey = await resolveApiKey("GEMINI_API_KEY");
     if (!geminiKey) {
-      return NextResponse.json({
-        resultImageUrl: null,
-        fallbackComposite: true,
-        engine: translate(locale, "api.modelSwap.fallbackEngine"),
-        isFallback: true,
-      });
+      return withQuotaCookie(
+        NextResponse.json({
+          resultImageUrl: null,
+          fallbackComposite: true,
+          engine: translate(locale, "api.modelSwap.fallbackEngine"),
+          isFallback: true,
+        })
+      );
     }
 
     let bgBytes: Uint8Array;
@@ -118,12 +133,20 @@ export async function POST(request: Request) {
       bgContentType = fetched.contentType;
     } catch (fetchErr) {
       if (fetchErr instanceof UpstreamStatusError) {
-        return NextResponse.json({
-          resultImageUrl: null,
-          fallbackComposite: true,
-          engine: translate(locale, "api.modelSwap.fallbackEngine"),
-          isFallback: true,
-        });
+        return withQuotaCookie(
+          NextResponse.json({
+            resultImageUrl: null,
+            fallbackComposite: true,
+            engine: translate(locale, "api.modelSwap.fallbackEngine"),
+            isFallback: true,
+          })
+        );
+      }
+      if (fetchErr instanceof InvalidUpstreamContentTypeError) {
+        return NextResponse.json(
+          { error: translate(locale, "api.bg.invalidUpstreamContentType") },
+          { status: 502 }
+        );
       }
       if (fetchErr instanceof UpstreamImageTooLargeError) {
         return NextResponse.json(
@@ -146,7 +169,6 @@ export async function POST(request: Request) {
       bgBytes.byteLength
     ).toString("base64");
     const bgMimeType = bgContentType.split(";")[0]?.trim() || "image/jpeg";
-    const modelPart = parseBase64DataUrl(modelImageRaw);
 
     const ai = new GoogleGenAI({ apiKey: geminiKey });
     const promptWithScene = body.sceneTitle
@@ -189,11 +211,13 @@ export async function POST(request: Request) {
 
       const generated = extractImagePart(response);
       if (generated) {
-        return NextResponse.json({
-          resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-          engine: translate(locale, "api.modelSwap.geminiEngine"),
-          isFallback: false,
-        });
+        return withQuotaCookie(
+          NextResponse.json({
+            resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
+            engine: translate(locale, "api.modelSwap.geminiEngine"),
+            isFallback: false,
+          })
+        );
       }
     } catch (primaryErr) {
       console.warn(
@@ -214,22 +238,26 @@ export async function POST(request: Request) {
 
       const generated = extractImagePart(fallbackResponse);
       if (generated) {
-        return NextResponse.json({
-          resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-          engine: translate(locale, "api.modelSwap.geminiEngine"),
-          isFallback: false,
-        });
+        return withQuotaCookie(
+          NextResponse.json({
+            resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
+            engine: translate(locale, "api.modelSwap.geminiEngine"),
+            isFallback: false,
+          })
+        );
       }
     } catch (fallbackErr) {
       console.warn("gemini-2.0-flash-exp-image-generation failed:", fallbackErr);
     }
 
-    return NextResponse.json({
-      resultImageUrl: null,
-      fallbackComposite: true,
-      engine: translate(locale, "api.modelSwap.fallbackEngine"),
-      isFallback: true,
-    });
+    return withQuotaCookie(
+      NextResponse.json({
+        resultImageUrl: null,
+        fallbackComposite: true,
+        engine: translate(locale, "api.modelSwap.fallbackEngine"),
+        isFallback: true,
+      })
+    );
   } catch (error) {
     console.error("Error in /api/model-swap:", error);
     return NextResponse.json(
