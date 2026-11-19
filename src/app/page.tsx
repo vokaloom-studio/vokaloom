@@ -169,58 +169,45 @@ export default function VokaloomStudioPage() {
               </h1>
             </div>
 
-            {/* Zone 2 (Center): Tactile Segmented Mode Switcher */}
+            {/* Zone 2 (Center): Crisp Segmented Mode Switcher */}
             <div className="order-3 w-full border-t border-white/[0.06] pt-2 lg:order-2 lg:w-auto lg:border-0 lg:pt-0">
               <TabsList className="grid h-8.5 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-[#050507] p-0.5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65)] lg:inline-flex lg:w-auto">
                 <TabsTrigger
                   value="backgrounds"
-                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3"
+                  data-testid="tab-backgrounds"
+                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
                 >
-                  <span
-                    className={`hidden font-mono text-[10px] font-semibold tabular-nums sm:inline ${
-                      isBackgroundsActive ? "text-amber-400" : "text-zinc-500"
-                    }`}
-                  >
-                    01
-                  </span>
                   <ImageIcon
                     className={`size-3.5 shrink-0 ${
                       isBackgroundsActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
                   <span className="truncate">{t("page.tabBackgrounds")}</span>
-                  <span className="hidden font-mono text-[10px] text-[#8B8D98] xl:inline">
-                    · {t("page.tabBackgroundsSub")}
-                  </span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="voice"
-                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3"
+                  data-testid="tab-voice"
+                  className="flex min-w-0 items-center justify-center gap-1.5 rounded-[5px] border border-transparent px-2.5 py-1 text-xs font-medium text-[#8B8D98] transition-colors hover:text-zinc-200 data-active:border-white/[0.11] data-active:bg-[#13151D] data-active:text-[#F4F4F5] data-active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:data-active:border-white/[0.11] dark:data-active:bg-[#13151D] dark:data-active:text-[#F4F4F5] lg:flex-initial lg:px-3.5"
                 >
-                  <span
-                    className={`hidden font-mono text-[10px] font-semibold tabular-nums sm:inline ${
-                      isVoiceActive ? "text-amber-400" : "text-zinc-500"
-                    }`}
-                  >
-                    02
-                  </span>
                   <Mic
                     className={`size-3.5 shrink-0 ${
                       isVoiceActive ? "text-amber-400" : "text-zinc-500"
                     }`}
                   />
                   <span className="truncate">{t("page.tabVoice")}</span>
-                  <span className="hidden font-mono text-[10px] text-[#8B8D98] xl:inline">
-                    · {t("page.tabVoiceSub")}
-                  </span>
                 </TabsTrigger>
               </TabsList>
             </div>
 
-            {/* Zone 3 (Right): Consolidated Status Cluster */}
+            {/* Zone 3 (Right): Single Status Pill, Language Switcher & Single Primary Action */}
             <div className="order-2 flex shrink-0 items-center gap-1.5 lg:order-3">
               {proActive ? (
-                <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-400">
+                <span
+                  data-testid={
+                    isAdminOperator ? "badge-operator" : "badge-pro-pass"
+                  }
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 font-mono text-[11px] font-medium text-emerald-400"
+                >
                   <ShieldCheck className="size-3 shrink-0" />
                   <span>
                     {isAdminOperator
@@ -230,6 +217,7 @@ export default function VokaloomStudioPage() {
                 </span>
               ) : (
                 <span
+                  data-testid="status-quota"
                   title={t("page.creditsBadge", {
                     remaining: quota.creditsRemaining,
                     max: quota.maxTrialCredits,
@@ -264,6 +252,7 @@ export default function VokaloomStudioPage() {
               {isAdminOperator ? (
                 <Link
                   href="/admin"
+                  data-testid="link-admin"
                   title={t("page.adminTitle")}
                   aria-label={t("page.adminTitle")}
                   className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[0.1] bg-[#13151D] px-2.5 text-xs font-medium text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-white/[0.18] hover:bg-[#191c26]"
@@ -271,23 +260,10 @@ export default function VokaloomStudioPage() {
                   <Settings className="size-3.5 text-amber-400" />
                   <span className="hidden sm:inline">{t("page.adminLink")}</span>
                 </Link>
-              ) : proActive ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsPaywallOpen(true)}
-                  title={t("page.proPassManage")}
-                  aria-label={t("page.proPassManage")}
-                  className="h-7 rounded-md border-emerald-500/35 bg-emerald-500/10 px-2.5 text-xs font-medium text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/20"
-                >
-                  <Crown className="size-3.5 sm:mr-1" />
-                  <span className="hidden sm:inline">
-                    {t("page.proPassManage")}
-                  </span>
-                </Button>
-              ) : (
+              ) : !proActive ? (
                 <Button
                   size="sm"
+                  data-testid="btn-upgrade"
                   onClick={() => setIsPaywallOpen(true)}
                   title={t("page.upgradeButton")}
                   aria-label={t("page.upgradeButton")}
@@ -298,7 +274,7 @@ export default function VokaloomStudioPage() {
                     {t("page.upgradeButton")}
                   </span>
                 </Button>
-              )}
+              ) : null}
             </div>
           </div>
         </header>
@@ -317,7 +293,7 @@ export default function VokaloomStudioPage() {
         </main>
       </Tabs>
 
-      {/* Bottom Studio Status Rail (32px desktop bar) */}
+      {/* Minimal Bottom Studio Status Rail */}
       <footer className="border-t border-white/[0.08] bg-[#0B0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
         <div className="mx-auto flex min-h-8 max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-3 py-1.5 sm:px-6 lg:h-8 lg:flex-nowrap lg:py-0">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[10px] tracking-wide text-[#8B8D98] sm:text-[11px]">
@@ -325,23 +301,19 @@ export default function VokaloomStudioPage() {
             <span className="truncate">{t("page.footerNotice")}</span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden font-mono text-[10px] tracking-wide text-[#8B8D98] md:inline">
-              {t("page.engineStrip")}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={handleInstallPwa}
-              title={t("page.installAppButton")}
-              aria-label={t("page.installAppButton")}
-              className="h-5.5 rounded border-white/[0.1] bg-[#13151D] px-2 font-mono text-[10px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200"
-            >
-              <Download className="size-3" />
-              <span>{t("page.installAppButton")}</span>
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            data-testid="btn-install-pwa"
+            onClick={handleInstallPwa}
+            title={t("page.installAppButton")}
+            aria-label={t("page.installAppButton")}
+            className="h-5.5 shrink-0 rounded border-white/[0.1] bg-[#13151D] px-2 font-mono text-[10px] font-medium text-zinc-200 hover:border-amber-500/40 hover:bg-[#191c26] hover:text-amber-200"
+          >
+            <Download className="size-3" />
+            <span>{t("page.installAppButton")}</span>
+          </Button>
         </div>
       </footer>
 

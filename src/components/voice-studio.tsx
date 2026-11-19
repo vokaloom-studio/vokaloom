@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Mic,
   Wand2,
@@ -14,7 +14,6 @@ import {
   RotateCw,
   Volume2,
   VolumeX,
-  Activity,
   Loader2,
   Sparkles,
   Trash2,
@@ -42,7 +41,6 @@ interface VoicePreset {
   shortName: string;
   labelKey: TranslationKey;
   badgeKey: TranslationKey;
-  timbreKey: TranslationKey;
   language: "es" | "en";
 }
 
@@ -52,7 +50,6 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Mateo",
     labelKey: "voice.preset.mateo.label",
     badgeKey: "voice.preset.mateo.badge",
-    timbreKey: "voice.preset.mateo.timbre",
     language: "es",
   },
   {
@@ -60,7 +57,6 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Sofía",
     labelKey: "voice.preset.sofia.label",
     badgeKey: "voice.preset.sofia.badge",
-    timbreKey: "voice.preset.sofia.timbre",
     language: "es",
   },
   {
@@ -68,7 +64,6 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Lucas",
     labelKey: "voice.preset.lucas.label",
     badgeKey: "voice.preset.lucas.badge",
-    timbreKey: "voice.preset.lucas.timbre",
     language: "es",
   },
   {
@@ -76,7 +71,6 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Abella",
     labelKey: "voice.preset.abella.label",
     badgeKey: "voice.preset.abella.badge",
-    timbreKey: "voice.preset.abella.timbre",
     language: "en",
   },
   {
@@ -84,7 +78,6 @@ const VOICE_PRESETS: VoicePreset[] = [
     shortName: "Adam",
     labelKey: "voice.preset.adam.label",
     badgeKey: "voice.preset.adam.badge",
-    timbreKey: "voice.preset.adam.timbre",
     language: "en",
   },
 ];
@@ -126,29 +119,30 @@ interface VoiceHistoryItem {
   isClone: boolean;
 }
 
-interface ReferenceAudioMeta {
-  sizeBytes: number;
-  format: string;
-  durationSec?: number;
-}
-
 const VOICE_HISTORY_KEY = "vokaloom_voice_history_v1";
+const MAX_PERSISTED_DATA_URL_CHARS = 250_000;
+const MAX_PERSISTED_HISTORY_JSON_CHARS = 1_500_000;
 
 const PLAYBACK_SPEEDS = [0.9, 1.0, 1.15] as const;
 type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
 
-const WAVEFORM_BARS = [
-  24, 42, 34, 62, 48, 78, 56, 40, 84, 66, 92, 54, 70, 38, 60, 88, 72, 46, 58,
-  95, 76, 50, 68, 42, 82, 64, 90, 52, 74, 44, 66, 86, 60, 48, 78, 56, 70, 42,
-  84, 62, 50, 74, 46, 64, 52, 38, 48, 30,
-];
-
-function formatBytesCompact(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+function buildDeterministicWaveform(seedText: string, barCount = 48): number[] {
+  const input = seedText || "vokaloom-studio";
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const bars: number[] = [];
+  for (let i = 0; i < barCount; i += 1) {
+    hash ^= i + 0x9e3779b9;
+    hash = Math.imul(hash, 2654435761);
+    const normalized = ((hash >>> 0) % 1000) / 1000;
+    const envelope = Math.sin(((i + 0.5) / barCount) * Math.PI);
+    const height = Math.round(22 + (0.35 + 0.65 * envelope) * normalized * 74);
+    bars.push(Math.max(22, Math.min(96, height)));
+  }
+  return bars;
 }
 
 function formatSpeedLabel(speed: PlaybackSpeed): string {
@@ -208,8 +202,6 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     string | null
   >(null);
   const [referenceAudioName, setReferenceAudioName] = useState<string>("");
-  const [referenceAudioMeta, setReferenceAudioMeta] =
-    useState<ReferenceAudioMeta | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
   const [activeOutput, setActiveOutput] = useState<VoiceHistoryItem | null>(
@@ -234,8 +226,12 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         if (saved) {
           const parsed = JSON.parse(saved) as VoiceHistoryItem[];
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setHistory(parsed.slice(0, 10));
-            setActiveOutput(parsed[0]);
+            const validItems = parsed.slice(0, 10);
+            setHistory(validItems);
+            const firstPlayable = validItems.find((item) => Boolean(item.audioUrl));
+            if (firstPlayable) {
+              setActiveOutput(firstPlayable);
+            }
           }
         }
       } catch {
@@ -248,9 +244,26 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     const trimmed = items.slice(0, 10);
     setHistory(trimmed);
     try {
-      window.localStorage.setItem(VOICE_HISTORY_KEY, JSON.stringify(trimmed));
+      const sanitized = trimmed.map((item) =>
+        item.audioUrl.startsWith("data:") &&
+        item.audioUrl.length > MAX_PERSISTED_DATA_URL_CHARS
+          ? { ...item, audioUrl: "" }
+          : item
+      );
+      const bounded = [...sanitized];
+      let serialized = JSON.stringify(bounded);
+      while (
+        serialized.length > MAX_PERSISTED_HISTORY_JSON_CHARS &&
+        bounded.length > 1
+      ) {
+        bounded.pop();
+        serialized = JSON.stringify(bounded);
+      }
+      if (serialized.length <= MAX_PERSISTED_HISTORY_JSON_CHARS) {
+        window.localStorage.setItem(VOICE_HISTORY_KEY, serialized);
+      }
     } catch {
-      // Ignore quota exceeded if base64 audio clips are large
+      // Ignore quota exceeded if storage is full
     }
   };
 
@@ -324,27 +337,8 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
-      const extMatch = file.name.split(".").pop()?.toUpperCase();
-      const format =
-        extMatch && extMatch.length <= 5
-          ? `.${extMatch}`
-          : file.type.split("/").pop()?.toUpperCase() || "AUDIO";
-
       setReferenceAudioBase64(dataUrl);
       setReferenceAudioName(file.name);
-      setReferenceAudioMeta({
-        sizeBytes: file.size,
-        format,
-      });
-
-      const probe = new Audio(dataUrl);
-      probe.addEventListener("loadedmetadata", () => {
-        if (Number.isFinite(probe.duration) && probe.duration > 0) {
-          setReferenceAudioMeta((prev) =>
-            prev ? { ...prev, durationSec: probe.duration } : prev
-          );
-        }
-      });
 
       toast.success(
         t("voice.toast.loadedAudioSample", { name: file.name })
@@ -369,7 +363,6 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   const handleClearAudioSample = () => {
     setReferenceAudioBase64(null);
     setReferenceAudioName("");
-    setReferenceAudioMeta(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -482,6 +475,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   };
 
   const handleDownloadAudio = (item: VoiceHistoryItem) => {
+    if (!item.audioUrl) return;
     const link = document.createElement("a");
     link.href = item.audioUrl;
     const ext = item.audioUrl.startsWith("data:audio/wav") ? "wav" : "mp3";
@@ -493,6 +487,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
   };
 
   const handleReplayItem = (item: VoiceHistoryItem) => {
+    if (!item.audioUrl) return;
     setActiveOutput(item);
     setPlaybackProgress(0);
     setAudioCurrentTime(0);
@@ -557,9 +552,17 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
     });
   };
 
+  const waveformBars = useMemo(
+    () =>
+      buildDeterministicWaveform(
+        activeOutput ? `${activeOutput.id}:${activeOutput.text}` : text
+      ),
+    [activeOutput, text]
+  );
+
   const handleWaveformSeek = (barIndex: number) => {
     const audio = audioPlayerRef.current;
-    const ratio = (barIndex + 0.5) / WAVEFORM_BARS.length;
+    const ratio = (barIndex + 0.5) / waveformBars.length;
     setPlaybackProgress(ratio);
     if (audio) {
       const duration =
@@ -599,33 +602,16 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         ? activeOutput.durationMs / 1000
         : 0;
 
-  const isCloneReady = Boolean(cloneMode && referenceAudioBase64);
-  const cloneMetaText = referenceAudioMeta
-    ? `${referenceAudioMeta.format} · ${formatBytesCompact(referenceAudioMeta.sizeBytes)}${
-        referenceAudioMeta.durationSec
-          ? ` · ${referenceAudioMeta.durationSec.toFixed(1)}s`
-          : ""
-      }`
-    : null;
-
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
       {/* Left Column (7 Cols): Script Editor, Voice Presets & Zero-Shot Clone Uploader */}
       <section className="studio-deck min-w-0 overflow-hidden rounded-lg divide-y divide-white/[0.06] lg:col-span-7">
         {/* Panel Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <div className="min-w-0 space-y-0.5">
-            <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
-              <Mic className="size-3.5 shrink-0 text-amber-400" />
-              <span>{t("voice.configTitle")}</span>
-            </h2>
-            <p className="text-xs text-[#8B8D98]">
-              {t("voice.configSubtitle")}
-            </p>
-          </div>
-          <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
-            {t("voice.licenseBadge")}
-          </span>
+          <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
+            <Mic className="size-3.5 shrink-0 text-amber-400" />
+            <span>{t("voice.configTitle")}</span>
+          </h2>
         </div>
 
         {/* Script Templates & Textarea */}
@@ -683,6 +669,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             </div>
             <Textarea
               id="voice-script-textarea"
+              data-testid="voice-script-input"
               value={text}
               onChange={(e) => setText(e.target.value.slice(0, 1500))}
               rows={5}
@@ -735,6 +722,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               </span>
               <button
                 type="button"
+                data-testid="btn-clone-toggle"
                 onClick={() => setCloneMode((prev) => !prev)}
                 aria-expanded={cloneMode}
                 className={`flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
@@ -792,9 +780,6 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   <p className="text-xs font-medium text-zinc-200">
                     {t("voice.dropzoneTitle")}
                   </p>
-                  <p className="text-[11px] text-[#8B8D98]">
-                    {t("voice.dropzoneHint")}
-                  </p>
                 </label>
               ) : (
                 <div className="flex items-center justify-between gap-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
@@ -806,7 +791,6 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                       </p>
                       <p className="text-[10px] text-emerald-400">
                         {t("voice.sampleReady")}
-                        {cloneMetaText ? ` · ${cloneMetaText}` : ""}
                       </p>
                     </div>
                   </div>
@@ -828,6 +812,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
           <Button
             type="button"
+            data-testid="btn-synthesize"
             onClick={handleSynthesize}
             disabled={isGenerating}
             className="h-9.5 w-full border border-amber-400/60 bg-amber-500 px-3 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400 sm:text-sm"
@@ -855,44 +840,22 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         </div>
       </section>
 
-      {/* Right Column (5 Cols): Master Audio Output Deck, Active Voice Telemetry & Session History */}
+      {/* Right Column (5 Cols): Master Audio Output Deck & Session History */}
       <aside className="min-w-0 space-y-4 lg:col-span-5">
         {/* Card 1: Unified Master Audio Output Transport Deck */}
-        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
+        <div
+          data-testid="voice-output-panel"
+          className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-            <div className="min-w-0 space-y-0.5">
-              <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
-                <Volume2 className="size-3.5 shrink-0 text-amber-400" />
-                <span>{t("voice.outputTitle")}</span>
-              </h2>
-              <p className="text-xs text-[#8B8D98]">
-                {t("voice.outputSubtitle")}
-              </p>
-            </div>
+            <h2 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
+              <Volume2 className="size-3.5 shrink-0 text-amber-400" />
+              <span>{t("voice.outputTitle")}</span>
+            </h2>
             {activeOutput && (
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span
-                  className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                    isPlaying
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                      : "border-white/[0.08] bg-[#13151D] text-[#8B8D98]"
-                  }`}
-                >
-                  <span
-                    className={`size-1.5 rounded-full ${
-                      isPlaying ? "bg-amber-400" : "bg-emerald-400"
-                    }`}
-                  />
-                  {isPlaying
-                    ? t("voice.deckStatusPlaying")
-                    : t("voice.deckStatusReady")}
-                </span>
-                <span className="rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
-                  {activeOutput.isClone
-                    ? t("voice.licenseMitSafe")
-                    : "Apache-2.0"}
-                </span>
-              </div>
+              <span className="rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-400">
+                {activeOutput.isClone ? "MIT" : "Apache-2.0"}
+              </span>
             )}
           </div>
 
@@ -916,13 +879,14 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   {/* 48-Bar High-Resolution Interactive Waveform */}
                   <div className="space-y-1">
                     <div
+                      data-testid="voice-waveform"
                       className="flex h-12 min-w-0 items-end justify-between gap-px sm:gap-[2px]"
                       role="group"
                       aria-label={t("voice.waveformAria")}
                     >
-                      {WAVEFORM_BARS.map((heightPct, i) => {
-                        const barStart = i / WAVEFORM_BARS.length;
-                        const barRatio = (i + 1) / WAVEFORM_BARS.length;
+                      {waveformBars.map((heightPct, i) => {
+                        const barStart = i / waveformBars.length;
+                        const barRatio = (i + 1) / waveformBars.length;
                         const isPlayhead =
                           playbackProgress > 0 &&
                           playbackProgress >= barStart &&
@@ -963,6 +927,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
+                        data-testid="btn-skip-back"
                         onClick={() => handleSkipSeconds(-5)}
                         aria-label={t("voice.skipBackAria")}
                         title={t("voice.skipBackAria")}
@@ -974,6 +939,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
                       <button
                         type="button"
+                        data-testid="btn-play-toggle"
                         onClick={handleTogglePlayPause}
                         aria-label={
                           isPlaying ? t("voice.pauseAria") : t("voice.playAria")
@@ -992,6 +958,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
                       <button
                         type="button"
+                        data-testid="btn-skip-forward"
                         onClick={() => handleSkipSeconds(5)}
                         aria-label={t("voice.skipForwardAria")}
                         title={t("voice.skipForwardAria")}
@@ -1005,6 +972,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
+                        data-testid="btn-speed-toggle"
                         onClick={handleCycleSpeed}
                         title={t("voice.speedTitle", {
                           speed: formatSpeedLabel(playbackSpeed).replace(
@@ -1029,6 +997,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
 
                       <button
                         type="button"
+                        data-testid="btn-mute-toggle"
                         onClick={handleToggleMute}
                         aria-label={
                           isMuted ? t("voice.unmuteAria") : t("voice.muteAria")
@@ -1049,7 +1018,10 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         )}
                       </button>
 
-                      <span className="pl-1 font-mono text-[11px] font-medium tabular-nums text-zinc-200">
+                      <span
+                        data-testid="voice-timecode"
+                        className="pl-1 font-mono text-[11px] font-medium tabular-nums text-zinc-200"
+                      >
                         {formatSeconds(audioCurrentTime)} /{" "}
                         {formatSeconds(effectiveDurationSec)}
                       </span>
@@ -1093,17 +1065,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                   className="hidden"
                 />
 
-                <div className="space-y-1">
-                  <span className="block font-mono text-[10px] uppercase tracking-wider text-[#8B8D98]">
-                    {t("voice.scriptExcerptLabel")}
-                  </span>
-                  <p className="line-clamp-2 text-xs text-zinc-300">
-                    &ldquo;{activeOutput.text}&rdquo;
-                  </p>
-                </div>
+                <p className="line-clamp-2 text-xs text-zinc-300">
+                  &ldquo;{activeOutput.text}&rdquo;
+                </p>
 
                 <Button
                   type="button"
+                  data-testid="btn-download-audio"
                   onClick={() => handleDownloadAudio(activeOutput)}
                   className="h-9 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
                 >
@@ -1116,116 +1084,34 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
             ) : (
               <div className="studio-well flex flex-col items-center justify-center gap-2 rounded-md border-dashed px-4 py-7 text-center">
                 <Mic className="size-5 text-zinc-500" />
-                <p className="text-xs font-medium text-zinc-200">
+                <p className="text-xs font-medium text-zinc-400">
                   {t("voice.emptyTitle")}
-                </p>
-                <p className="text-[11px] text-[#8B8D98]">
-                  {t("voice.emptyDescBefore")}{" "}
-                  <strong className="font-medium text-zinc-200">
-                    {t("voice.emptyDescAction")}
-                  </strong>{" "}
-                  {t("voice.emptyDescAfter")}
                 </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Card 2: Active Voice Profile & Telemetry Card */}
-        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
-          <div className="flex items-center justify-between gap-2 px-4 py-2.5">
-            <h3 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
-              <Activity className="size-3.5 shrink-0 text-violet-400" />
-              <span>{t("voice.profileTitle")}</span>
-            </h3>
-            <span
-              className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                cloneMode
-                  ? "border-violet-500/35 bg-violet-500/10 text-violet-300"
-                  : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
-              }`}
-            >
-              {cloneMode
-                ? t("voice.profileModeClone")
-                : t("voice.profileModePreset")}
-            </span>
-          </div>
-
-          <div className="space-y-3 p-4">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-[#F4F4F5]">
-                  {isCloneReady
-                    ? t("voice.cloneVoiceLabel", { name: referenceAudioName })
-                    : t(selectedPreset.labelKey)}
-                </span>
-                <span className="shrink-0 rounded border border-white/[0.08] bg-[#13151D] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
-                  {isCloneReady
-                    ? cloneMetaText || t("voice.profileSpecValue")
-                    : t(selectedPreset.badgeKey)}
-                </span>
-              </div>
-              <p className="text-[11px] leading-snug text-[#8B8D98]">
-                {cloneMode
-                  ? isCloneReady && referenceAudioMeta
-                    ? t("voice.profileCloneLoadedDesc", {
-                        format: referenceAudioMeta.format,
-                        size: formatBytesCompact(referenceAudioMeta.sizeBytes),
-                      })
-                    : t("voice.profileAwaitingSample")
-                  : t(selectedPreset.timbreKey)}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="studio-well rounded px-2.5 py-1.5">
-                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
-                  {t("voice.profilePipelineLabel")}
-                </span>
-                <span className="block truncate font-mono text-[11px] font-medium text-zinc-200">
-                  {cloneMode
-                    ? t("voice.profilePipelineClone")
-                    : t("voice.profilePipelinePreset")}
-                </span>
-              </div>
-
-              <div className="studio-well rounded px-2.5 py-1.5">
-                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
-                  {t("voice.profilePacingLabel")}
-                </span>
-                <span className="block truncate font-mono text-[11px] font-medium tabular-nums text-zinc-200">
-                  {t("voice.profilePacingValue", {
-                    words: wordCount,
-                    seconds: estimatedReadSec,
-                  })}
-                </span>
-              </div>
-
-              <div className="studio-well rounded px-2.5 py-1.5">
-                <span className="block font-mono text-[9px] uppercase tracking-wider text-[#8B8D98]">
-                  {t("voice.profileSpecLabel")}
-                </span>
-                <span className="block truncate font-mono text-[11px] font-medium tabular-nums text-emerald-400">
-                  {t("voice.profileSpecValue")}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Session History (Last 10 Clips) */}
-        <div className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]">
+        {/* Session History (Last 10 Clips) */}
+        <div
+          data-testid="voice-history-panel"
+          className="studio-deck overflow-hidden rounded-lg divide-y divide-white/[0.06]"
+        >
           <div className="flex items-center justify-between gap-2 px-4 py-2.5">
             <h3 className="flex items-center gap-2 font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
               <History className="size-3.5 shrink-0 text-[#8B8D98]" />
               <span>{t("voice.historyTitle")}</span>
-              <span className="font-mono text-[11px] font-normal tabular-nums text-[#8B8D98]">
+              <span
+                data-testid="voice-history-count"
+                className="font-mono text-[11px] font-normal tabular-nums text-[#8B8D98]"
+              >
                 ({history.length}/10)
               </span>
             </h3>
             {history.length > 0 && (
               <Button
                 type="button"
+                data-testid="btn-clear-history"
                 variant="ghost"
                 size="xs"
                 onClick={handleClearHistory}
@@ -1244,7 +1130,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               </p>
             ) : (
               <div className="no-scrollbar max-h-56 space-y-2 overflow-y-auto">
-                {history.map((item) => {
+                {history.map((item, idx) => {
                   const isCurrent = activeOutput?.id === item.id;
                   return (
                     <div
@@ -1271,8 +1157,10 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
+                          data-testid={`btn-replay-${idx}`}
                           size="icon-xs"
                           variant="outline"
+                          disabled={!item.audioUrl}
                           onClick={() => handleReplayItem(item)}
                           title={t("voice.replayClipTitle")}
                           aria-label={t("voice.replayClipTitle")}
@@ -1282,8 +1170,10 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
                         </Button>
                         <Button
                           type="button"
+                          data-testid={`btn-download-history-${idx}`}
                           size="icon-xs"
                           variant="outline"
+                          disabled={!item.audioUrl}
                           onClick={() => handleDownloadAudio(item)}
                           title={t("voice.downloadClipTitle")}
                           aria-label={t("voice.downloadClipTitle")}

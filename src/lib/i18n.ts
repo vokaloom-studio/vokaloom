@@ -33,12 +33,7 @@ const en = {
   "page.vipUnlockedToast":
     "VIP Access unlocked via invite link! Unlimited generations active.",
   "page.tabBackgrounds": "Aesthetic Backgrounds",
-  "page.tabBackgroundsSub": "Scene Lightbox",
   "page.tabVoice": "Realistic Voice Studio",
-  "page.tabVoiceSub": "Voice Mastering",
-  "page.proPassManage": "Pro Active",
-  "page.engineStrip":
-    "Pexels · Unsplash · Gemini 2.5 · Kokoro-82M · F5-TTS",
   "page.footerNotice":
     "Vokaloom Studio · MIT Commercial License",
 
@@ -64,7 +59,6 @@ const en = {
   "bg.shuffleTitle": "Load {count} more photos (Page #{page})",
   "bg.referenceTitle": "Reference Image",
   "bg.uploadReference": "Upload reference image",
-  "bg.uploadReferenceHint": "JPG, PNG, WEBP · matches {count} photos",
   "bg.referencePreviewAlt": "Reference Image Preview",
   "bg.referenceFallbackName": "Reference Image",
   "bg.removeReferenceTitle": "Remove reference image",
@@ -72,21 +66,15 @@ const en = {
   "bg.extractedDna": "Search DNA:",
   "bg.model.title": "My Model",
   "bg.model.uploadTitle": "Upload model photo",
-  "bg.model.uploadHint": "Saved locally · for Place Model",
   "bg.model.previewAlt": "Saved Model Reference Preview",
   "bg.model.fallbackName": "Model Photo",
-  "bg.model.savedStatus": "Saved for 1-tap placement",
   "bg.model.removeTitle": "Remove saved model photo",
   "bg.placeModelButton": "Place Model",
   "bg.placeModelShort": "Model",
   "bg.placeModelTitle": "Place my model into #{index}",
   "bg.placeModelAria": "Place my model into scene #{index} by {photographer}",
   "bg.swapModal.title": "Model Scene Compositor",
-  "bg.swapModal.subtitle":
-    "9:16 vertical composite ready for Reels & Stories.",
   "bg.swapModal.generating": "Compositing model into 9:16 scene...",
-  "bg.swapModal.generatingHint":
-    "Matching lighting, shadows & candid realism",
   "bg.swapModal.fallbackNote":
     "Local canvas preview generated. Add GEMINI_API_KEY in /admin for neural relighting.",
   "bg.swapModal.downloadButton": "Download 9:16 Composite",
@@ -153,10 +141,7 @@ const en = {
   "bg.readme.itemLine": "{num}. \"{title}\" — Photo by {photographer} ({source})",
 
   // Voice Studio (src/components/voice-studio.tsx)
-  "voice.configTitle": "Script & Neural Voice Configuration",
-  "voice.configSubtitle":
-    "Write or paste your Spanish or English script, select a neural voice, or expand zero-shot cloning.",
-  "voice.licenseBadge": "Apache-2.0 & MIT",
+  "voice.configTitle": "Script & Voice",
   "voice.templatesLabel": "Quick Viral Hook Templates",
   "voice.sample.sofiaEs": "ES · Lifestyle & Travel Hook",
   "voice.sample.mateoEs": "ES · Business & Brand Hook",
@@ -165,45 +150,30 @@ const en = {
   "voice.readTime": "~{seconds}s read",
   "voice.charCount": "{count} / {max} chars",
   "voice.scriptPlaceholder": "Paste your Spanish or English reel script here...",
-  "voice.presetLabel": "Neural Voice Preset (Kokoro-82M)",
+  "voice.presetLabel": "Voice Preset",
   "voice.preset.mateo.label": "Mateo — LatAm Narrator",
   "voice.preset.mateo.badge": "ES · LatAm",
-  "voice.preset.mateo.timbre":
-    "Warm neutral Latin American baritone · balanced articulation",
   "voice.preset.sofia.label": "Sofía — Lifestyle & Travel",
   "voice.preset.sofia.badge": "ES · Natural",
-  "voice.preset.sofia.timbre":
-    "Natural expressive lifestyle timbre · social-first cadence",
   "voice.preset.lucas.label": "Lucas — Dynamic Commercial",
   "voice.preset.lucas.badge": "ES · Reels",
-  "voice.preset.lucas.timbre":
-    "Crisp energetic commercial delivery · high hook retention",
   "voice.preset.abella.label": "Abella — English Creator",
   "voice.preset.abella.badge": "EN · Creator",
-  "voice.preset.abella.timbre":
-    "Bright conversational US English creator timbre · clear diction",
   "voice.preset.adam.label": "Adam — Documentary & Tech",
   "voice.preset.adam.badge": "EN · Deep",
-  "voice.preset.adam.timbre":
-    "Grounded documentary & tech narrator · steady low end",
-  "voice.cloneSectionLabel": "Zero-Shot Voice Cloning (MIT F5-TTS)",
+  "voice.cloneSectionLabel": "Voice Cloning",
   "voice.cloneToggleLabel": "Clone Custom Voice",
   "voice.toggleOn": "ON",
   "voice.toggleOff": "OFF",
   "voice.dropzoneTitle":
-    "Drop or select WhatsApp voice note (.OGG, .MP3, .WAV · 10–20s)",
-  "voice.dropzoneHint":
-    "Powered by MIT F5-TTS · 100% commercial-safe zero-shot cloning",
+    "Drop or select WhatsApp voice note (.OGG, .MP3, .WAV)",
   "voice.sampleReady": "Ready for zero-shot F5-TTS synthesis",
   "voice.removeAudioAria": "Remove reference audio sample",
   "voice.synthesizingButton": "Synthesizing Neural Voiceover...",
   "voice.generateCloneButton": "Generate Zero-Shot Cloned Voiceover (F5-TTS)",
   "voice.generatePresetButton": "Generate Voiceover ({name})",
   "voice.cloneVoiceLabel": "Zero-Shot Clone ({name})",
-  "voice.outputTitle": "Master Audio Output",
-  "voice.outputSubtitle":
-    "Inspect waveform, preview playback, and export broadcast audio.",
-  "voice.licenseMitSafe": "MIT Safe",
+  "voice.outputTitle": "Master Output",
   "voice.playAria": "Play voiceover",
   "voice.pauseAria": "Pause voiceover",
   "voice.skipBackAria": "Rewind 5 seconds",
@@ -213,31 +183,10 @@ const en = {
   "voice.speedTitle": "Playback speed: {speed}x (click to cycle)",
   "voice.muteAria": "Mute audio output",
   "voice.unmuteAria": "Unmute audio output",
-  "voice.deckStatusReady": "READY",
-  "voice.deckStatusPlaying": "ON AIR",
-  "voice.scriptExcerptLabel": "Script Excerpt",
   "voice.waveformAria": "Interactive audio waveform scrubber",
   "voice.seekAria": "Seek to {percent}%",
   "voice.downloadAudioButton": "Download Broadcast Audio",
-  "voice.profileTitle": "Active Voice Profile & Telemetry",
-  "voice.profileModeClone": "Zero-Shot Clone",
-  "voice.profileModePreset": "Neural Preset",
-  "voice.profilePipelineLabel": "Engine",
-  "voice.profilePipelineClone": "MIT F5-TTS",
-  "voice.profilePipelinePreset": "Kokoro-82M",
-  "voice.profileLanguageLabel": "Region",
-  "voice.profilePacingLabel": "Read Pacing",
-  "voice.profileSpecLabel": "Master Spec",
-  "voice.profileSpecValue": "24kHz · 16-bit PCM",
-  "voice.profilePacingValue": "{words}w · ~{seconds}s · 150 wpm",
-  "voice.profileAwaitingSample":
-    "Awaiting WhatsApp .OGG / .MP3 / .WAV reference clip to enable cloning.",
-  "voice.profileCloneLoadedDesc":
-    "Custom voice sample loaded ({format} · {size}).",
   "voice.emptyTitle": "No active voiceover output",
-  "voice.emptyDescBefore": "Configure your script and click",
-  "voice.emptyDescAction": "Generate Voiceover",
-  "voice.emptyDescAfter": "to preview audio.",
   "voice.historyTitle": "Session History",
   "voice.clearHistory": "Clear",
   "voice.historyEmpty":
@@ -264,30 +213,17 @@ const en = {
   "paywall.badgeTitle": "Vokaloom Pro Pass",
   "paywall.badgeActive": "Active",
   "paywall.badgeTrial": "Trial: {remaining}/{max} left",
-  "paywall.title": "Unlimited Aesthetic Batches & AI Voiceovers",
-  "paywall.description":
-    "Unlock full agency production speed with unlimited 15-image vertical batches, Gemini Vision aesthetic matching, and neural Spanish & English voice synthesis.",
-  "paywall.planName": "All-In-One Fulfillment Pass",
-  "paywall.planSubtitle": "Commercial & Agency License",
+  "paywall.title": "Upgrade to Vokaloom Pro",
   "paywall.perMonthShort": "/ mo",
-  "paywall.approxCopPerMonth": "~{priceCop} · mo",
-  "paywall.approxUsdPerMonth": "~{priceUsd} · mo",
-  "paywall.compare.freeLabel": "Free Trial",
-  "paywall.compare.freeValue": "{max} Credits",
-  "paywall.compare.proLabel": "Pro Pass",
-  "paywall.compare.proValue": "Unlimited · Commercial MIT/Apache-2.0 License",
   "paywall.currencyAria": "Select checkout currency",
   "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
   "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.benefit1":
-    "Unlimited 15-Image Aesthetic Batches (9:16 Vertical HD + ZIP Export)",
+    "Unlimited 15-photo vertical batches & ZIP export",
   "paywall.benefit2":
-    "Unlimited Boss Reference Image Matching (Gemini 2.5 Flash Vision)",
+    "Vision reference matching & 9:16 model compositing",
   "paywall.benefit3":
-    "Unlimited Realistic AI Voiceovers (Spanish & English Neural TTS)",
-  "paywall.benefit4":
-    "Unlimited Zero-Shot Custom Voice Cloning (10–20s Audio via MIT F5-TTS)",
-  "paywall.benefit5": "100% Commercial & Agency Service-Fulfillment License",
+    "Spanish & English neural voiceovers with F5-TTS cloning",
   "paywall.checkoutCopButton":
     "Subscribe for {priceCop} / month (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":
@@ -468,12 +404,7 @@ const es: Record<TranslationKey, string> = {
   "page.vipUnlockedToast":
     "¡Acceso VIP desbloqueado mediante enlace de invitación! Generaciones ilimitadas activas.",
   "page.tabBackgrounds": "Fondos Estéticos",
-  "page.tabBackgroundsSub": "Mesa de Escenas",
   "page.tabVoice": "Estudio de Voz Realista",
-  "page.tabVoiceSub": "Masterización Vocal",
-  "page.proPassManage": "Pro Activo",
-  "page.engineStrip":
-    "Pexels · Unsplash · Gemini 2.5 · Kokoro-82M · F5-TTS",
   "page.footerNotice":
     "Vokaloom Studio · Licencia Comercial MIT",
 
@@ -499,7 +430,6 @@ const es: Record<TranslationKey, string> = {
   "bg.shuffleTitle": "Cargar {count} fotos más (Página #{page})",
   "bg.referenceTitle": "Imagen de Referencia",
   "bg.uploadReference": "Subir imagen de referencia",
-  "bg.uploadReferenceHint": "JPG, PNG, WEBP · empareja {count} fotos",
   "bg.referencePreviewAlt": "Vista previa de referencia",
   "bg.referenceFallbackName": "Imagen de referencia",
   "bg.removeReferenceTitle": "Quitar imagen de referencia",
@@ -507,21 +437,15 @@ const es: Record<TranslationKey, string> = {
   "bg.extractedDna": "ADN Búsqueda:",
   "bg.model.title": "Mi Modelo",
   "bg.model.uploadTitle": "Subir foto de modelo",
-  "bg.model.uploadHint": "Guardada local · para Colocar Modelo",
   "bg.model.previewAlt": "Vista previa del modelo guardado",
   "bg.model.fallbackName": "Foto de Modelo",
-  "bg.model.savedStatus": "Lista para colocar en 1 toque",
   "bg.model.removeTitle": "Quitar foto de modelo guardada",
   "bg.placeModelButton": "Colocar Modelo",
   "bg.placeModelShort": "Modelo",
   "bg.placeModelTitle": "Colocar mi modelo en #{index}",
   "bg.placeModelAria": "Colocar mi modelo en escena #{index} de {photographer}",
   "bg.swapModal.title": "Compositor de Modelo en Escena",
-  "bg.swapModal.subtitle":
-    "Composición vertical 9:16 lista para Reels e Historias.",
   "bg.swapModal.generating": "Integrando modelo en escena 9:16...",
-  "bg.swapModal.generatingHint":
-    "Igualando iluminación, sombras y realismo fotográfico",
   "bg.swapModal.fallbackNote":
     "Vista previa local generada en Canvas. Agrega GEMINI_API_KEY en /admin para reiluminación neural.",
   "bg.swapModal.downloadButton": "Descargar Composición 9:16",
@@ -591,10 +515,7 @@ const es: Record<TranslationKey, string> = {
   "bg.readme.itemLine": "{num}. \"{title}\" — Foto por {photographer} ({source})",
 
   // Voice Studio (src/components/voice-studio.tsx)
-  "voice.configTitle": "Guion y Configuración de Voz Neural",
-  "voice.configSubtitle":
-    "Escribe o pega tu guion en español o inglés, elige una voz neural o activa la clonación zero-shot.",
-  "voice.licenseBadge": "Apache-2.0 y MIT",
+  "voice.configTitle": "Guion y Voz",
   "voice.templatesLabel": "Plantillas Rápidas de Ganchos Virales",
   "voice.sample.sofiaEs": "ES · Hook Estilo de Vida y Viajes",
   "voice.sample.mateoEs": "ES · Hook Negocios y Marca",
@@ -604,35 +525,23 @@ const es: Record<TranslationKey, string> = {
   "voice.charCount": "{count} / {max} car.",
   "voice.scriptPlaceholder":
     "Pega aquí tu guion para reel en español o inglés...",
-  "voice.presetLabel": "Voz Neural Predefinida (Kokoro-82M)",
+  "voice.presetLabel": "Voz Predefinida",
   "voice.preset.mateo.label": "Mateo — Narrador LatAm",
   "voice.preset.mateo.badge": "ES · LatAm",
-  "voice.preset.mateo.timbre":
-    "Barítono latinoamericano cálido y neutro · articulación equilibrada",
   "voice.preset.sofia.label": "Sofía — Estilo de Vida y Viajes",
   "voice.preset.sofia.badge": "ES · Natural",
-  "voice.preset.sofia.timbre":
-    "Timbre femenino natural y expresivo · cadencia ideal para Reels",
   "voice.preset.lucas.label": "Lucas — Dinámico Comercial",
   "voice.preset.lucas.badge": "ES · Reels",
-  "voice.preset.lucas.timbre":
-    "Locución masculina dinámica y comercial · alta retención en ganchos",
   "voice.preset.abella.label": "Abella — Creadora en Inglés",
   "voice.preset.abella.badge": "EN · Creadora",
-  "voice.preset.abella.timbre":
-    "Timbre femenino conversacional en inglés US · dicción nítida",
   "voice.preset.adam.label": "Adam — Documental y Tech",
   "voice.preset.adam.badge": "EN · Grave",
-  "voice.preset.adam.timbre":
-    "Narrador grave para documental y tecnología · presencia sólida",
-  "voice.cloneSectionLabel": "Clonación de Voz Zero-Shot (MIT F5-TTS)",
+  "voice.cloneSectionLabel": "Clonación de Voz",
   "voice.cloneToggleLabel": "Clonar Voz Personalizada",
   "voice.toggleOn": "ACTIVO",
   "voice.toggleOff": "INACTIVO",
   "voice.dropzoneTitle":
-    "Sube o arrastra nota de voz de WhatsApp (.OGG, .MP3, .WAV · 10–20s)",
-  "voice.dropzoneHint":
-    "Impulsado por MIT F5-TTS · clonación zero-shot 100% apta para uso comercial",
+    "Sube o arrastra nota de voz de WhatsApp (.OGG, .MP3, .WAV)",
   "voice.sampleReady": "Lista para síntesis zero-shot con F5-TTS",
   "voice.removeAudioAria": "Quitar muestra de audio de referencia",
   "voice.synthesizingButton": "Sintetizando locución neural...",
@@ -640,10 +549,7 @@ const es: Record<TranslationKey, string> = {
     "Generar Locución Clonada Zero-Shot (F5-TTS)",
   "voice.generatePresetButton": "Generar Locución ({name})",
   "voice.cloneVoiceLabel": "Clon Zero-Shot ({name})",
-  "voice.outputTitle": "Salida de Audio Maestra",
-  "voice.outputSubtitle":
-    "Inspecciona la onda, previsualiza la reproducción y exporta audio listo para publicar.",
-  "voice.licenseMitSafe": "MIT Comercial",
+  "voice.outputTitle": "Salida Maestra",
   "voice.playAria": "Reproducir locución",
   "voice.pauseAria": "Pausar locución",
   "voice.skipBackAria": "Retroceder 5 segundos",
@@ -653,31 +559,10 @@ const es: Record<TranslationKey, string> = {
   "voice.speedTitle": "Velocidad de reproducción: {speed}x (clic para cambiar)",
   "voice.muteAria": "Silenciar salida de audio",
   "voice.unmuteAria": "Activar sonido de salida",
-  "voice.deckStatusReady": "LISTO",
-  "voice.deckStatusPlaying": "AL AIRE",
-  "voice.scriptExcerptLabel": "Extracto del Guion",
   "voice.waveformAria": "Control interactivo de onda de audio",
   "voice.seekAria": "Ir al {percent}%",
   "voice.downloadAudioButton": "Descargar Audio Maestro",
-  "voice.profileTitle": "Perfil Vocal Activo y Telemetría",
-  "voice.profileModeClone": "Clonación Zero-Shot",
-  "voice.profileModePreset": "Voz Neural",
-  "voice.profilePipelineLabel": "Motor",
-  "voice.profilePipelineClone": "MIT F5-TTS",
-  "voice.profilePipelinePreset": "Kokoro-82M",
-  "voice.profileLanguageLabel": "Región",
-  "voice.profilePacingLabel": "Ritmo Est.",
-  "voice.profileSpecLabel": "Formato Máster",
-  "voice.profileSpecValue": "24kHz · 16-bit PCM",
-  "voice.profilePacingValue": "{words} pal · ~{seconds}s · 150 ppm",
-  "voice.profileAwaitingSample":
-    "Esperando clip .OGG / .MP3 / .WAV de WhatsApp para activar clonación.",
-  "voice.profileCloneLoadedDesc":
-    "Muestra de voz personalizada cargada ({format} · {size}).",
   "voice.emptyTitle": "Sin locución activa",
-  "voice.emptyDescBefore": "Configura tu guion y haz clic en",
-  "voice.emptyDescAction": "Generar Locución",
-  "voice.emptyDescAfter": "para previsualizar el audio.",
   "voice.historyTitle": "Historial de Sesión",
   "voice.clearHistory": "Limpiar",
   "voice.historyEmpty":
@@ -704,31 +589,17 @@ const es: Record<TranslationKey, string> = {
   "paywall.badgeTitle": "Pase Vokaloom Pro",
   "paywall.badgeActive": "Activo",
   "paywall.badgeTrial": "Prueba: {remaining}/{max} rest.",
-  "paywall.title": "Lotes Estéticos y Locuciones IA Ilimitadas",
-  "paywall.description":
-    "Desbloquea velocidad de producción de agencia con lotes verticales ilimitados de 15 imágenes, emparejamiento visual Gemini Vision y síntesis de voz neural en español e inglés.",
-  "paywall.planName": "Pase Todo-en-Uno de Producción",
-  "paywall.planSubtitle": "Licencia Comercial y de Agencia",
+  "paywall.title": "Mejorar a Vokaloom Pro",
   "paywall.perMonthShort": "/ mes",
-  "paywall.approxCopPerMonth": "~{priceCop} · mes",
-  "paywall.approxUsdPerMonth": "~{priceUsd} · mes",
-  "paywall.compare.freeLabel": "Prueba Gratuita",
-  "paywall.compare.freeValue": "{max} Créditos",
-  "paywall.compare.proLabel": "Pase Pro",
-  "paywall.compare.proValue":
-    "Ilimitado · Licencia Comercial MIT/Apache-2.0",
   "paywall.currencyAria": "Seleccionar moneda de pago",
   "paywall.currency.cop": "COP · Colombia (Nequi / PSE / Wompi)",
   "paywall.currency.usd": "USD · Global (Stripe)",
   "paywall.benefit1":
-    "Lotes ilimitados de 15 imágenes estéticas (HD vertical 9:16 + exportación ZIP)",
+    "Lotes verticales ilimitados de 15 fotos y exportación ZIP",
   "paywall.benefit2":
-    "Coincidencia ilimitada por imagen de referencia (Gemini 2.5 Flash Vision)",
+    "Emparejamiento visual y composición de modelo 9:16",
   "paywall.benefit3":
-    "Locuciones IA realistas ilimitadas (TTS neural en español e inglés)",
-  "paywall.benefit4":
-    "Clonación zero-shot de voz personalizada ilimitada (audio 10–20s con MIT F5-TTS)",
-  "paywall.benefit5": "Licencia 100% comercial y apta para servicios de agencia",
+    "Locuciones neurales ES/EN con clonación zero-shot F5-TTS",
   "paywall.checkoutCopButton":
     "Suscribirse por {priceCop} / mes (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":

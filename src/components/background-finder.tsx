@@ -15,8 +15,6 @@ import {
   CheckCircle2,
   Check,
   UserPlus,
-  Smartphone,
-  Layers,
   Wand2,
   Scan,
   MoveHorizontal,
@@ -367,13 +365,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const [resolvedQuery, setResolvedQuery] = useState<string>(
     "Luxury Travel candid vertical"
   );
-  const [extractedTags, setExtractedTags] = useState<string[]>([
-    "luxury",
-    "travel",
-    "candid",
-    "vertical",
-    "sunlight",
-  ]);
   const [visionUsed, setVisionUsed] = useState<boolean>(false);
   const [isCuratedFallback, setIsCuratedFallback] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -409,9 +400,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
   const [zipProgress, setZipProgress] = useState<number>(0);
   const [zipTargetCount, setZipTargetCount] = useState<number>(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-  const selectedVibeMeta =
-    VIBE_PRESETS.find((v) => v.value === selectedVibe) ?? VIBE_PRESETS[0];
 
   const fetchBatch = async (opts: {
     targetPage: number;
@@ -467,7 +455,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       setItems(data.items || []);
       setSelectedIds(new Set());
       setResolvedQuery(data.resolvedQuery || "");
-      setExtractedTags(data.extractedTags || []);
       setVisionUsed(Boolean(data.visionUsed));
       setIsCuratedFallback(Boolean(data.isCuratedFallback));
       setPage(opts.targetPage);
@@ -524,7 +511,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         setResolvedQuery(
           data.resolvedQuery || "Luxury Travel candid vertical"
         );
-        setExtractedTags(data.extractedTags || []);
         setVisionUsed(Boolean(data.visionUsed));
         setIsCuratedFallback(Boolean(data.isCuratedFallback));
       })
@@ -902,57 +888,18 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
-      {/* Director's Inspector Rail (4 Columns): Hardware Surface Decks & Recessed Wells */}
+      {/* Director's Inspector Rail (4 Columns) */}
       <aside className="studio-deck min-w-0 overflow-hidden rounded-lg divide-y divide-white/[0.06] lg:sticky lg:top-18 lg:col-span-4">
         {/* Section 1: Query & Vibe */}
         <div className="space-y-3.5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
-              {t("bg.section.queryVibe")}
-            </h2>
-            <div
-              role="group"
-              aria-label={t("bg.batch.label")}
-              className="studio-well inline-flex items-center rounded-md p-0.5 font-mono text-[10px]"
-            >
-              <button
-                type="button"
-                onClick={() => handleBatchSizeChange(5)}
-                aria-pressed={batchSize === 5}
-                className={`inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-medium transition-colors ${
-                  batchSize === 5
-                    ? "bg-[#F4F4F5] text-[#09090B]"
-                    : "text-[#8B8D98] hover:text-[#F4F4F5]"
-                }`}
-              >
-                <Smartphone className="size-2.5 shrink-0" />
-                <span>{t("bg.batch.fast5")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleBatchSizeChange(15)}
-                aria-pressed={batchSize === 15}
-                className={`inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-medium transition-colors ${
-                  batchSize === 15
-                    ? "bg-[#F4F4F5] text-[#09090B]"
-                    : "text-[#8B8D98] hover:text-[#F4F4F5]"
-                }`}
-              >
-                <Layers className="size-2.5 shrink-0" />
-                <span>{t("bg.batch.full15")}</span>
-              </button>
-            </div>
-          </div>
+          <h2 className="font-heading text-xs font-semibold tracking-tight text-[#F4F4F5]">
+            {t("bg.section.queryVibe")}
+          </h2>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
-                {t("bg.vibePresets")}
-              </span>
-              <span className="truncate font-mono text-[10px] text-amber-400/90">
-                {t(selectedVibeMeta.labelKey)}
-              </span>
-            </div>
+            <span className="block font-mono text-[10px] font-medium uppercase tracking-wider text-[#8B8D98]">
+              {t("bg.vibePresets")}
+            </span>
             <div className="flex flex-wrap gap-1.5">
               {VIBE_PRESETS.map((vibe) => {
                 const isActive = selectedVibe === vibe.value;
@@ -961,6 +908,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     key={vibe.value}
                     type="button"
                     onClick={() => handleVibeSelect(vibe.value)}
+                    aria-pressed={isActive}
                     className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                       isActive
                         ? "border-amber-500/45 bg-[#13151D] text-[#F4F4F5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
@@ -985,6 +933,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#8B8D98]" />
               <Input
                 id="aesthetic-search-input"
+                data-testid="input-scene-query"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -1014,6 +963,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             <Button
               type="button"
               size="sm"
+              data-testid="btn-generate"
               onClick={handleGenerateClick}
               disabled={isLoading}
               className="h-8.5 min-w-0 flex-1 border border-amber-400/60 bg-amber-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-amber-400"
@@ -1032,6 +982,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               type="button"
               size="sm"
               variant="outline"
+              data-testid="btn-shuffle"
               onClick={handleShuffleMore}
               disabled={isLoading}
               title={t("bg.shuffleTitle", {
@@ -1075,23 +1026,18 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             {!myModelPreview ? (
               <label
                 htmlFor="my-model-upload"
-                className="studio-well group flex cursor-pointer items-center gap-2.5 rounded-md border-dashed p-2 transition-colors hover:border-white/[0.2] hover:bg-[#13151D]"
+                className="studio-well group flex cursor-pointer items-center gap-2.5 rounded-md border-dashed p-2.5 transition-colors hover:border-white/[0.2] hover:bg-[#13151D]"
               >
                 <div className="flex size-7 shrink-0 items-center justify-center rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
                   <UserPlus className="size-3.5" />
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-zinc-200">
-                    {t("bg.model.uploadTitle")}
-                  </p>
-                  <p className="truncate text-[10px] text-[#8B8D98]">
-                    {t("bg.model.uploadHint")}
-                  </p>
-                </div>
+                <span className="min-w-0 truncate text-xs font-medium text-zinc-200">
+                  {t("bg.model.uploadTitle")}
+                </span>
               </label>
             ) : (
               <div className="studio-elevated flex items-center gap-2.5 rounded-md p-2">
-                <div className="relative h-12 w-9 shrink-0 overflow-hidden rounded border border-white/[0.12] bg-[#050507]">
+                <div className="relative h-10 w-7.5 shrink-0 overflow-hidden rounded border border-white/[0.12] bg-[#050507]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={myModelPreview}
@@ -1099,39 +1045,27 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="truncate text-xs font-medium text-[#F4F4F5]">
-                      {myModelName || t("bg.model.fallbackName")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClearMyModel}
-                      className="rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
-                      title={t("bg.model.removeTitle")}
-                      aria-label={t("bg.model.removeTitle")}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                  <p className="truncate text-[10px] text-emerald-400">
-                    {t("bg.model.savedStatus")}
-                  </p>
-                </div>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#F4F4F5]">
+                  {myModelName || t("bg.model.fallbackName")}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearMyModel}
+                  className="shrink-0 rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
+                  title={t("bg.model.removeTitle")}
+                  aria-label={t("bg.model.removeTitle")}
+                >
+                  <X className="size-3" />
+                </button>
               </div>
             )}
           </div>
 
-          {/* Boss Reference Image Slot */}
+          {/* Reference Image Slot */}
           <div className="space-y-1.5 border-t border-white/[0.06] pt-3">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-zinc-200">
-                {t("bg.referenceTitle")}
-              </span>
-              <span className="font-mono text-[10px] text-violet-400">
-                Gemini 2.5
-              </span>
-            </div>
+            <span className="block text-[11px] font-medium text-zinc-200">
+              {t("bg.referenceTitle")}
+            </span>
 
             <input
               ref={fileInputRef}
@@ -1145,23 +1079,18 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             {!referencePreview ? (
               <label
                 htmlFor="boss-reference-upload"
-                className="studio-well group flex cursor-pointer items-center gap-2.5 rounded-md border-dashed p-2 transition-colors hover:border-white/[0.2] hover:bg-[#13151D]"
+                className="studio-well group flex cursor-pointer items-center gap-2.5 rounded-md border-dashed p-2.5 transition-colors hover:border-white/[0.2] hover:bg-[#13151D]"
               >
                 <div className="flex size-7 shrink-0 items-center justify-center rounded border border-violet-500/30 bg-violet-500/10 text-violet-400">
                   <Eye className="size-3.5" />
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-zinc-200">
-                    {t("bg.uploadReference")}
-                  </p>
-                  <p className="truncate text-[10px] text-[#8B8D98]">
-                    {t("bg.uploadReferenceHint", { count: batchSize })}
-                  </p>
-                </div>
+                <span className="min-w-0 truncate text-xs font-medium text-zinc-200">
+                  {t("bg.uploadReference")}
+                </span>
               </label>
             ) : (
-              <div className="studio-elevated flex items-start gap-2.5 rounded-md p-2">
-                <div className="relative h-14 w-10 shrink-0 overflow-hidden rounded border border-white/[0.12] bg-[#050507]">
+              <div className="studio-elevated flex items-center gap-2.5 rounded-md p-2">
+                <div className="relative h-10 w-7.5 shrink-0 overflow-hidden rounded border border-white/[0.12] bg-[#050507]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={referencePreview}
@@ -1169,64 +1098,38 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="truncate text-xs font-medium text-[#F4F4F5]">
-                      {referenceFileName || t("bg.referenceFallbackName")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClearReference}
-                      className="rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
-                      title={t("bg.removeReferenceTitle")}
-                      aria-label={t("bg.removeReferenceTitle")}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-[#8B8D98]">
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-[#F4F4F5]">
+                    {referenceFileName || t("bg.referenceFallbackName")}
+                  </span>
+                  <span className="block text-[10px] text-[#8B8D98]">
                     {visionUsed ? t("bg.visionDna") : t("bg.extractedDna")}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {extractedTags.slice(0, 3).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded border border-white/[0.08] bg-[#050507] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
+                  </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleClearReference}
+                  className="shrink-0 rounded p-1 text-[#8B8D98] transition-colors hover:bg-white/[0.08] hover:text-[#F4F4F5]"
+                  title={t("bg.removeReferenceTitle")}
+                  aria-label={t("bg.removeReferenceTitle")}
+                >
+                  <X className="size-3" />
+                </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Section 3: Active Query Readout */}
-        <div className="space-y-2 bg-[#050507]/80 px-4 py-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-[#8B8D98]">
-            <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
-            <span className="shrink-0">{t("bg.resolvedLabel")}</span>
-            <span
-              className="truncate font-mono text-zinc-200"
-              title={resolvedQuery}
-            >
-              {resolvedQuery}
-            </span>
-          </div>
-          {extractedTags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {extractedTags.slice(0, 5).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded border border-white/[0.07] bg-[#13151D] px-1.5 py-0.5 font-mono text-[10px] text-[#8B8D98]"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
+        {/* Section 3: Concise Active Query Readout */}
+        <div className="flex items-center gap-1.5 bg-[#050507]/80 px-4 py-2.5 text-[11px] text-[#8B8D98]">
+          <CheckCircle2 className="size-3 shrink-0 text-emerald-400" />
+          <span className="shrink-0">{t("bg.resolvedLabel")}</span>
+          <span
+            className="truncate font-mono text-zinc-200"
+            title={resolvedQuery}
+          >
+            {resolvedQuery}
+          </span>
         </div>
       </aside>
 
@@ -1238,7 +1141,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="font-heading text-xs font-semibold tracking-tight text-[#F4F4F5] sm:text-sm">
                 {t("bg.canvasTitle")}{" "}
-                <span className="font-mono tabular-nums text-[#8B8D98]">
+                <span
+                  data-testid="canvas-count"
+                  className="font-mono tabular-nums text-[#8B8D98]"
+                >
                   {items.length}/{batchSize}
                 </span>
               </h2>
@@ -1247,8 +1153,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 {t("bg.pageBadge", { page })}
               </span>
 
-              {/* Single Clean Batch Source Telemetry Pill */}
+              {/* Single Clean Batch Source Indicator */}
               <span
+                data-testid="badge-batch-source"
                 className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] font-medium tracking-wide ${
                   isLiveStock
                     ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
@@ -1267,6 +1174,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 </span>
               </span>
 
+              {/* Single Unified 5x / 15x Batch Toggle */}
               <div
                 role="group"
                 aria-label={t("bg.batch.label")}
@@ -1274,8 +1182,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               >
                 <button
                   type="button"
+                  data-testid="batch-5"
                   onClick={() => handleBatchSizeChange(5)}
                   aria-pressed={batchSize === 5}
+                  aria-label={t("bg.batch.fast5")}
                   className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
                     batchSize === 5
                       ? "bg-[#F4F4F5] text-[#09090B]"
@@ -1286,8 +1196,10 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 </button>
                 <button
                   type="button"
+                  data-testid="batch-15"
                   onClick={() => handleBatchSizeChange(15)}
                   aria-pressed={batchSize === 15}
+                  aria-label={t("bg.batch.full15")}
                   className={`rounded-[3px] px-1.5 py-0.5 font-medium transition-colors ${
                     batchSize === 15
                       ? "bg-[#F4F4F5] text-[#09090B]"
@@ -1303,6 +1215,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               {/* 9:16 Safe Zones Guide Toggle */}
               <button
                 type="button"
+                data-testid="btn-safe-zones"
                 onClick={() => setShowSafeZones((prev) => !prev)}
                 aria-pressed={showSafeZones}
                 title={t("bg.safeZonesTitle")}
@@ -1319,6 +1232,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               {selectedCount > 0 && (
                 <button
                   type="button"
+                  data-testid="btn-clear-selection"
                   onClick={handleClearSelection}
                   className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 font-mono text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-500/20"
                 >
@@ -1332,6 +1246,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
               <Button
                 type="button"
                 size="sm"
+                data-testid="btn-export-zip"
                 onClick={handleDownloadAllZip}
                 disabled={isZipping || items.length === 0}
                 className={`h-7 max-w-full shrink-0 border px-2.5 text-xs font-semibold transition-colors ${
@@ -1387,12 +1302,16 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div
+            data-testid="bg-grid"
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
+          >
             {items.map((item, index) => {
               const isSelected = selectedIds.has(item.id);
               return (
                 <div
                   key={item.id}
+                  data-testid="bg-card"
                   className={`group relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-[#0B0C10] transition-colors ${
                     isSelected
                       ? "border-amber-400/90 ring-2 ring-amber-500/45"
@@ -1407,28 +1326,20 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
                   />
 
-                  {/* TikTok / Instagram Reels 9:16 Safe-Zone Guide Overlay */}
+                  {/* Minimal Non-Interactive 9:16 Reels / TikTok Safe-Zone Margin Guides */}
                   {showSafeZones && (
                     <div
                       aria-hidden="true"
+                      data-testid="safe-zone-guide"
                       className="pointer-events-none absolute inset-0 z-10 select-none"
                     >
-                      {/* Top Status Bar Margin (12%) */}
-                      <div className="absolute inset-x-0 top-0 h-[12%] border-b border-dashed border-amber-400/60 bg-amber-500/[0.07]" />
-                      {/* Bottom Caption & Audio Margin (24%) */}
-                      <div className="absolute inset-x-0 bottom-0 h-[24%] border-t border-dashed border-amber-400/60 bg-amber-500/[0.09]" />
-                      {/* Right Engagement Action Stack Guide */}
-                      <div className="absolute top-[40%] right-0 bottom-[24%] flex w-[14%] flex-col items-center justify-center gap-2 border-l border-dashed border-amber-400/60 bg-amber-500/[0.06]">
-                        <span className="size-2.5 rounded-full border border-amber-300/70" />
-                        <span className="size-2.5 rounded-full border border-amber-300/70" />
-                        <span className="size-2.5 rounded-full border border-amber-300/70" />
-                      </div>
-                      {/* Center Safe Composition Frame */}
-                      <div className="absolute top-[12%] right-[14%] bottom-[24%] left-[5%] border border-dashed border-emerald-400/40" />
+                      <div className="absolute inset-x-0 top-0 h-[12%] border-b border-dashed border-amber-400/60" />
+                      <div className="absolute inset-x-0 bottom-0 h-[24%] border-t border-dashed border-amber-400/60" />
+                      <div className="absolute top-[12%] right-0 bottom-[24%] w-[14%] border-l border-dashed border-amber-400/60" />
                     </div>
                   )}
 
-                  {/* Minimal Frame Index (Left) + Multi-Select Checkbox Pill (Right) */}
+                  {/* Calm Top Corner Index + Selection Toggle */}
                   <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex items-center justify-between gap-1 font-mono text-[10px]">
                     <span className="rounded bg-black/75 px-1.5 py-0.5 tabular-nums text-zinc-100">
                       #{index + 1}
@@ -1437,6 +1348,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     <button
                       type="button"
                       role="checkbox"
+                      data-testid={`select-frame-${index + 1}`}
                       aria-checked={isSelected}
                       aria-label={
                         isSelected
@@ -1477,6 +1389,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     <Button
                       type="button"
                       size="sm"
+                      data-testid={`btn-place-model-${index + 1}`}
                       onClick={() => void handlePlaceModel(item, index)}
                       disabled={swappingItemId === item.id}
                       title={t("bg.placeModelTitle", { index: index + 1 })}
@@ -1498,6 +1411,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                       type="button"
                       size="sm"
                       variant="secondary"
+                      data-testid={`btn-download-single-${index + 1}`}
                       onClick={() => handleDownloadSingle(item, index)}
                       disabled={downloadingId === item.id}
                       title={t("bg.downloadSingleTitle", { index: index + 1 })}
@@ -1516,7 +1430,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     </Button>
                   </div>
 
-                  {/* Minimal Bottom Metadata + Mobile Touch Controls */}
+                  {/* Calm Bottom Scrim & Mobile Touch Controls */}
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/65 to-transparent p-2 pt-9">
                     <p className="line-clamp-1 text-[11px] font-medium text-[#F4F4F5]">
                       {item.title}
@@ -1576,8 +1490,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
       {/* Model-in-Scene Compositor Before/After Preview Dialog */}
       <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
-        <DialogContent className="studio-deck border-white/[0.12] bg-[#0B0C10] p-5 text-[#F4F4F5] shadow-2xl sm:max-w-md">
-          <DialogHeader className="space-y-1.5 pr-6">
+        <DialogContent
+          data-testid="dialog-model-swap"
+          className="studio-deck border-white/[0.12] bg-[#0B0C10] p-5 text-[#F4F4F5] shadow-2xl sm:max-w-md"
+        >
+          <DialogHeader className="space-y-1 pr-6">
             <div className="flex flex-wrap items-center gap-2">
               <DialogTitle className="flex items-center gap-2 font-heading text-sm font-semibold text-[#F4F4F5] sm:text-base">
                 <Wand2 className="size-4 shrink-0 text-amber-400" />
@@ -1589,9 +1506,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 </span>
               )}
             </div>
-            <DialogDescription className="text-xs text-[#8B8D98]">
-              {swapTargetItem?.title || t("bg.swapModal.subtitle")}
-            </DialogDescription>
+            {swapTargetItem?.title && (
+              <DialogDescription className="text-xs text-[#8B8D98]">
+                {swapTargetItem.title}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           <div className="space-y-3">
@@ -1601,15 +1520,11 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                 <p className="text-xs font-semibold text-[#F4F4F5]">
                   {t("bg.swapModal.generating")}
                 </p>
-                <p className="text-[11px] text-[#8B8D98]">
-                  {t("bg.swapModal.generatingHint")}
-                </p>
               </div>
             ) : swapResultUrl ? (
-              <div className="space-y-2.5">
-                {/* Interactive Horizontal Before / After Split Comparator */}
-                <div className="relative mx-auto aspect-[9/16] max-h-[56vh] overflow-hidden rounded-lg border border-white/[0.12] bg-[#050507] select-none">
-                  {/* Before (Original Background Plate) — Full Base Layer (Left Side Revealed) */}
+              <div className="space-y-3">
+                {/* Clean Horizontal Before / After Split Comparator */}
+                <div className="relative mx-auto aspect-[9/16] max-h-[58vh] overflow-hidden rounded-lg border border-white/[0.12] bg-[#050507] select-none">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={swapTargetItem?.previewUrl || swapResultUrl}
@@ -1618,7 +1533,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     className="h-full w-full object-cover"
                   />
 
-                  {/* After (Composited Result) — Clipped to Right Side of Divider */}
                   <div
                     aria-hidden="true"
                     style={{
@@ -1635,7 +1549,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     />
                   </div>
 
-                  {/* Corner Before / After Badges */}
                   {comparePosition > 14 && (
                     <span className="pointer-events-none absolute top-2.5 left-2.5 z-10 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-200">
                       {t("bg.swapModal.beforeLabel")}
@@ -1647,7 +1560,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     </span>
                   )}
 
-                  {/* Vertical Split Line & Clamped Grip Handle */}
                   <div
                     aria-hidden="true"
                     style={{ left: `${comparePosition}%` }}
@@ -1663,9 +1575,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     <MoveHorizontal className="size-3.5" />
                   </div>
 
-                  {/* Accessible Full-Frame Range Scrubber */}
                   <input
                     type="range"
+                    data-testid="slider-compare"
                     min={0}
                     max={100}
                     value={comparePosition}
@@ -1673,31 +1585,6 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
                     aria-label={t("bg.swapModal.compareAria")}
                     className="absolute inset-0 z-20 m-0 h-full w-full cursor-ew-resize opacity-0"
                   />
-                </div>
-
-                {/* Comparison Telemetry Scrubber Readout */}
-                <div className="studio-well flex items-center justify-between gap-2 rounded-md px-3 py-1.5 font-mono text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setComparePosition(100)}
-                    className="text-[#8B8D98] transition-colors hover:text-[#F4F4F5]"
-                  >
-                    {t("bg.swapModal.beforeLabel")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setComparePosition(50)}
-                    className="tabular-nums text-amber-400 transition-colors hover:text-amber-300"
-                  >
-                    {comparePosition}% / {100 - comparePosition}%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setComparePosition(0)}
-                    className="text-emerald-400 transition-colors hover:text-emerald-300"
-                  >
-                    {t("bg.swapModal.afterLabel")}
-                  </button>
                 </div>
 
                 {swapIsFallback && (
@@ -1708,6 +1595,7 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
 
                 <Button
                   type="button"
+                  data-testid="btn-download-composite"
                   onClick={handleDownloadSwapResult}
                   className="h-9 w-full border border-emerald-400/50 bg-emerald-500 text-xs font-semibold text-zinc-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:bg-emerald-400"
                 >

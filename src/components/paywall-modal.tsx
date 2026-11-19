@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -41,8 +40,6 @@ const PRO_BENEFIT_KEYS: readonly TranslationKey[] = [
   "paywall.benefit1",
   "paywall.benefit2",
   "paywall.benefit3",
-  "paywall.benefit4",
-  "paywall.benefit5",
 ];
 
 export function PaywallModal({
@@ -148,36 +145,14 @@ export function PaywallModal({
               )}
             </div>
 
-            <DialogTitle className="flex items-center gap-2 font-heading text-base font-semibold tracking-tight text-[#F4F4F5] sm:text-lg">
+            <DialogTitle
+              data-testid="paywall-title"
+              className="flex items-center gap-2 font-heading text-base font-semibold tracking-tight text-[#F4F4F5] sm:text-lg"
+            >
               <Crown className="size-4 shrink-0 text-amber-400" />
               <span>{t("paywall.title")}</span>
             </DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed text-[#8B8D98]">
-              {t("paywall.description")}
-            </DialogDescription>
           </DialogHeader>
-
-          {/* Crisp 2-Tier Comparison Strip */}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="studio-well rounded-md px-3 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-wider text-[#8B8D98]">
-                {t("paywall.compare.freeLabel")}
-              </span>
-              <span className="mt-0.5 block font-mono text-xs font-medium tabular-nums text-zinc-300">
-                {t("paywall.compare.freeValue", {
-                  max: businessConfig.maxTrialCredits,
-                })}
-              </span>
-            </div>
-            <div className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-3 py-2">
-              <span className="block font-mono text-[10px] uppercase tracking-wider text-emerald-400">
-                {t("paywall.compare.proLabel")}
-              </span>
-              <span className="mt-0.5 block text-xs font-semibold leading-snug text-emerald-200">
-                {t("paywall.compare.proValue")}
-              </span>
-            </div>
-          </div>
 
           {/* Currency Selector Switch */}
           <div
@@ -187,6 +162,7 @@ export function PaywallModal({
           >
             <button
               type="button"
+              data-testid="currency-cop"
               onClick={() => setCurrency("cop")}
               aria-pressed={currency === "cop"}
               className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
@@ -199,6 +175,7 @@ export function PaywallModal({
             </button>
             <button
               type="button"
+              data-testid="currency-usd"
               onClick={() => setCurrency("usd")}
               aria-pressed={currency === "usd"}
               className={`rounded-md px-2 py-1.5 text-center font-mono text-[10.5px] font-medium transition-colors ${
@@ -213,36 +190,18 @@ export function PaywallModal({
 
           {/* Pricing & Benefit Summary Deck */}
           <div className="studio-elevated rounded-lg p-3.5">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.08] pb-2.5">
-              <div className="min-w-0 space-y-0.5">
-                <span className="block text-xs font-semibold text-[#F4F4F5]">
-                  {t("paywall.planName")}
-                </span>
-                <span className="block font-mono text-[11px] text-[#8B8D98]">
-                  {t("paywall.planSubtitle")}
-                </span>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="flex items-baseline justify-end gap-1">
-                  <span className="font-heading text-xl font-semibold tracking-tight tabular-nums text-[#F4F4F5]">
-                    {currency === "cop"
-                      ? businessConfig.priceCop
-                      : businessConfig.priceUsd}
-                  </span>
-                  <span className="text-xs text-[#8B8D98]">
-                    {t("paywall.perMonthShort")}
-                  </span>
-                </div>
-                <span className="block font-mono text-[11px] tabular-nums text-[#8B8D98]">
-                  {currency === "cop"
-                    ? t("paywall.approxUsdPerMonth", {
-                        priceUsd: businessConfig.priceUsd,
-                      })
-                    : t("paywall.approxCopPerMonth", {
-                        priceCop: businessConfig.priceCop,
-                      })}
-                </span>
-              </div>
+            <div className="flex items-baseline gap-1.5 border-b border-white/[0.08] pb-2.5">
+              <span
+                data-testid="paywall-price"
+                className="font-heading text-xl font-semibold tracking-tight tabular-nums text-[#F4F4F5]"
+              >
+                {currency === "cop"
+                  ? businessConfig.priceCop
+                  : businessConfig.priceUsd}
+              </span>
+              <span className="text-xs text-[#8B8D98]">
+                {t("paywall.perMonthShort")}
+              </span>
             </div>
 
             <ul className="space-y-1.5 pt-2.5">
@@ -262,6 +221,7 @@ export function PaywallModal({
           <div className="space-y-2">
             <Button
               type="button"
+              data-testid="btn-checkout-primary"
               onClick={() =>
                 handleOpenCheckout(primaryCheckout.url, primaryCheckout.label)
               }
@@ -274,6 +234,7 @@ export function PaywallModal({
 
             <Button
               type="button"
+              data-testid="btn-checkout-secondary"
               variant="outline"
               onClick={() =>
                 handleOpenCheckout(
@@ -309,6 +270,7 @@ export function PaywallModal({
             <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <Input
                 id="paywall-access-code"
+                data-testid="input-access-code"
                 value={accessCode}
                 onChange={(e) => setAccessCode(e.target.value)}
                 placeholder={t("paywall.codePlaceholder")}
@@ -317,6 +279,7 @@ export function PaywallModal({
               />
               <Button
                 type="submit"
+                data-testid="btn-unlock-code"
                 variant="secondary"
                 disabled={isVerifying}
                 className="h-9 shrink-0 border border-white/[0.12] bg-[#13151D] px-4 text-xs font-semibold text-[#F4F4F5] hover:border-white/[0.2] hover:bg-[#191c26]"

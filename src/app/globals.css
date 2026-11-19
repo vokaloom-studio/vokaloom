@@ -88,24 +88,6 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-@utility glass-panel {
-  background-color: var(--surface-deck);
-  border: 1px solid var(--border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-@utility glass-panel-hover {
-  @apply transition-colors duration-150 hover:bg-[#13151D] hover:border-zinc-700/80;
-}
-
-@utility glass-header {
-  @apply bg-[#060608]/92 backdrop-blur-md border-b border-zinc-800/85;
-}
-
-@utility glass-subtle {
-  @apply bg-[#0B0C10]/90 border border-zinc-800/85;
-}
-
 @utility cn-toast {
   /* Custom hook class referenced by src/components/ui/sonner.tsx */
   font-family: var(--font-sans);
