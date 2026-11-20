@@ -2204,4 +2204,109 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     );
     assert.equal(reVerify.status, 401);
   });
+
+  it("calls Gemini TTS on v1beta with valid responseModalities, speechConfig, verbatim text, and preserves RIFF WAV output", async () => {
+    delete process.env.FAL_KEY;
+
+    const capturedCalls: Array<{
+      url: string;
+      body: {
+        contents?: Array<{ parts?: Array<{ text?: string }> }>;
+        generationConfig?: {
+          responseModalities?: string[];
+          speechConfig?: {
+            voiceConfig?: {
+              prebuiltVoiceConfig?: { voiceName?: string };
+            };
+          };
+        };
+      };
+    }> = [];
+
+    const fakeWav = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4, 0),
+      Buffer.from("WAVEfmt "),
+      Buffer.alloc(32, 0),
+    ]);
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("generativelanguage.googleapis.com")) {
+        const parsedBody = JSON.parse(String(init?.body || "{}")) as
+          (typeof capturedCalls)[number]["body"];
+        capturedCalls.push({ url, body: parsedBody });
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "audio/wav",
+                        data: fakeWav.toString("base64"),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 24,
+              candidatesTokenCount: 160,
+              totalTokenCount: 184,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const operatorCookie = makeOperatorCookieHeader();
+    const res = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          text: "Hola desde Vokaloom Studio.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as {
+      isFallback: boolean;
+      audioUrl: string;
+    };
+    assert.equal(data.isFallback, false);
+    assert.equal(capturedCalls.length, 1);
+
+    const call = capturedCalls[0]!;
+    assert.ok(
+      call.url.includes("/v1beta/models/gemini-3.8-flash-lite-tts:generateContent")
+    );
+    assert.equal(call.url.includes("/v1/models/"), false);
+    assert.deepEqual(call.body.generationConfig?.responseModalities, ["AUDIO"]);
+    assert.equal(
+      call.body.generationConfig?.speechConfig?.voiceConfig?.prebuiltVoiceConfig
+        ?.voiceName,
+      "Aoede"
+    );
+    assert.equal(
+      call.body.contents?.[0]?.parts?.[0]?.text,
+      "Hola desde Vokaloom Studio."
+    );
+
+    // Ensure an already-RIFF WAV from Gemini TTS is not double-wrapped
+    assert.ok(data.audioUrl.startsWith("data:audio/wav;base64,"));
+    const decodedOut = Buffer.from(
+      data.audioUrl.replace("data:audio/wav;base64,", ""),
+      "base64"
+    );
+    assert.equal(decodedOut.toString("ascii", 0, 4), "RIFF");
+    assert.equal(decodedOut.length, fakeWav.length);
+  });
 });

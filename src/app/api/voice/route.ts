@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { createFalClient, type FalClient } from "@fal-ai/client";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import {
   checkPaidGenerationEligibility,
   ensureFreshFalBalanceStatus,
@@ -678,7 +678,13 @@ export async function POST(request: Request) {
     ) {
       const ttsModel = resolveGeminiTtsModel();
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        // @google/genai v3 defaults to v1, where generation_config rejects speechConfig;
+        // Gemini TTS (responseModalities: ["AUDIO"] + speechConfig) requires v1beta.
+        const ai = new GoogleGenAI({
+          apiKey: geminiKey,
+          apiVersion: "v1beta",
+          httpOptions: { apiVersion: "v1beta" },
+        });
         const voiceName =
           voiceId.includes("sofia") || voiceId.includes("abella")
             ? "Aoede"
@@ -698,18 +704,12 @@ export async function POST(request: Request) {
           contents: [
             {
               role: "user",
-              parts: [
-                {
-                  text: `Read this voiceover script naturally and expressively in ${
-                    language === "es" ? "Spanish" : "English"
-                  }: ${text}`,
-                },
-              ],
+              parts: [{ text }],
             },
           ],
           config: {
             abortSignal: geminiAbortSignal,
-            responseModalities: ["AUDIO"],
+            responseModalities: [Modality.AUDIO],
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: {
@@ -722,18 +722,44 @@ export async function POST(request: Request) {
 
         await recordGeminiUsage("audio", response.usageMetadata);
 
-        const base64Pcm =
-          response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (base64Pcm) {
-          const pcmBuffer = Buffer.from(base64Pcm, "base64");
-          const wavBuffer = wrapPcmInWavHeader(pcmBuffer, 24000, 1, 16);
+        const audioPart = response.candidates?.[0]?.content?.parts?.find(
+          (part) => Boolean(part.inlineData?.data)
+        );
+        const base64Audio = audioPart?.inlineData?.data;
+        if (base64Audio) {
+          const rawBuffer = Buffer.from(base64Audio, "base64");
+          const audioMime =
+            (audioPart?.inlineData?.mimeType || "audio/pcm")
+              .split(";")[0]
+              ?.trim()
+              .toLowerCase() || "audio/pcm";
+          const hasRiffHeader =
+            rawBuffer.length >= 12 &&
+            rawBuffer.toString("ascii", 0, 4) === "RIFF" &&
+            rawBuffer.toString("ascii", 8, 12) === "WAVE";
+          const isEncodedAudio =
+            hasRiffHeader ||
+            (audioMime.startsWith("audio/") &&
+              !audioMime.includes("pcm") &&
+              !audioMime.includes("l16"));
+          const outBuffer = isEncodedAudio
+            ? rawBuffer
+            : wrapPcmInWavHeader(rawBuffer, 24000, 1, 16);
+          const outMime = hasRiffHeader
+            ? "audio/wav"
+            : isEncodedAudio
+              ? audioMime
+              : "audio/wav";
+          const pcmByteLen = hasRiffHeader
+            ? Math.max(0, rawBuffer.length - 44)
+            : rawBuffer.length;
           const durationMs = Math.max(
             500,
-            Math.round((pcmBuffer.length / (24000 * 2)) * 1000)
+            Math.round((pcmByteLen / (24000 * 2)) * 1000)
           );
           return withQuotaCookie(
             NextResponse.json({
-              audioUrl: "data:audio/wav;base64," + wavBuffer.toString("base64"),
+              audioUrl: `data:${outMime};base64,${outBuffer.toString("base64")}`,
               engine: translate(locale, "api.voice.engine.geminiTts"),
               language,
               durationMs,
