@@ -3,10 +3,16 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   getAdminTelemetrySnapshot,
+  getServerBusinessConfig,
   resetBudgetCaps,
+  saveServerBusinessConfig,
   toggleEmergencyPause,
+  type ServerBusinessConfig,
 } from "@/lib/budget-guard";
-import { getRateLimitClientKey } from "@/lib/client-ip";
+import {
+  getRateLimitClientKey,
+  isTrustedProxyEnvironment,
+} from "@/lib/client-ip";
 import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
 import {
   MalformedJsonBodyError,
@@ -94,6 +100,12 @@ function getVipClientCodes(): string[] {
   return ["VOKALOOM-PRO-2026", "CLIENT-VIP-01"];
 }
 
+function timingSafeEqualExact(a: string, b: string): boolean {
+  const digestA = crypto.createHash("sha256").update(a.trim()).digest();
+  const digestB = crypto.createHash("sha256").update(b.trim()).digest();
+  return crypto.timingSafeEqual(digestA, digestB);
+}
+
 function timingSafeEqualIgnoreCase(a: string, b: string): boolean {
   const digestA = crypto
     .createHash("sha256")
@@ -104,6 +116,77 @@ function timingSafeEqualIgnoreCase(a: string, b: string): boolean {
     .update(b.trim().toUpperCase())
     .digest();
   return crypto.timingSafeEqual(digestA, digestB);
+}
+
+function verifySameOriginForAdminPost(request: Request): boolean {
+  const secFetchSite = request.headers
+    .get("sec-fetch-site")
+    ?.trim()
+    .toLowerCase();
+  if (secFetchSite === "cross-site") {
+    return false;
+  }
+
+  const originHeader = request.headers.get("origin")?.trim();
+  if (!originHeader) {
+    // Allow direct headerless API/unit-test calls
+    return true;
+  }
+
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(originHeader);
+  } catch {
+    return false;
+  }
+
+  let expectedHost: string | null = null;
+  let expectedProtocol: string | null = null;
+
+  if (isTrustedProxyEnvironment()) {
+    const fwdHost = request.headers
+      .get("x-forwarded-host")
+      ?.split(",")[0]
+      ?.trim();
+    const fwdProto = request.headers
+      .get("x-forwarded-proto")
+      ?.split(",")[0]
+      ?.trim()
+      ?.toLowerCase();
+    if (fwdHost) {
+      expectedHost = fwdHost.toLowerCase();
+    }
+    if (fwdProto === "http" || fwdProto === "https") {
+      expectedProtocol = `${fwdProto}:`;
+    }
+  }
+
+  if (!expectedHost) {
+    const hostHeader = request.headers.get("host")?.trim();
+    if (hostHeader) {
+      expectedHost = hostHeader.toLowerCase();
+    }
+  }
+
+  try {
+    const reqUrl = new URL(request.url);
+    if (!expectedHost) {
+      expectedHost = reqUrl.host.toLowerCase();
+    }
+    if (!expectedProtocol) {
+      expectedProtocol = reqUrl.protocol;
+    }
+  } catch {
+    // Ignore malformed URL fallback
+  }
+
+  if (!expectedHost || parsedOrigin.host.toLowerCase() !== expectedHost) {
+    return false;
+  }
+  if (expectedProtocol && parsedOrigin.protocol !== expectedProtocol) {
+    return false;
+  }
+  return true;
 }
 
 async function isRateLimited(ip: string): Promise<boolean> {
@@ -127,23 +210,26 @@ function buildDiagnosticsFromValues(
       pexelsConfigured: Boolean(values.PEXELS_API_KEY),
       unsplashConfigured: Boolean(values.UNSPLASH_ACCESS_KEY),
       falConfigured: Boolean(values.FAL_KEY),
+      falBillingConfigured: Boolean(values.FAL_BILLING_KEY),
     },
     maskedKeys: {
       GEMINI_API_KEY: maskSecret(values.GEMINI_API_KEY),
       PEXELS_API_KEY: maskSecret(values.PEXELS_API_KEY),
       UNSPLASH_ACCESS_KEY: maskSecret(values.UNSPLASH_ACCESS_KEY),
       FAL_KEY: maskSecret(values.FAL_KEY),
+      FAL_BILLING_KEY: maskSecret(values.FAL_BILLING_KEY),
     },
     vipClientCodes: getVipClientCodes(),
   };
 }
 
 async function resolveAllDiagnostics() {
-  const [gemini, pexels, unsplash, fal] = await Promise.all([
+  const [gemini, pexels, unsplash, fal, falBilling] = await Promise.all([
     resolveApiKey("GEMINI_API_KEY"),
     resolveApiKey("PEXELS_API_KEY"),
     resolveApiKey("UNSPLASH_ACCESS_KEY"),
     resolveApiKey("FAL_KEY"),
+    resolveApiKey("FAL_BILLING_KEY"),
   ]);
 
   return {
@@ -152,9 +238,11 @@ async function resolveAllDiagnostics() {
       PEXELS_API_KEY: pexels,
       UNSPLASH_ACCESS_KEY: unsplash,
       FAL_KEY: fal,
+      FAL_BILLING_KEY: falBilling,
     }),
     geminiKey: gemini,
     falKey: fal,
+    falBillingKey: falBilling,
   };
 }
 
@@ -224,9 +312,8 @@ async function authorizeAdminRequest(
     }
 
     if (
-      (headerKey.length > 0 &&
-        timingSafeEqualIgnoreCase(headerKey, masterKey)) ||
-      (bodyKey.length > 0 && timingSafeEqualIgnoreCase(bodyKey, masterKey))
+      (headerKey.length > 0 && timingSafeEqualExact(headerKey, masterKey)) ||
+      (bodyKey.length > 0 && timingSafeEqualExact(bodyKey, masterKey))
     ) {
       await clearFailedLogins(clientIp);
       return { authorized: true, usedSubmittedKey: true };
@@ -293,33 +380,27 @@ export async function GET(request: Request) {
     );
   }
 
-  const publicDefaults = {
-    priceCop: "$60,000 COP",
-    priceUsd: "$15 USD",
-    maxTrialCredits: 3,
-    checkoutUrlCop:
-      process.env.NEXT_PUBLIC_CHECKOUT_URL_COP ||
-      "https://checkout.wompi.co/l/your_60000_cop_link",
-    checkoutUrlUsd:
-      process.env.NEXT_PUBLIC_CHECKOUT_URL_USD ||
-      "https://buy.stripe.com/your_15_usd_link",
-  };
+  const isProduction = process.env.NODE_ENV === "production";
+  const serverConfig = await getServerBusinessConfig();
 
   if (!authResult.authorized) {
     return NextResponse.json(
       {
         authenticated: false,
+        isProduction,
         entitlement,
-        config: publicDefaults,
+        config: serverConfig,
         message: translate(locale, "api.admin.unauthenticated"),
       },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
 
-  const { diagnostics, falKey, geminiKey } = await resolveAllDiagnostics();
+  const { diagnostics, falKey, falBillingKey, geminiKey } =
+    await resolveAllDiagnostics();
   const telemetry = await getAdminTelemetrySnapshot({
     falKey,
+    falBillingKey,
     geminiKey,
     refreshFal,
   });
@@ -327,8 +408,9 @@ export async function GET(request: Request) {
   return NextResponse.json(
     {
       authenticated: true,
+      isProduction,
       entitlement,
-      config: publicDefaults,
+      config: serverConfig,
       message: translate(locale, "api.admin.authenticated"),
       ...diagnostics,
       telemetry,
@@ -339,6 +421,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   let locale = resolveRequestLocale(request);
+  if (!verifySameOriginForAdminPost(request)) {
+    return NextResponse.json(
+      {
+        valid: false,
+        success: false,
+        error: translate(locale, "api.admin.forbiddenOrigin"),
+      },
+      { status: 403 }
+    );
+  }
   try {
     const rawBody = await readJsonBodyWithLimit(request, 16 * 1024);
     const body = rawBody as {
@@ -349,16 +441,54 @@ export async function POST(request: Request) {
         | "update-keys"
         | "clear-vault"
         | "reset-budget-caps"
-        | "toggle-emergency-pause";
+        | "toggle-emergency-pause"
+        | "update-business-config";
       code?: string;
       adminKey?: string;
       keys?: Partial<Record<SecretKeyName, string>>;
+      config?: Partial<ServerBusinessConfig>;
       removeFromDisk?: boolean;
       paused?: boolean;
       locale?: unknown;
     };
     if (body.locale !== undefined) {
       locale = resolveRequestLocale(request, body.locale);
+    }
+
+    if (body.action === "update-business-config") {
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
+
+      if (!body.config || typeof body.config !== "object") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, "api.admin.invalidBusinessConfig"),
+          },
+          { status: 400 }
+        );
+      }
+
+      const saved = await saveServerBusinessConfig(body.config);
+      if (!saved.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, saved.errorKey),
+          },
+          { status: saved.statusCode }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        config: saved.config,
+        message: translate(locale, "api.admin.businessConfigSaved"),
+      });
     }
 
     if (body.action === "reset-budget-caps") {
@@ -370,9 +500,11 @@ export async function POST(request: Request) {
       if (authError) return authError;
 
       await resetBudgetCaps();
-      const { falKey, geminiKey } = await resolveAllDiagnostics();
+      const { falKey, falBillingKey, geminiKey } =
+        await resolveAllDiagnostics();
       const telemetry = await getAdminTelemetrySnapshot({
         falKey,
+        falBillingKey,
         geminiKey,
       });
 
@@ -394,9 +526,11 @@ export async function POST(request: Request) {
       const explicitPause =
         typeof body.paused === "boolean" ? body.paused : undefined;
       await toggleEmergencyPause(explicitPause);
-      const { falKey, geminiKey } = await resolveAllDiagnostics();
+      const { falKey, falBillingKey, geminiKey } =
+        await resolveAllDiagnostics();
       const telemetry = await getAdminTelemetrySnapshot({
         falKey,
+        falBillingKey,
         geminiKey,
       });
 
@@ -604,7 +738,7 @@ export async function POST(request: Request) {
 
     const vipCodes = getVipClientCodes();
 
-    const isOperator = timingSafeEqualIgnoreCase(submitted, masterKey);
+    const isOperator = timingSafeEqualExact(submitted, masterKey);
     const isVipClient = vipCodes.some((c) =>
       timingSafeEqualIgnoreCase(submitted, c)
     );
@@ -634,6 +768,14 @@ export async function POST(request: Request) {
     await clearFailedLogins(clientIp);
 
     const role: EntitlementRole = isOperator ? "operator" : "pro_client";
+    const subjectId =
+      role === "pro_client"
+        ? crypto
+            .createHash("sha256")
+            .update(submitted.trim().toUpperCase())
+            .digest("hex")
+            .slice(0, 16)
+        : undefined;
     const response = NextResponse.json({
       valid: true,
       role,
@@ -646,7 +788,7 @@ export async function POST(request: Request) {
     });
 
     const isProd = process.env.NODE_ENV === "production";
-    const entitlementToken = signEntitlementToken(role);
+    const entitlementToken = signEntitlementToken(role, subjectId);
     if (entitlementToken) {
       response.cookies.set(ENTITLEMENT_COOKIE_NAME, entitlementToken, {
         httpOnly: true,

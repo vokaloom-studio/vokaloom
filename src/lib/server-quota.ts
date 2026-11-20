@@ -58,6 +58,7 @@ export type ServerQuotaEnforcementResult =
       isPro: boolean;
       isOperator: boolean;
       role: EntitlementRole | "guest";
+      subjectId?: string;
       trialCookieToken?: string;
       resetAt?: number;
     }
@@ -93,6 +94,7 @@ export async function enforceServerGenerationQuota(
       isPro: true,
       isOperator: entitlement.isOperator,
       role: entitlement.role,
+      ...(entitlement.subjectId ? { subjectId: entitlement.subjectId } : {}),
     };
   }
 

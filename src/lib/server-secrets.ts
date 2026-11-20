@@ -7,13 +7,15 @@ export type SecretKeyName =
   | "GEMINI_API_KEY"
   | "PEXELS_API_KEY"
   | "UNSPLASH_ACCESS_KEY"
-  | "FAL_KEY";
+  | "FAL_KEY"
+  | "FAL_BILLING_KEY";
 
 export const SECRET_KEY_NAMES: readonly SecretKeyName[] = [
   "GEMINI_API_KEY",
   "PEXELS_API_KEY",
   "UNSPLASH_ACCESS_KEY",
   "FAL_KEY",
+  "FAL_BILLING_KEY",
 ];
 
 export const VAULT_COOKIE_NAME = "vokaloom_vault_v1";
@@ -39,6 +41,7 @@ const PLACEHOLDERS: Record<SecretKeyName, string> = {
   PEXELS_API_KEY: "your_pexels_api_key",
   UNSPLASH_ACCESS_KEY: "your_unsplash_access_key",
   FAL_KEY: "your_fal_ai_key",
+  FAL_BILLING_KEY: "your_fal_billing_readonly_key",
 };
 
 const ALL_PLACEHOLDERS = new Set<string>(Object.values(PLACEHOLDERS));
@@ -54,21 +57,34 @@ export function resolveAdminMasterKey(): string | null {
   return "VOKALOOM-ADMIN-2026";
 }
 
+export function isDedicatedSigningSecretConfigured(): boolean {
+  const signingSecret = process.env.SESSION_SIGNING_SECRET?.trim();
+  return Boolean(signingSecret && signingSecret.length > 0);
+}
+
+export function resolveSessionSigningSecret(): string | null {
+  const dedicated = process.env.SESSION_SIGNING_SECRET?.trim();
+  if (dedicated && dedicated.length > 0) {
+    return dedicated;
+  }
+  return resolveAdminMasterKey();
+}
+
 function deriveAesKey(): Buffer {
-  const master = resolveAdminMasterKey();
-  if (!master) {
+  const secret = resolveSessionSigningSecret();
+  if (!secret) {
     throw new MissingAdminKeyError();
   }
-  return crypto.createHash("sha256").update(master).digest();
+  return crypto.createHash("sha256").update(secret).digest();
 }
 
 function deriveHmacKey(purpose: string): Buffer | null {
-  const master = resolveAdminMasterKey();
-  if (!master) {
+  const secret = resolveSessionSigningSecret();
+  if (!secret) {
     return null;
   }
   return crypto
-    .createHmac("sha256", master)
+    .createHmac("sha256", secret)
     .update(`vokaloom-hmac:${purpose}`)
     .digest();
 }
@@ -121,12 +137,17 @@ export function verifyAdminSessionToken(
 
 export function signEntitlementToken(
   role: EntitlementRole,
+  subjectId?: string,
   nowMs = Date.now()
 ): string | null {
   const hmacKey = deriveHmacKey("entitlement");
   if (!hmacKey) return null;
+  const cleanSub =
+    typeof subjectId === "string" && /^[a-z0-9_-]{4,64}$/i.test(subjectId)
+      ? subjectId
+      : undefined;
   const payload = Buffer.from(
-    JSON.stringify({ role, iat: nowMs }),
+    JSON.stringify({ role, iat: nowMs, ...(cleanSub ? { sub: cleanSub } : {}) }),
     "utf8"
   ).toString("base64url");
   const sig = crypto
@@ -144,6 +165,7 @@ export function verifyEntitlementToken(
   role: EntitlementRole | "guest";
   isPro: boolean;
   isOperator: boolean;
+  subjectId?: string;
 } {
   const guestResult = {
     valid: false,
@@ -177,7 +199,7 @@ export function verifyEntitlementToken(
   try {
     const parsed = JSON.parse(
       Buffer.from(payloadB64, "base64url").toString("utf8")
-    ) as { role?: unknown; iat?: unknown };
+    ) as { role?: unknown; iat?: unknown; sub?: unknown };
 
     const iat = Number(parsed.iat);
     if (
@@ -189,12 +211,19 @@ export function verifyEntitlementToken(
       return guestResult;
     }
 
+    const subjectId =
+      typeof parsed.sub === "string" &&
+      /^[a-z0-9_-]{4,64}$/i.test(parsed.sub)
+        ? parsed.sub
+        : undefined;
+
     if (parsed.role === "operator") {
       return {
         valid: true,
         role: "operator",
         isPro: true,
         isOperator: true,
+        ...(subjectId ? { subjectId } : {}),
       };
     }
 
@@ -204,6 +233,7 @@ export function verifyEntitlementToken(
         role: "pro_client",
         isPro: true,
         isOperator: false,
+        ...(subjectId ? { subjectId } : {}),
       };
     }
 
@@ -241,6 +271,7 @@ export async function resolveServerEntitlement(
   role: EntitlementRole | "guest";
   isPro: boolean;
   isOperator: boolean;
+  subjectId?: string;
 }> {
   let adminToken: string | undefined;
   let entitlementToken: string | undefined;
@@ -270,6 +301,7 @@ export async function resolveServerEntitlement(
       role: verified.role,
       isPro: verified.isPro,
       isOperator: verified.isOperator,
+      ...(verified.subjectId ? { subjectId: verified.subjectId } : {}),
     };
   }
 

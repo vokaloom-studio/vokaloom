@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createFalClient, type FalClient } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
 import {
+  checkPaidGenerationEligibility,
+  ensureFreshFalBalanceStatus,
   getBudgetCapErrorMessage,
-  getCachedFalBalanceStatus,
   getPublicQuotaSnapshot,
   invalidateFalBalanceCache,
   isPaidModelFallbackDisabled,
@@ -11,8 +12,9 @@ import {
   isUpstreamExhaustionError,
   recordGeminiUsage,
   recordProviderExhaustion,
-  refreshFalBalanceSnapshotAsync,
+  refreshFalBalanceSnapshot,
   reservePaidGenerationSlot,
+  resolveGeminiTtsModel,
 } from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
@@ -25,7 +27,10 @@ import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
 } from "@/lib/server-quota";
-import { resolveApiKey } from "@/lib/server-secrets";
+import {
+  resolveApiKey,
+  resolveServerEntitlement,
+} from "@/lib/server-secrets";
 
 export const maxDuration = 60;
 
@@ -310,6 +315,21 @@ function extractFalAudioUrl(result: unknown): string | null {
   return null;
 }
 
+function schedulePostResponseTask(task: () => Promise<unknown>): void {
+  try {
+    after(async () => {
+      try {
+        await task();
+      } catch {
+        // Ignore post-response refresh errors
+      }
+    });
+  } catch {
+    // Outside Next.js request lifecycle (e.g., direct Node unit test invocation)
+    void task().catch(() => undefined);
+  }
+}
+
 export async function POST(request: Request) {
   const startTime = Date.now();
   let locale = resolveRequestLocale(request);
@@ -374,31 +394,35 @@ export async function POST(request: Request) {
       ? refAudioValidation.dataUri
       : undefined;
 
-    const quota = await enforceServerGenerationQuota(request, locale);
-    if (!quota.allowed) {
-      return quota.response;
-    }
-
-    const withQuotaCookie = (res: NextResponse) =>
-      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
-
-    const [falKey, geminiKey] = await Promise.all([
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
+    const [entitlement, falKey, falBillingKey, geminiKey] = await Promise.all([
+      resolveServerEntitlement(cookieHeader),
       resolveApiKey("FAL_KEY"),
+      resolveApiKey("FAL_BILLING_KEY"),
       resolveApiKey("GEMINI_API_KEY"),
     ]);
+    const effectiveBillingKey = falBillingKey || falKey;
+    const clientIpKey = getRateLimitClientKey(request).key;
+    const initialUserKey = entitlement.subjectId
+      ? `sub:${entitlement.subjectId}`
+      : clientIpKey;
 
     const falClient = falKey
       ? createFalClient({ credentials: falKey })
       : null;
 
     if (!falClient && !geminiKey) {
+      const quota = await enforceServerGenerationQuota(request, locale);
+      if (!quota.allowed) {
+        return quota.response;
+      }
       // Mode C: Zero-Key Instant Offline Fallback
       const synth = synthesizePlayableWavDataUri(
         text,
         voiceId,
         Boolean(validatedReferenceAudio)
       );
-      return withQuotaCookie(
+      return attachServerTrialCookie(
         NextResponse.json({
           audioUrl: synth.dataUri,
           engine: translate(locale, "api.voice.demoFallbackEngine"),
@@ -406,14 +430,16 @@ export async function POST(request: Request) {
           durationMs: synth.durationMs,
           isFallback: true,
           budget: await getPublicQuotaSnapshot(),
-        })
+        }),
+        quota.trialCookieToken,
+        quota.resetAt
       );
     }
 
     const fallbackDisabled = isPaidModelFallbackDisabled();
     const [falBalanceStatus, falBroken, geminiBroken] = await Promise.all([
       falClient
-        ? getCachedFalBalanceStatus()
+        ? ensureFreshFalBalanceStatus(effectiveBillingKey)
         : Promise.resolve({
             known: false,
             belowMinFloor: false,
@@ -440,26 +466,59 @@ export async function POST(request: Request) {
           : "circuit_breaker"
         : undefined;
 
+    // Read-only eligibility check BEFORE consuming guest trial credits so
+    // paused, capped, low-balance, or circuit-broken responses return 429/503 cleanly.
+    const eligibility = await checkPaidGenerationEligibility("audio", {
+      role: entitlement.role,
+      userKey: initialUserKey,
+      providerUnavailableReason,
+    });
+    if (!eligibility.allowed) {
+      const budget = await getPublicQuotaSnapshot();
+      const status = eligibility.statusCode ?? 429;
+      return NextResponse.json(
+        {
+          error: getBudgetCapErrorMessage(locale, eligibility),
+          capReached: status !== 503,
+          durableStoreUnavailable: status === 503,
+          resource: "audio",
+          reason: eligibility.reason,
+          budget,
+        },
+        { status }
+      );
+    }
+
+    const quota = await enforceServerGenerationQuota(request, locale);
+    if (!quota.allowed) {
+      return quota.response;
+    }
+
+    const withQuotaCookie = (res: NextResponse) =>
+      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+
+    const reservationUserKey = quota.subjectId
+      ? `sub:${quota.subjectId}`
+      : clientIpKey;
+
     const reservation = await reservePaidGenerationSlot("audio", {
       role: quota.role,
-      userKey: getRateLimitClientKey(request).key,
+      userKey: reservationUserKey,
       providerUnavailableReason,
     });
     if (!reservation.allowed) {
       const budget = await getPublicQuotaSnapshot();
       const status = reservation.statusCode ?? 429;
-      return withQuotaCookie(
-        NextResponse.json(
-          {
-            error: getBudgetCapErrorMessage(locale, reservation),
-            capReached: status !== 503,
-            durableStoreUnavailable: status === 503,
-            resource: "audio",
-            reason: reservation.reason,
-            budget,
-          },
-          { status }
-        )
+      return NextResponse.json(
+        {
+          error: getBudgetCapErrorMessage(locale, reservation),
+          capReached: status !== 503,
+          durableStoreUnavailable: status === 503,
+          resource: "audio",
+          reason: reservation.reason,
+          budget,
+        },
+        { status }
       );
     }
 
@@ -485,8 +544,10 @@ export async function POST(request: Request) {
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
           await invalidateFalBalanceCache();
-          if (falKey) {
-            refreshFalBalanceSnapshotAsync(falKey);
+          if (effectiveBillingKey) {
+            schedulePostResponseTask(() =>
+              refreshFalBalanceSnapshot(effectiveBillingKey)
+            );
           }
           return withQuotaCookie(
             NextResponse.json({
@@ -553,8 +614,10 @@ export async function POST(request: Request) {
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
           await invalidateFalBalanceCache();
-          if (falKey) {
-            refreshFalBalanceSnapshotAsync(falKey);
+          if (effectiveBillingKey) {
+            schedulePostResponseTask(() =>
+              refreshFalBalanceSnapshot(effectiveBillingKey)
+            );
           }
           return withQuotaCookie(
             NextResponse.json({
@@ -583,13 +646,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Mode B2: Gemini 2.5 Flash Native Neural TTS via GEMINI_API_KEY
+    // Mode B2: Gemini Native Neural TTS via GEMINI_API_KEY
     // Never fall through from Fal to Gemini when DISABLE_PAID_MODEL_FALLBACK is active.
     if (
       geminiKey &&
       !geminiBroken &&
       (!falAttempted || (!fallbackDisabled && !validatedReferenceAudio))
     ) {
+      const ttsModel = resolveGeminiTtsModel();
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const voiceName =
@@ -607,7 +671,7 @@ export async function POST(request: Request) {
           : AbortSignal.timeout(GEMINI_TTS_TIMEOUT_MS);
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-preview-tts",
+          model: ttsModel,
           contents: [
             {
               role: "user",
@@ -668,7 +732,7 @@ export async function POST(request: Request) {
           );
         }
         console.warn(
-          "Gemini 2.5 Native TTS call failed, falling back to demo synth:",
+          `Gemini Native TTS (${ttsModel}) call failed, falling back to demo synth:`,
           err
         );
       }

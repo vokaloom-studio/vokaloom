@@ -3,8 +3,19 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Locale } from "@/lib/i18n";
 import { translate } from "@/lib/i18n";
+import {
+  DEFAULT_CHECKOUT_URL_COP,
+  DEFAULT_CHECKOUT_URL_USD,
+  DEFAULT_TRIAL_CREDITS,
+  isAllowedCheckoutUrl,
+  sanitizeCheckoutUrl,
+} from "@/lib/quota";
 import { resolveSharedRedisRestConfig } from "@/lib/rate-limit";
-import { resolveApiKey, type EntitlementRole } from "@/lib/server-secrets";
+import {
+  isDedicatedSigningSecretConfigured,
+  resolveApiKey,
+  type EntitlementRole,
+} from "@/lib/server-secrets";
 import type {
   AdminTelemetrySnapshot,
   CircuitBreakerRecord,
@@ -17,6 +28,7 @@ import type {
   PublicQuotaSnapshot,
   PublicResourceQuota,
   QuotaStatusLevel,
+  ServerBusinessConfig,
   StockProvider,
   StockRateLimitSnapshot,
 } from "@/lib/budget-types";
@@ -33,6 +45,7 @@ export type {
   PublicQuotaSnapshot,
   PublicResourceQuota,
   QuotaStatusLevel,
+  ServerBusinessConfig,
   StockProvider,
   StockRateLimitSnapshot,
 };
@@ -53,6 +66,23 @@ const DEFAULT_FAL_LOW_BALANCE_WARN_USD = 5.0;
 const DEFAULT_FAL_MIN_BALANCE_USD = 1.0;
 const DEFAULT_PRO_DAILY_IMAGE_LIMIT = 25;
 const DEFAULT_PRO_DAILY_AUDIO_LIMIT = 100;
+const DEFAULT_PRO_DAILY_VISION_LIMIT = 50;
+
+export const DEFAULT_GEMINI_VISION_MODEL = "gemini-3.5-flash-lite";
+export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1";
+export const DEFAULT_GEMINI_TTS_MODEL = "gemini-3.8-flash-lite-tts";
+
+export function resolveGeminiVisionModel(): string {
+  return process.env.GEMINI_VISION_MODEL?.trim() || DEFAULT_GEMINI_VISION_MODEL;
+}
+
+export function resolveGeminiImageModel(): string {
+  return process.env.GEMINI_IMAGE_MODEL?.trim() || DEFAULT_GEMINI_IMAGE_MODEL;
+}
+
+export function resolveGeminiTtsModel(): string {
+  return process.env.GEMINI_TTS_MODEL?.trim() || DEFAULT_GEMINI_TTS_MODEL;
+}
 
 const GEMINI_RATES_USD_PER_1M: Record<
   PaidResource,
@@ -90,6 +120,7 @@ interface BudgetLedgerData {
     unsplash?: StockRateLimitSnapshot;
   };
   geminiUsage: Record<PaidResource, GeminiResourceUsage>;
+  businessConfig?: ServerBusinessConfig;
 }
 
 export interface GeminiUsageMetadataLike {
@@ -259,6 +290,12 @@ export function resolveProClientDailyLimit(
       DEFAULT_PRO_DAILY_AUDIO_LIMIT
     );
   }
+  if (resource === "vision") {
+    return parsePositiveInt(
+      process.env.PRO_CLIENT_DAILY_VISION_LIMIT,
+      DEFAULT_PRO_DAILY_VISION_LIMIT
+    );
+  }
   return null;
 }
 
@@ -409,6 +446,67 @@ function normalizeGeminiUsageRecord(raw: unknown): GeminiResourceUsage {
   };
 }
 
+export function resolveDefaultBusinessConfig(): ServerBusinessConfig {
+  const rawTrials = process.env.VOKALOOM_FREE_TRIALS?.trim();
+  const maxTrialCredits =
+    rawTrials && /^\d+$/.test(rawTrials)
+      ? Math.min(100, Math.max(0, Number.parseInt(rawTrials, 10)))
+      : DEFAULT_TRIAL_CREDITS;
+  return {
+    priceCop: process.env.NEXT_PUBLIC_PRICE_COP?.trim() || "$60,000 COP",
+    priceUsd: process.env.NEXT_PUBLIC_PRICE_USD?.trim() || "$15 USD",
+    maxTrialCredits,
+    checkoutUrlCop: sanitizeCheckoutUrl(
+      process.env.NEXT_PUBLIC_CHECKOUT_URL_COP,
+      DEFAULT_CHECKOUT_URL_COP
+    ),
+    checkoutUrlUsd: sanitizeCheckoutUrl(
+      process.env.NEXT_PUBLIC_CHECKOUT_URL_USD,
+      DEFAULT_CHECKOUT_URL_USD
+    ),
+  };
+}
+
+function sanitizeStoredBusinessConfig(raw: unknown): ServerBusinessConfig {
+  const defaults = resolveDefaultBusinessConfig();
+  if (!raw || typeof raw !== "object") {
+    return defaults;
+  }
+  const obj = raw as Partial<ServerBusinessConfig>;
+  const priceCop =
+    typeof obj.priceCop === "string" &&
+    obj.priceCop.trim().length > 0 &&
+    obj.priceCop.trim().length <= 48
+      ? obj.priceCop.trim()
+      : defaults.priceCop;
+  const priceUsd =
+    typeof obj.priceUsd === "string" &&
+    obj.priceUsd.trim().length > 0 &&
+    obj.priceUsd.trim().length <= 48
+      ? obj.priceUsd.trim()
+      : defaults.priceUsd;
+  const maxTrialCredits =
+    typeof obj.maxTrialCredits === "number" &&
+    Number.isInteger(obj.maxTrialCredits) &&
+    obj.maxTrialCredits >= 0 &&
+    obj.maxTrialCredits <= 100
+      ? obj.maxTrialCredits
+      : defaults.maxTrialCredits;
+  return {
+    priceCop,
+    priceUsd,
+    maxTrialCredits,
+    checkoutUrlCop: sanitizeCheckoutUrl(
+      typeof obj.checkoutUrlCop === "string" ? obj.checkoutUrlCop : undefined,
+      defaults.checkoutUrlCop
+    ),
+    checkoutUrlUsd: sanitizeCheckoutUrl(
+      typeof obj.checkoutUrlUsd === "string" ? obj.checkoutUrlUsd : undefined,
+      defaults.checkoutUrlUsd
+    ),
+  };
+}
+
 function normalizeLedgerData(
   raw: unknown,
   now = Date.now()
@@ -545,6 +643,10 @@ function normalizeLedgerData(
     vision: normalizeGeminiUsageRecord(rawGeminiUsage?.vision),
   };
 
+  if (obj.businessConfig && typeof obj.businessConfig === "object") {
+    base.businessConfig = sanitizeStoredBusinessConfig(obj.businessConfig);
+  }
+
   return base;
 }
 
@@ -654,6 +756,7 @@ const REDIS_PREFIX = "vokaloom:{budget}:";
 const REDIS_EPOCH_KEY = `${REDIS_PREFIX}epoch`;
 const REDIS_PAUSE_KEY = `${REDIS_PREFIX}pause`;
 const REDIS_FAL_BALANCE_KEY = `${REDIS_PREFIX}fal_balance`;
+const REDIS_BUSINESS_CONFIG_KEY = `${REDIS_PREFIX}business_config`;
 
 function redisCapKey(
   epoch: number,
@@ -870,6 +973,7 @@ async function readRedisLedgerSnapshot(): Promise<BudgetLedgerData> {
     ["HGETALL", redisGeminiUsageKey("image")],
     ["HGETALL", redisGeminiUsageKey("audio")],
     ["HGETALL", redisGeminiUsageKey("vision")],
+    ["GET", REDIS_BUSINESS_CONFIG_KEY],
   ]);
 
   const toCounter = (valIdx: number, ttlIdx: number): ResourceCounterRecord => {
@@ -923,6 +1027,11 @@ async function readRedisLedgerSnapshot(): Promise<BudgetLedgerData> {
     audio: parseRedisHashToGeminiUsage(results[13]?.result),
     vision: parseRedisHashToGeminiUsage(results[14]?.result),
   };
+
+  const bizConfig = parseJsonSafe<ServerBusinessConfig>(results[15]?.result);
+  if (bizConfig) {
+    ledger.businessConfig = sanitizeStoredBusinessConfig(bizConfig);
+  }
 
   return normalizeLedgerData(ledger, now);
 }
@@ -1162,6 +1271,370 @@ async function readCurrentLedgerWithFallback(): Promise<{
 export async function getPublicQuotaSnapshot(): Promise<PublicQuotaSnapshot> {
   const { ledger } = await readCurrentLedgerWithFallback();
   return projectPublicSnapshot(ledger);
+}
+
+export async function getServerBusinessConfig(): Promise<ServerBusinessConfig> {
+  const { ledger } = await readCurrentLedgerWithFallback();
+  if (ledger.businessConfig) {
+    return sanitizeStoredBusinessConfig(ledger.businessConfig);
+  }
+  return resolveDefaultBusinessConfig();
+}
+
+export async function saveServerBusinessConfig(
+  input: Partial<ServerBusinessConfig>
+): Promise<
+  | { ok: true; config: ServerBusinessConfig }
+  | {
+      ok: false;
+      errorKey:
+        | "api.admin.invalidBusinessConfig"
+        | "api.budget.durableStoreUnavailable";
+      statusCode: 400 | 503;
+    }
+> {
+  const current = await getServerBusinessConfig();
+
+  let priceCop = current.priceCop;
+  if (input.priceCop !== undefined) {
+    if (typeof input.priceCop !== "string") {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    const trimmed = input.priceCop.trim();
+    if (!trimmed || trimmed.length > 48) {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    priceCop = trimmed;
+  }
+
+  let priceUsd = current.priceUsd;
+  if (input.priceUsd !== undefined) {
+    if (typeof input.priceUsd !== "string") {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    const trimmed = input.priceUsd.trim();
+    if (!trimmed || trimmed.length > 48) {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    priceUsd = trimmed;
+  }
+
+  let maxTrialCredits = current.maxTrialCredits;
+  if (input.maxTrialCredits !== undefined) {
+    if (
+      typeof input.maxTrialCredits !== "number" ||
+      !Number.isInteger(input.maxTrialCredits) ||
+      input.maxTrialCredits < 0 ||
+      input.maxTrialCredits > 100
+    ) {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    maxTrialCredits = input.maxTrialCredits;
+  }
+
+  let checkoutUrlCop = current.checkoutUrlCop;
+  if (input.checkoutUrlCop !== undefined) {
+    if (
+      typeof input.checkoutUrlCop !== "string" ||
+      !isAllowedCheckoutUrl(input.checkoutUrlCop)
+    ) {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    checkoutUrlCop = new URL(input.checkoutUrlCop.trim()).toString();
+  }
+
+  let checkoutUrlUsd = current.checkoutUrlUsd;
+  if (input.checkoutUrlUsd !== undefined) {
+    if (
+      typeof input.checkoutUrlUsd !== "string" ||
+      !isAllowedCheckoutUrl(input.checkoutUrlUsd)
+    ) {
+      return {
+        ok: false,
+        errorKey: "api.admin.invalidBusinessConfig",
+        statusCode: 400,
+      };
+    }
+    checkoutUrlUsd = new URL(input.checkoutUrlUsd.trim()).toString();
+  }
+
+  const nextConfig: ServerBusinessConfig = {
+    priceCop,
+    priceUsd,
+    maxTrialCredits,
+    checkoutUrlCop,
+    checkoutUrlUsd,
+  };
+
+  const requireDurable = isDurableStoreRequired();
+  const configuredBackend = resolveStorageBackend();
+
+  if (configuredBackend === "memory" && requireDurable) {
+    return {
+      ok: false,
+      errorKey: "api.budget.durableStoreUnavailable",
+      statusCode: 503,
+    };
+  }
+
+  if (configuredBackend === "redis") {
+    try {
+      await runRedisPipeline([
+        ["SET", REDIS_BUSINESS_CONFIG_KEY, JSON.stringify(nextConfig)],
+      ]);
+      return { ok: true, config: nextConfig };
+    } catch (err) {
+      if (requireDurable) {
+        console.error(
+          "Redis saveServerBusinessConfig failed with strict durability:",
+          err
+        );
+        return {
+          ok: false,
+          errorKey: "api.budget.durableStoreUnavailable",
+          statusCode: 503,
+        };
+      }
+      console.warn(
+        "Redis saveServerBusinessConfig failed, falling back to local store:",
+        err
+      );
+    }
+  }
+
+  const localBackend: "file" | "memory" =
+    process.env.NODE_ENV !== "production" ? "file" : "memory";
+  await mutateLocalOrMemLedger(localBackend, (ledger) => {
+    ledger.businessConfig = nextConfig;
+  });
+
+  return { ok: true, config: nextConfig };
+}
+
+/**
+ * Read-only eligibility check that inspects emergency pause, durable store
+ * availability, circuit breakers, Fal floor status, pro daily fair-use limits,
+ * and global hard caps WITHOUT mutating or reserving any quota slot.
+ */
+export async function checkPaidGenerationEligibility(
+  resource: PaidResource,
+  options: ReserveSlotOptions = {}
+): Promise<ReserveSlotResult> {
+  const globalLimit = resolveHardCapLimit(resource);
+  const warnRatio = resolveLowQuotaWarnRatio();
+  const isProClient =
+    options.role === "pro_client" && !options.skipProDailyCap;
+  const proLimit = isProClient ? resolveProClientDailyLimit(resource) : null;
+  const effectiveProLimit = proLimit !== null ? proLimit : -1;
+  const userKey = options.userKey?.trim() || "pro:anonymous";
+  const providers = options.providers ?? [];
+  const requireAll = options.requireAllProviders ?? false;
+  const requireDurable = isDurableStoreRequired();
+  const configuredBackend = resolveStorageBackend();
+
+  if (configuredBackend === "memory" && requireDurable) {
+    return {
+      allowed: false,
+      resource,
+      used: 0,
+      limit: globalLimit,
+      remaining: globalLimit,
+      status: "exhausted",
+      reason: "durable_store_unavailable",
+      resetAt: null,
+      statusCode: 503,
+    };
+  }
+
+  const { ledger, backend, durableStoreWarning } =
+    await readCurrentLedgerWithFallback();
+
+  if (durableStoreWarning && requireDurable) {
+    return {
+      allowed: false,
+      resource,
+      used: 0,
+      limit: globalLimit,
+      remaining: globalLimit,
+      status: "exhausted",
+      reason: "durable_store_unavailable",
+      resetAt: null,
+      statusCode: 503,
+    };
+  }
+
+  const counter = ledger.counters[resource];
+  const currentStatus = computeQuotaStatusLevel(
+    counter.used,
+    globalLimit,
+    warnRatio
+  );
+  const now = Date.now();
+
+  if (isEnvEmergencyPaused() || ledger.emergencyPause) {
+    return {
+      allowed: false,
+      resource,
+      used: counter.used,
+      limit: globalLimit,
+      remaining: currentStatus.remaining,
+      status: currentStatus.status,
+      reason: "emergency_pause",
+      resetAt: counter.resetAt,
+      statusCode: 429,
+    };
+  }
+
+  if (options.providerUnavailableReason) {
+    return {
+      allowed: false,
+      resource,
+      used: counter.used,
+      limit: globalLimit,
+      remaining: currentStatus.remaining,
+      status: currentStatus.status,
+      reason: options.providerUnavailableReason,
+      resetAt: counter.resetAt,
+      statusCode: 429,
+    };
+  }
+
+  if (providers.length > 0) {
+    const brokenRecords = providers.map((p) => {
+      const rec = ledger.circuitBreakers[p];
+      return rec && now < rec.blockedUntil ? rec : null;
+    });
+    const isBlocked = requireAll
+      ? brokenRecords.some((r) => r !== null)
+      : brokenRecords.every((r) => r !== null);
+
+    if (isBlocked) {
+      const firstBlocked = brokenRecords.find((r) => r !== null);
+      return {
+        allowed: false,
+        resource,
+        used: counter.used,
+        limit: globalLimit,
+        remaining: currentStatus.remaining,
+        status: currentStatus.status,
+        reason: "circuit_breaker",
+        resetAt: firstBlocked?.blockedUntil ?? null,
+        statusCode: 429,
+      };
+    }
+  }
+
+  if (effectiveProLimit >= 0) {
+    let proUsed = 0;
+    let proResetAt: number | null = now + DAY_MS;
+
+    if (backend === "redis") {
+      try {
+        const proKey = redisProKey(ledger.epoch, resource, userKey);
+        const proRes = await runRedisPipeline([
+          ["GET", proKey],
+          ["PTTL", proKey],
+        ]);
+        const rawUsed = proRes[0]?.result;
+        const rawTtl = Number(proRes[1]?.result ?? -1);
+        proUsed =
+          rawUsed !== null &&
+          rawUsed !== undefined &&
+          Number.isFinite(Number(rawUsed))
+            ? Math.max(0, Math.floor(Number(rawUsed)))
+            : 0;
+        proResetAt =
+          Number.isFinite(rawTtl) && rawTtl > 0 ? now + rawTtl : now + DAY_MS;
+      } catch (err) {
+        if (requireDurable) {
+          console.error(
+            "Redis pro eligibility check failed with strict durability:",
+            err
+          );
+          return {
+            allowed: false,
+            resource,
+            used: counter.used,
+            limit: globalLimit,
+            remaining: currentStatus.remaining,
+            status: currentStatus.status,
+            reason: "durable_store_unavailable",
+            resetAt: null,
+            statusCode: 503,
+          };
+        }
+      }
+    } else {
+      const proKey = `pro:${resource}:${userKey}`;
+      const existingPro = ledger.proDailyUsage[proKey];
+      if (existingPro && now < existingPro.resetAt) {
+        proUsed = existingPro.used;
+        proResetAt = existingPro.resetAt;
+      }
+    }
+
+    if (proUsed >= effectiveProLimit) {
+      return {
+        allowed: false,
+        resource,
+        used: proUsed,
+        limit: effectiveProLimit,
+        remaining: 0,
+        status: "exhausted",
+        reason: "pro_daily_cap",
+        resetAt: proResetAt,
+        statusCode: 429,
+      };
+    }
+  }
+
+  if (globalLimit !== null && counter.used >= globalLimit) {
+    return {
+      allowed: false,
+      resource,
+      used: counter.used,
+      limit: globalLimit,
+      remaining: 0,
+      status: "exhausted",
+      reason: "hard_cap",
+      resetAt: counter.resetAt,
+      statusCode: 429,
+    };
+  }
+
+  return {
+    allowed: true,
+    resource,
+    used: counter.used,
+    limit: globalLimit,
+    remaining: currentStatus.remaining,
+    status: currentStatus.status,
+    resetAt: globalLimit === null ? null : counter.resetAt,
+  };
 }
 
 /**
@@ -1878,11 +2351,25 @@ export async function invalidateFalBalanceCache(): Promise<void> {
   });
 }
 
+export async function resolveFalBillingKey(
+  explicitBillingOrFalKey?: string
+): Promise<string | undefined> {
+  const trimmed = explicitBillingOrFalKey?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+  const dedicatedBillingKey = await resolveApiKey("FAL_BILLING_KEY");
+  if (dedicatedBillingKey) {
+    return dedicatedBillingKey;
+  }
+  return await resolveApiKey("FAL_KEY");
+}
+
 export async function fetchFalBalanceSnapshot(
   explicitFalKey?: string,
   options: { force?: boolean } = {}
 ): Promise<FalBalanceSnapshot | null> {
-  const falKey = explicitFalKey?.trim() || (await resolveApiKey("FAL_KEY"));
+  const falKey = await resolveFalBillingKey(explicitFalKey);
   if (!falKey) {
     return null;
   }
@@ -1974,8 +2461,38 @@ export async function fetchFalBalanceSnapshot(
   }
 }
 
-export function refreshFalBalanceSnapshotAsync(falKey: string): void {
-  void fetchFalBalanceSnapshot(falKey, { force: true }).catch(() => undefined);
+export async function refreshFalBalanceSnapshot(
+  explicitBillingOrFalKey?: string
+): Promise<FalBalanceSnapshot | null> {
+  return fetchFalBalanceSnapshot(explicitBillingOrFalKey, { force: true });
+}
+
+export function refreshFalBalanceSnapshotAsync(falKey?: string): void {
+  void refreshFalBalanceSnapshot(falKey).catch(() => undefined);
+}
+
+export async function ensureFreshFalBalanceStatus(
+  explicitBillingOrFalKey?: string
+): Promise<{
+  known: boolean;
+  belowMinFloor: boolean;
+  lowWarning: boolean;
+  snapshot: FalBalanceSnapshot | null;
+}> {
+  const billingKey = await resolveFalBillingKey(explicitBillingOrFalKey);
+  if (billingKey) {
+    const { ledger } = await readCurrentLedgerWithFallback();
+    const cached = ledger.falBalance;
+    const now = Date.now();
+    const isFresh =
+      cached &&
+      cached.fetchedAt > 0 &&
+      now - cached.fetchedAt < FAL_BALANCE_CACHE_TTL_MS;
+    if (!isFresh) {
+      await fetchFalBalanceSnapshot(billingKey);
+    }
+  }
+  return getCachedFalBalanceStatus();
 }
 
 export async function getCachedFalBalanceStatus(): Promise<{
@@ -2016,6 +2533,7 @@ export async function getCachedFalBalanceStatus(): Promise<{
 
 export async function getAdminTelemetrySnapshot(options: {
   falKey?: string;
+  falBillingKey?: string;
   geminiKey?: string;
   refreshFal?: boolean;
 } = {}): Promise<AdminTelemetrySnapshot> {
@@ -2023,14 +2541,20 @@ export async function getAdminTelemetrySnapshot(options: {
     options.falKey !== undefined
       ? options.falKey
       : await resolveApiKey("FAL_KEY");
+  const falBillingKey =
+    options.falBillingKey !== undefined
+      ? options.falBillingKey
+      : await resolveApiKey("FAL_BILLING_KEY");
+  const effectiveBillingKey =
+    falBillingKey?.trim() || falKey?.trim() || undefined;
   const geminiKey =
     options.geminiKey !== undefined
       ? options.geminiKey
       : await resolveApiKey("GEMINI_API_KEY");
 
   let liveFalBalance: FalBalanceSnapshot | null = null;
-  if (falKey) {
-    liveFalBalance = await fetchFalBalanceSnapshot(falKey, {
+  if (effectiveBillingKey) {
+    liveFalBalance = await fetchFalBalanceSnapshot(effectiveBillingKey, {
       force: Boolean(options.refreshFal),
     });
   }
@@ -2093,8 +2617,13 @@ export async function getAdminTelemetrySnapshot(options: {
       lowQuotaWarnRatio: resolveLowQuotaWarnRatio(),
       falLowBalanceWarnUsd: resolveFalLowBalanceWarnUsd(),
       falMinBalanceUsd: resolveFalMinBalanceUsd(),
-      proClientDailyImageLimit: resolveProClientDailyLimit("image") ?? 25,
-      proClientDailyAudioLimit: resolveProClientDailyLimit("audio") ?? 100,
+      proClientDailyImageLimit:
+        resolveProClientDailyLimit("image") ?? DEFAULT_PRO_DAILY_IMAGE_LIMIT,
+      proClientDailyAudioLimit:
+        resolveProClientDailyLimit("audio") ?? DEFAULT_PRO_DAILY_AUDIO_LIMIT,
+      proClientDailyVisionLimit:
+        resolveProClientDailyLimit("vision") ?? DEFAULT_PRO_DAILY_VISION_LIMIT,
+      usingDedicatedSigningSecret: isDedicatedSigningSecretConfigured(),
     },
     emergencyPause: {
       active: isEnvEmergencyPaused() || ledger.emergencyPause,
@@ -2104,6 +2633,7 @@ export async function getAdminTelemetrySnapshot(options: {
     hardCaps: publicSnapshot.resources,
     fal: {
       configured: Boolean(falKey),
+      billingKeyConfigured: Boolean(falBillingKey),
       balance: falBalance,
       lowBalanceWarning,
       belowMinFloor,

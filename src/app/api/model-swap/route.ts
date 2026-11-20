@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import {
+  checkPaidGenerationEligibility,
   getBudgetCapErrorMessage,
   getPublicQuotaSnapshot,
-  isPaidModelFallbackDisabled,
   isUpstreamExhaustionError,
   recordGeminiUsage,
   recordProviderExhaustion,
   reservePaidGenerationSlot,
+  resolveGeminiImageModel,
 } from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
@@ -20,7 +21,10 @@ import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
 } from "@/lib/server-quota";
-import { resolveApiKey } from "@/lib/server-secrets";
+import {
+  resolveApiKey,
+  resolveServerEntitlement,
+} from "@/lib/server-secrets";
 import {
   AsyncSemaphore,
   DEFAULT_MAX_IMAGE_BYTES,
@@ -141,50 +145,57 @@ export async function POST(request: Request) {
       );
     }
 
-    const quota = await enforceServerGenerationQuota(request, locale);
-    if (!quota.allowed) {
-      return quota.response;
-    }
-
-    const withQuotaCookie = (res: NextResponse) =>
-      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
+    const entitlement = await resolveServerEntitlement(cookieHeader);
+    const clientIpKey = getRateLimitClientKey(request).key;
+    const initialUserKey = entitlement.subjectId
+      ? `sub:${entitlement.subjectId}`
+      : clientIpKey;
 
     const geminiKey = await resolveApiKey("GEMINI_API_KEY");
     if (!geminiKey) {
-      return withQuotaCookie(
+      const quota = await enforceServerGenerationQuota(request, locale);
+      if (!quota.allowed) {
+        return quota.response;
+      }
+      return attachServerTrialCookie(
         NextResponse.json({
           resultImageUrl: null,
           fallbackComposite: true,
           engine: translate(locale, "api.modelSwap.fallbackEngine"),
           isFallback: true,
           budget: await getPublicQuotaSnapshot(),
-        })
+        }),
+        quota.trialCookieToken,
+        quota.resetAt
       );
     }
 
-    const reservation = await reservePaidGenerationSlot("image", {
-      role: quota.role,
-      userKey: getRateLimitClientKey(request).key,
+    // Read-only eligibility check BEFORE consuming guest trial credits so
+    // paused, capped, or circuit-broken responses return 429/503 cleanly.
+    const eligibility = await checkPaidGenerationEligibility("image", {
+      role: entitlement.role,
+      userKey: initialUserKey,
       providers: ["gemini"],
     });
-    if (!reservation.allowed) {
+    if (!eligibility.allowed) {
       const budget = await getPublicQuotaSnapshot();
-      const status = reservation.statusCode ?? 429;
-      return withQuotaCookie(
-        NextResponse.json(
-          {
-            error: getBudgetCapErrorMessage(locale, reservation),
-            capReached: status !== 503,
-            durableStoreUnavailable: status === 503,
-            resource: "image",
-            reason: reservation.reason,
-            budget,
-          },
-          { status }
-        )
+      const status = eligibility.statusCode ?? 429;
+      return NextResponse.json(
+        {
+          error: getBudgetCapErrorMessage(locale, eligibility),
+          capReached: status !== 503,
+          durableStoreUnavailable: status === 503,
+          resource: "image",
+          reason: eligibility.reason,
+          budget,
+        },
+        { status }
       );
     }
 
+    // Fetch and validate background BEFORE reserving a paid image cap slot or
+    // consuming guest credits so 404/413/502/timeout never burns billable quota.
     let bgBytes: Uint8Array;
     let bgContentType: string;
     try {
@@ -198,15 +209,13 @@ export async function POST(request: Request) {
       bgContentType = fetched.contentType;
     } catch (fetchErr) {
       if (fetchErr instanceof UpstreamStatusError) {
-        return withQuotaCookie(
-          NextResponse.json({
-            resultImageUrl: null,
-            fallbackComposite: true,
-            engine: translate(locale, "api.modelSwap.fallbackEngine"),
-            isFallback: true,
-            budget: await getPublicQuotaSnapshot(),
-          })
-        );
+        return NextResponse.json({
+          resultImageUrl: null,
+          fallbackComposite: true,
+          engine: translate(locale, "api.modelSwap.fallbackEngine"),
+          isFallback: true,
+          budget: await getPublicQuotaSnapshot(),
+        });
       }
       if (fetchErr instanceof InvalidUpstreamContentTypeError) {
         return NextResponse.json(
@@ -227,6 +236,39 @@ export async function POST(request: Request) {
         );
       }
       throw fetchErr;
+    }
+
+    const quota = await enforceServerGenerationQuota(request, locale);
+    if (!quota.allowed) {
+      return quota.response;
+    }
+
+    const withQuotaCookie = (res: NextResponse) =>
+      attachServerTrialCookie(res, quota.trialCookieToken, quota.resetAt);
+
+    const reservationUserKey = quota.subjectId
+      ? `sub:${quota.subjectId}`
+      : clientIpKey;
+
+    const reservation = await reservePaidGenerationSlot("image", {
+      role: quota.role,
+      userKey: reservationUserKey,
+      providers: ["gemini"],
+    });
+    if (!reservation.allowed) {
+      const budget = await getPublicQuotaSnapshot();
+      const status = reservation.statusCode ?? 429;
+      return NextResponse.json(
+        {
+          error: getBudgetCapErrorMessage(locale, reservation),
+          capReached: status !== 503,
+          durableStoreUnavailable: status === 503,
+          resource: "image",
+          reason: reservation.reason,
+          budget,
+        },
+        { status }
+      );
     }
 
     const bgBase64 = Buffer.from(
@@ -273,12 +315,11 @@ export async function POST(request: Request) {
       },
     ];
 
-    const fallbackDisabled = isPaidModelFallbackDisabled();
+    const imageModel = resolveGeminiImageModel();
 
-    // Primary: gemini-2.5-flash-image
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
+        model: imageModel,
         contents,
         config: {
           abortSignal: createGeminiAbortSignal(),
@@ -302,19 +343,6 @@ export async function POST(request: Request) {
           })
         );
       }
-
-      if (fallbackDisabled) {
-        return withQuotaCookie(
-          NextResponse.json({
-            resultImageUrl: null,
-            fallbackComposite: true,
-            engine: translate(locale, "api.modelSwap.fallbackEngine"),
-            isFallback: true,
-            fallbackBlocked: true,
-            budget: await getPublicQuotaSnapshot(),
-          })
-        );
-      }
     } catch (primaryErr) {
       if (request.signal?.aborted) {
         throw primaryErr;
@@ -327,60 +355,7 @@ export async function POST(request: Request) {
           exhaustion.reason
         );
       }
-      console.warn(
-        "gemini-2.5-flash-image failed:",
-        primaryErr
-      );
-      if (fallbackDisabled || exhaustion.exhausted) {
-        return withQuotaCookie(
-          NextResponse.json({
-            resultImageUrl: null,
-            fallbackComposite: true,
-            engine: translate(locale, "api.modelSwap.fallbackEngine"),
-            isFallback: true,
-            fallbackBlocked: true,
-            budget: await getPublicQuotaSnapshot(),
-          })
-        );
-      }
-    }
-
-    // Fallback: gemini-2.0-flash-exp-image-generation
-    if (!fallbackDisabled) {
-      try {
-        const fallbackResponse = await ai.models.generateContent({
-          model: "gemini-2.0-flash-exp-image-generation",
-          contents,
-          config: {
-            abortSignal: createGeminiAbortSignal(),
-            responseModalities: ["TEXT", "IMAGE"],
-          },
-        });
-
-        await recordGeminiUsage("image", fallbackResponse.usageMetadata);
-
-        const generated = extractImagePart(fallbackResponse);
-        if (generated) {
-          return withQuotaCookie(
-            NextResponse.json({
-              resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-              engine: translate(locale, "api.modelSwap.geminiEngine"),
-              isFallback: false,
-              budget: await getPublicQuotaSnapshot(),
-            })
-          );
-        }
-      } catch (fallbackErr) {
-        const exhaustion = isUpstreamExhaustionError(fallbackErr);
-        if (exhaustion.exhausted) {
-          await recordProviderExhaustion(
-            "gemini",
-            exhaustion.statusCode,
-            exhaustion.reason
-          );
-        }
-        console.warn("gemini-2.0-flash-exp-image-generation failed:", fallbackErr);
-      }
+      console.warn(`${imageModel} failed:`, primaryErr);
     }
 
     return withQuotaCookie(

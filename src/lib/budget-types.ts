@@ -82,6 +82,14 @@ export interface GeminiResourceUsage {
   lastCallAt: number | null;
 }
 
+export interface ServerBusinessConfig {
+  priceCop: string;
+  priceUsd: string;
+  maxTrialCredits: number;
+  checkoutUrlCop: string;
+  checkoutUrlUsd: string;
+}
+
 export interface AdminTelemetrySnapshot {
   storage: {
     backend: "redis" | "file" | "memory";
@@ -97,6 +105,8 @@ export interface AdminTelemetrySnapshot {
     falMinBalanceUsd: number;
     proClientDailyImageLimit: number;
     proClientDailyAudioLimit: number;
+    proClientDailyVisionLimit: number;
+    usingDedicatedSigningSecret: boolean;
   };
   emergencyPause: {
     active: boolean;
@@ -106,6 +116,7 @@ export interface AdminTelemetrySnapshot {
   hardCaps: Record<PaidResource, PublicResourceQuota>;
   fal: {
     configured: boolean;
+    billingKeyConfigured: boolean;
     balance: FalBalanceSnapshot | null;
     lowBalanceWarning: boolean;
     belowMinFloor: boolean;

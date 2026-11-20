@@ -127,6 +127,24 @@ function isLoopbackIp(ip: string): boolean {
   return ip === "::1" || ip === "127.0.0.1" || ip.startsWith("127.");
 }
 
+export function isTrustedProxyEnvironment(): boolean {
+  const configuredHeader = process.env.TRUSTED_PROXY_HEADER?.trim().toLowerCase();
+  if (configuredHeader && ALLOWED_PROXY_HEADERS.has(configuredHeader)) {
+    return true;
+  }
+  const isVercel =
+    process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV?.trim());
+  const isCloudflare =
+    process.env.CF_PAGES === "1" ||
+    isTruthyEnv(process.env.TRUST_CLOUDFLARE) ||
+    process.env.TRUST_PROXY_PLATFORM?.trim().toLowerCase() === "cloudflare";
+  const isFly = Boolean(process.env.FLY_APP_NAME?.trim());
+
+  return (
+    isVercel || isCloudflare || isFly || isTruthyEnv(process.env.TRUST_PROXY)
+  );
+}
+
 /**
  * Resolves client IP only from headers trusted in the active deployment environment,
  * falling back to connection-level metadata or `"unknown"` when headers are unverified.
@@ -208,8 +226,8 @@ export function getClientIp(request: Request): string {
 /**
  * Returns a partitioned client bucket key for rate limiting and trial quotas.
  * Preserves strict IP attribution when a trusted proxy/platform header exists,
- * and falls back to non-loopback proxy headers or a request fingerprint so
- * proxy-less/local deployments never collapse all users onto one `"unknown"` key.
+ * and falls back strictly to a request fingerprint when unverified so attackers
+ * cannot spoof X-Forwarded-For / X-Real-IP headers to reset quotas or bypass limits.
  */
 export function getRateLimitClientKey(request: Request): {
   key: string;
@@ -218,19 +236,6 @@ export function getRateLimitClientKey(request: Request): {
   const verified = getClientIp(request);
   if (verified !== "unknown") {
     return { key: verified, trusted: true };
-  }
-
-  const realIp = normalizeIp(request.headers.get("x-real-ip"));
-  if (realIp && !isLoopbackIp(realIp)) {
-    return { key: `unverified:${realIp}`, trusted: false };
-  }
-
-  const forwardedIp = extractForwardedIp(
-    request.headers.get("x-forwarded-for"),
-    DEFAULT_TRUSTED_PROXY_HOPS
-  );
-  if (forwardedIp && !isLoopbackIp(forwardedIp)) {
-    return { key: `unverified:${forwardedIp}`, trusted: false };
   }
 
   const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 256);

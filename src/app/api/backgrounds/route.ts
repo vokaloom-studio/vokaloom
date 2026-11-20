@@ -9,6 +9,7 @@ import {
   recordProviderExhaustion,
   recordStockRateLimit,
   reservePaidGenerationSlot,
+  resolveGeminiVisionModel,
 } from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
@@ -266,6 +267,7 @@ async function analyzeReferenceImageWithGemini(
   fallbackQuery: string,
   locale: Locale,
   role?: EntitlementRole | "guest",
+  userKey?: string,
   signal?: AbortSignal
 ): Promise<{
   resolvedQuery: string;
@@ -282,8 +284,8 @@ async function analyzeReferenceImageWithGemini(
 
   const reservation = await reservePaidGenerationSlot("vision", {
     role,
+    userKey,
     providers: ["gemini"],
-    skipProDailyCap: true,
   });
   if (!reservation.allowed) {
     return {
@@ -307,7 +309,7 @@ async function analyzeReferenceImageWithGemini(
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: resolveGeminiVisionModel(),
       contents: [
         {
           role: "user",
@@ -786,18 +788,22 @@ export async function POST(request: Request) {
       [vibe, rawQuery].filter(Boolean).join(" ").trim() ||
       "aesthetic travel lifestyle candid vertical";
 
-    // Step A: Vision Reference Matcher via Gemini 2.5 Flash
+    // Step A: Vision Reference Matcher via Gemini Vision
     let resolvedQuery = baseSearchTerms;
     let visionUsed = false;
     let visionCapNotice: string | undefined;
 
     if (validatedRefImage) {
+      const visionUserKey = quota.subjectId
+        ? `sub:${quota.subjectId}`
+        : getRateLimitClientKey(request).key;
       const visionResult = await analyzeReferenceImageWithGemini(
         validatedRefImage.data,
         validatedRefImage.mimeType,
         baseSearchTerms,
         locale,
         quota.role,
+        visionUserKey,
         request.signal
       );
       resolvedQuery = visionResult.resolvedQuery;
