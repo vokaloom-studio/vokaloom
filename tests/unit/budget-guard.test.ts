@@ -13,11 +13,13 @@ import {
   resetBudgetCaps,
   toggleEmergencyPause,
 } from "@/lib/budget-guard";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import {
   ADMIN_SESSION_COOKIE_NAME,
   ENTITLEMENT_COOKIE_NAME,
   signAdminSessionToken,
   signEntitlementToken,
+  verifyEntitlementToken,
 } from "@/lib/server-secrets";
 import { POST as modelSwapPost } from "@/app/api/model-swap/route";
 import { POST as voicePost } from "@/app/api/voice/route";
@@ -63,6 +65,13 @@ function restoreEnvAndSetBase() {
   process.env.PEXELS_API_KEY = "pexels_unit_test_key_123456";
   process.env.UNSPLASH_ACCESS_KEY = "unsplash_unit_test_key_123456";
 
+  delete process.env.FAL_BILLING_KEY;
+  delete process.env.SESSION_SIGNING_SECRET;
+  delete process.env.GEMINI_VISION_MODEL;
+  delete process.env.GEMINI_IMAGE_MODEL;
+  delete process.env.GEMINI_TTS_MODEL;
+  delete process.env.TRUST_PROXY;
+  delete process.env.TRUST_PROXY_HOPS;
   delete process.env.HARD_CAP_IMAGE_LIMIT;
   delete process.env.HARD_CAP_AUDIO_LIMIT;
   delete process.env.HARD_CAP_VISION_LIMIT;
@@ -72,6 +81,7 @@ function restoreEnvAndSetBase() {
   delete process.env.BUDGET_REQUIRE_DURABLE_STORE;
   delete process.env.PRO_CLIENT_DAILY_IMAGE_LIMIT;
   delete process.env.PRO_CLIENT_DAILY_AUDIO_LIMIT;
+  delete process.env.PRO_CLIENT_DAILY_VISION_LIMIT;
   delete process.env.FAL_LOW_BALANCE_WARN_USD;
   delete process.env.FAL_MIN_BALANCE_USD;
   (process.env as Record<string, string | undefined>).NODE_ENV = "test";
@@ -185,7 +195,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
       }
 
       if (url.includes("generativelanguage.googleapis.com")) {
-        if (url.includes("gemini-2.5-flash-image")) {
+        if (url.includes("gemini-nano-banana-2.1")) {
           geminiImageCalls += 1;
           return new Response(
             JSON.stringify({
@@ -213,7 +223,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
           );
         }
 
-        if (url.includes("gemini-2.5-flash:")) {
+        if (url.includes("gemini-3.5-flash-lite:")) {
           geminiVisionCalls += 1;
           return new Response(
             JSON.stringify({
@@ -524,8 +534,8 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
         });
       }
 
-      if (url.includes("gemini-2.5-flash-image")) {
-        calledModels.push("gemini-2.5-flash-image");
+      if (url.includes("gemini-nano-banana-2.1")) {
+        calledModels.push("gemini-nano-banana-2.1");
         return new Response(
           JSON.stringify({
             error: { code: 429, message: "429 RESOURCE_EXHAUSTED" },
@@ -547,8 +557,8 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
         });
       }
 
-      if (url.includes("gemini-2.5-flash-preview-tts")) {
-        calledModels.push("gemini-2.5-flash-preview-tts");
+      if (url.includes("gemini-3.8-flash-lite-tts")) {
+        calledModels.push("gemini-3.8-flash-lite-tts");
         throw new Error("Gemini TTS fallback must NOT be called!");
       }
 
@@ -574,7 +584,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
       fallbackComposite: boolean;
     };
     assert.equal(swapJson1.fallbackComposite, true);
-    assert.deepEqual(calledModels, ["gemini-2.5-flash-image"]);
+    assert.deepEqual(calledModels, ["gemini-nano-banana-2.1"]);
     assert.equal(await isProviderCircuitBroken("gemini"), true);
 
     // Subsequent model-swap call is blocked immediately at 429 by circuit breaker
@@ -595,7 +605,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     };
     assert.equal(swapJson2.capReached, true);
     assert.equal(swapJson2.reason, "circuit_breaker");
-    assert.deepEqual(calledModels, ["gemini-2.5-flash-image"]);
+    assert.deepEqual(calledModels, ["gemini-nano-banana-2.1"]);
 
     // Voice call with Fal failing MUST NOT fall through to Gemini TTS
     const voiceRes = await voicePost(
@@ -612,7 +622,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(voiceRes.status, 200);
     const voiceJson = (await voiceRes.json()) as { isFallback: boolean };
     assert.equal(voiceJson.isFallback, true);
-    assert.equal(calledModels.includes("gemini-2.5-flash-preview-tts"), false);
+    assert.equal(calledModels.includes("gemini-3.8-flash-lite-tts"), false);
   });
 
   it("handles Fal 403 permissionRestricted gracefully and hard-blocks when balance <= FAL_MIN_BALANCE_USD", async () => {
@@ -1048,6 +1058,721 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(bgJson.budget.stockLow, true);
     assert.ok(
       bgJson.budget.advisories.some((a) => a.code === "stock_rate_limited")
+    );
+  });
+
+  it("supports externalized Gemini model overrides and removes dead image fallback model", async () => {
+    process.env.GEMINI_VISION_MODEL = "gemini-custom-vision-test";
+    process.env.GEMINI_IMAGE_MODEL = "gemini-custom-image-test";
+    process.env.GEMINI_TTS_MODEL = "gemini-custom-tts-test";
+    process.env.DISABLE_PAID_MODEL_FALLBACK = "false";
+    delete process.env.FAL_KEY;
+
+    const hitUrls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      hitUrls.push(url);
+
+      if (url.includes("images.pexels.com/photos/555/")) {
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      if (url.includes("api.pexels.com/")) {
+        return new Response(JSON.stringify({ photos: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("api.unsplash.com/")) {
+        return new Response(JSON.stringify({ results: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("gemini-2.0-flash-exp-image-generation")) {
+        throw new Error("Removed dead fallback model must never be called");
+      }
+      if (url.includes("gemini-custom-vision-test")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: "clean minimalist coffee studio" }] } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("gemini-custom-image-test")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: "no image returned" }] } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("gemini-custom-tts-test")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "audio/pcm",
+                        data: Buffer.from([0, 0, 1, 0]).toString("base64"),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const operatorCookie = makeOperatorCookieHeader();
+
+    const bgRes = await backgroundsPost(
+      new Request("http://localhost/api/backgrounds", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          vibe: "Coffee",
+          referenceImageBase64: TINY_PNG_BASE64,
+        }),
+      })
+    );
+    assert.equal(bgRes.status, 200);
+
+    const swapRes = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/555/bg.png",
+        }),
+      })
+    );
+    assert.equal(swapRes.status, 200);
+    const swapJson = (await swapRes.json()) as { fallbackComposite: boolean };
+    assert.equal(swapJson.fallbackComposite, true);
+
+    const voiceRes = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          text: "Testing configurable Gemini TTS model.",
+          language: "en",
+          voiceId: "bella-en",
+        }),
+      })
+    );
+    assert.equal(voiceRes.status, 200);
+
+    assert.ok(hitUrls.some((u) => u.includes("gemini-custom-vision-test")));
+    assert.ok(hitUrls.some((u) => u.includes("gemini-custom-image-test")));
+    assert.ok(hitUrls.some((u) => u.includes("gemini-custom-tts-test")));
+    assert.equal(
+      hitUrls.some((u) => u.includes("gemini-2.0-flash-exp-image-generation")),
+      false
+    );
+  });
+
+  it("ignores spoofable IP headers when TRUST_PROXY is unset and stops IP-header trial bypass", async () => {
+    delete process.env.FAL_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    const ua = `SpoofAgent/${Date.now()}`;
+    const k1 = getRateLimitClientKey(
+      new Request("http://localhost/api/voice", {
+        headers: {
+          "user-agent": ua,
+          "accept-language": "en-US",
+          "x-real-ip": "1.1.1.1",
+          "x-forwarded-for": "2.2.2.2",
+        },
+      })
+    );
+    const k2 = getRateLimitClientKey(
+      new Request("http://localhost/api/voice", {
+        headers: {
+          "user-agent": ua,
+          "accept-language": "en-US",
+          "x-real-ip": "9.9.9.9",
+          "x-forwarded-for": "8.8.8.8",
+        },
+      })
+    );
+    assert.equal(k1.trusted, false);
+    assert.ok(k1.key.startsWith("unverified:fp:"));
+    assert.equal(k1.key, k2.key);
+
+    // Exhaust 3 guest credits with changing spoofed IPs -> 4th MUST be rejected with 402
+    for (let i = 0; i < 3; i += 1) {
+      const ok = await voicePost(
+        new Request("http://localhost/api/voice", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": ua,
+            "accept-language": "en-US",
+            "x-real-ip": `198.51.100.${i + 10}`,
+            "x-forwarded-for": `203.0.113.${i + 10}`,
+          },
+          body: JSON.stringify({
+            text: `Spoof check ${i}`,
+            voiceId: "sofia-es",
+            language: "es",
+          }),
+        })
+      );
+      assert.equal(ok.status, 200);
+    }
+
+    const blocked4 = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": ua,
+          "accept-language": "en-US",
+          "x-real-ip": "198.51.100.250",
+          "x-forwarded-for": "203.0.113.250",
+        },
+        body: JSON.stringify({
+          text: "4th request spoofing IP",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(blocked4.status, 402);
+  });
+
+  it("uses dedicated FAL_BILLING_KEY and enforces live Fal floor automatically in /api/voice", async () => {
+    process.env.FAL_KEY = "fal_inference_only_key_12345";
+    process.env.FAL_BILLING_KEY = "fal_readonly_billing_key_67890";
+    process.env.FAL_MIN_BALANCE_USD = "1.0";
+    process.env.HARD_CAP_AUDIO_LIMIT = "5";
+
+    let billingAuthHeader = "";
+    let inferCalled = false;
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("api.fal.ai/v1/account/billing")) {
+        const hdrs = new Headers(init?.headers);
+        billingAuthHeader = hdrs.get("authorization") || "";
+        return new Response(
+          JSON.stringify({ credits: { current_balance: 0.4, currency: "USD" } }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("queue.fal.run")) {
+        inferCalled = true;
+        throw new Error("Fal inference must NOT execute when live floor triggers!");
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const operatorCookie = makeOperatorCookieHeader();
+    const res = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          text: "Voice call checks cold balance automatically.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(res.status, 429);
+    const data = (await res.json()) as { reason: string; capReached: boolean };
+    assert.equal(data.reason, "fal_min_balance");
+    assert.equal(data.capReached, true);
+    assert.equal(billingAuthHeader, "Key fal_readonly_billing_key_67890");
+    assert.equal(inferCalled, false);
+
+    const telemetry = await getAdminTelemetrySnapshot();
+    assert.equal(telemetry.fal.billingKeyConfigured, true);
+    assert.equal(telemetry.fal.belowMinFloor, true);
+  });
+
+  it("does not burn paid image cap slots on upstream 404/502 fetches and preserves guest credits on 429 blocks", async () => {
+    process.env.HARD_CAP_IMAGE_LIMIT = "1";
+    process.env.HARD_CAP_AUDIO_LIMIT = "5";
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("images.pexels.com/photos/404/")) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (url.includes("images.pexels.com/photos/502/")) {
+        return new Response("<html>error</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        });
+      }
+      if (url.includes("images.pexels.com/photos/200/")) {
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      if (url.includes("generativelanguage.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "image/png",
+                        data: TINY_PNG_BASE64.split(",")[1],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("queue.fal.run")) {
+        const isPost = !url.includes("/requests/");
+        if (isPost) {
+          return new Response(
+            JSON.stringify({
+              request_id: "req-guest",
+              response_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest",
+              status_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest/status",
+              cancel_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest/cancel",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        if (url.includes("/status/stream")) {
+          return new Response('data: {"status":"COMPLETED"}\n\n', {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+        if (new URL(url).pathname.endsWith("/status")) {
+          return new Response(JSON.stringify({ status: "COMPLETED" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({ audio_url: "https://cdn.fal.media/ok.mp3" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const guestUa = `CleanGuest-${Date.now()}`;
+    const guestHeaders = {
+      "content-type": "application/json",
+      "user-agent": guestUa,
+    };
+
+    // 1. Upstream 404 & invalid MIME 502 MUST NOT consume HARD_CAP_IMAGE_LIMIT or guest credits
+    const bg404Res = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: guestHeaders,
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/404/bg.png",
+        }),
+      })
+    );
+    assert.equal(bg404Res.status, 200);
+    assert.equal((await bg404Res.json()).fallbackComposite, true);
+
+    const bgHtmlRes = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: guestHeaders,
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/502/bg.png",
+        }),
+      })
+    );
+    assert.equal(bgHtmlRes.status, 502);
+
+    const snapBeforeValid = await getPublicQuotaSnapshot();
+    assert.equal(snapBeforeValid.resources.image.used, 0);
+
+    // 2. Valid swap succeeds (1/1 cap used, 1/3 guest credit used)
+    const validSwapRes = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: guestHeaders,
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/200/bg.png",
+        }),
+      })
+    );
+    assert.equal(validSwapRes.status, 200);
+    assert.ok(validSwapRes.headers.get("set-cookie")?.includes("vokaloom_trial_v1="));
+
+    // 3. Hard-capped 429 block MUST NOT attach trial cookie OR burn the guest's remaining 2 credits
+    for (let i = 0; i < 3; i += 1) {
+      const cappedSwap = await modelSwapPost(
+        new Request("http://localhost/api/model-swap", {
+          method: "POST",
+          headers: guestHeaders,
+          body: JSON.stringify({
+            modelImageBase64: TINY_PNG_BASE64,
+            backgroundUrl: "https://images.pexels.com/photos/200/bg.png",
+          }),
+        })
+      );
+      assert.equal(cappedSwap.status, 429);
+      assert.equal(
+        cappedSwap.headers.get("set-cookie")?.includes("vokaloom_trial_v1") ?? false,
+        false
+      );
+    }
+
+    // 4. Guest still has 2 remaining trial credits on /api/voice!
+    for (let i = 0; i < 2; i += 1) {
+      const voiceOk = await voicePost(
+        new Request("http://localhost/api/voice", {
+          method: "POST",
+          headers: guestHeaders,
+          body: JSON.stringify({
+            text: `Remaining guest credit ${i}`,
+            voiceId: "sofia-es",
+            language: "es",
+          }),
+        })
+      );
+      assert.equal(voiceOk.status, 200);
+    }
+
+    // 5. Next request reaches true 3/3 guest quota -> 402
+    const voice402 = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: guestHeaders,
+        body: JSON.stringify({
+          text: "Should now be 402.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(voice402.status, 402);
+  });
+
+  it("tracks pro_client daily fair-use caps by non-PII subjectId across changing IPs (including Vision)", async () => {
+    process.env.TRUST_PROXY = "true";
+    process.env.PRO_CLIENT_DAILY_IMAGE_LIMIT = "1";
+    process.env.PRO_CLIENT_DAILY_VISION_LIMIT = "1";
+
+    let visionCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("images.pexels.com/photos/777/")) {
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      if (url.includes("api.pexels.com/")) {
+        return new Response(JSON.stringify({ photos: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("api.unsplash.com/")) {
+        return new Response(JSON.stringify({ results: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("gemini-nano-banana-2.1")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "image/png",
+                        data: TINY_PNG_BASE64.split(",")[1],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("gemini-3.5-flash-lite")) {
+        visionCalls += 1;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: "sunset coastal editorial" }] } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    // Issue VIP cookie via verify-code (case-insensitive VIP pass supported)
+    const verifyRes = await adminPost(
+      new Request("http://localhost/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "198.51.100.1",
+        },
+        body: JSON.stringify({
+          action: "verify-code",
+          code: "unit-vip-pass",
+        }),
+      })
+    );
+    assert.equal(verifyRes.status, 200);
+    const setCookies = verifyRes.headers.getSetCookie();
+    const entCookieLine = setCookies.find((c) =>
+      c.startsWith(`${ENTITLEMENT_COOKIE_NAME}=`)
+    );
+    assert.ok(entCookieLine);
+    const rawCookiePair = entCookieLine.split(";")[0]!;
+    const rawToken = decodeURIComponent(rawCookiePair.split("=")[1]!);
+    const verified = verifyEntitlementToken(rawToken);
+    assert.ok(verified.subjectId);
+    assert.equal(verified.subjectId.length, 16);
+
+    // 1st image swap succeeds from IP .10
+    const swap1 = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: rawCookiePair,
+          "x-forwarded-for": "198.51.100.10",
+        },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/777/bg.png",
+        }),
+      })
+    );
+    assert.equal(swap1.status, 200);
+
+    // 2nd image swap from DIFFERENT IP .99 STILL hits pro_daily_cap!
+    const swap2 = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: rawCookiePair,
+          "x-forwarded-for": "198.51.100.99",
+        },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/777/bg.png",
+        }),
+      })
+    );
+    assert.equal(swap2.status, 429);
+    assert.equal((await swap2.json()).reason, "pro_daily_cap");
+
+    // 1st Vision search succeeds from IP .10
+    const bg1 = await backgroundsPost(
+      new Request("http://localhost/api/backgrounds", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: rawCookiePair,
+          "x-forwarded-for": "198.51.100.10",
+        },
+        body: JSON.stringify({
+          vibe: "Travel",
+          referenceImageBase64: TINY_PNG_BASE64,
+        }),
+      })
+    );
+    assert.equal(bg1.status, 200);
+    assert.equal((await bg1.json()).visionUsed, true);
+    assert.equal(visionCalls, 1);
+
+    // 2nd Vision search from DIFFERENT IP .77 hits pro_daily_cap & falls back without calling Gemini
+    const bg2 = await backgroundsPost(
+      new Request("http://localhost/api/backgrounds", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: rawCookiePair,
+          "x-forwarded-for": "198.51.100.77",
+        },
+        body: JSON.stringify({
+          vibe: "Travel",
+          referenceImageBase64: TINY_PNG_BASE64,
+        }),
+      })
+    );
+    assert.equal(bg2.status, 200);
+    const bg2Json = (await bg2.json()) as {
+      visionUsed: boolean;
+      visionCapNotice?: string;
+    };
+    assert.equal(bg2Json.visionUsed, false);
+    assert.ok(bg2Json.visionCapNotice);
+    assert.equal(visionCalls, 1);
+  });
+
+  it("enforces case-sensitive ADMIN_MASTER_KEY, SESSION_SIGNING_SECRET isolation, CSRF origin check & server business config", async () => {
+    process.env.SESSION_SIGNING_SECRET = "dedicated-signing-secret-v1";
+
+    // Wrong case master key MUST fail 401
+    const wrongCaseRes = await adminPost(
+      new Request("http://localhost/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "AdminCaseCheck/1",
+        },
+        body: JSON.stringify({
+          action: "admin-login",
+          code: "unit-test-master-key",
+        }),
+      })
+    );
+    assert.equal(wrongCaseRes.status, 401);
+
+    // Exact case master key succeeds 200
+    const exactCaseRes = await adminPost(
+      new Request("http://localhost/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "AdminCaseCheck/1",
+        },
+        body: JSON.stringify({
+          action: "admin-login",
+          code: "UNIT-TEST-MASTER-KEY",
+        }),
+      })
+    );
+    assert.equal(exactCaseRes.status, 200);
+
+    // Decoupled SESSION_SIGNING_SECRET survives ADMIN_MASTER_KEY rotation
+    const signedVipToken = signEntitlementToken("pro_client", "subj1234567890ab");
+    assert.ok(signedVipToken);
+    process.env.ADMIN_MASTER_KEY = "ROTATED-NEW-MASTER-KEY";
+    const stillValid = verifyEntitlementToken(signedVipToken);
+    assert.equal(stillValid.isPro, true);
+    assert.equal(stillValid.subjectId, "subj1234567890ab");
+
+    const telemetry = await getAdminTelemetrySnapshot();
+    assert.equal(telemetry.config.usingDedicatedSigningSecret, true);
+
+    // CSRF cross-origin & Sec-Fetch-Site checks return 403
+    const csrfOriginRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "localhost:3000",
+          origin: "https://evil-attacker.example",
+          "x-admin-key": "ROTATED-NEW-MASTER-KEY",
+        },
+        body: JSON.stringify({ action: "toggle-emergency-pause" }),
+      })
+    );
+    assert.equal(csrfOriginRes.status, 403);
+
+    const csrfFetchSiteRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "sec-fetch-site": "cross-site",
+          "x-admin-key": "ROTATED-NEW-MASTER-KEY",
+        },
+        body: JSON.stringify({ action: "toggle-emergency-pause" }),
+      })
+    );
+    assert.equal(csrfFetchSiteRes.status, 403);
+
+    // Disallowed checkout URL returns 400
+    const badCfgRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+          "x-admin-key": "ROTATED-NEW-MASTER-KEY",
+        },
+        body: JSON.stringify({
+          action: "update-business-config",
+          config: { checkoutUrlCop: "javascript:alert(1)" },
+        }),
+      })
+    );
+    assert.equal(badCfgRes.status, 400);
+
+    // Valid same-origin update-business-config persists & surfaces on GET /api/admin
+    const okCfgRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "localhost:3000",
+          origin: "http://localhost:3000",
+          "x-admin-key": "ROTATED-NEW-MASTER-KEY",
+        },
+        body: JSON.stringify({
+          action: "update-business-config",
+          config: {
+            priceCop: "$79,000 COP",
+            priceUsd: "$19 USD",
+            maxTrialCredits: 4,
+            checkoutUrlCop: "https://checkout.wompi.co/l/vokaloom_pro_79k",
+            checkoutUrlUsd: "https://buy.stripe.com/vokaloom_pro_19usd",
+          },
+        }),
+      })
+    );
+    assert.equal(okCfgRes.status, 200);
+
+    const publicAdminGet = await adminGet(
+      new Request("http://localhost:3000/api/admin")
+    );
+    assert.equal(publicAdminGet.status, 200);
+    const getJson = (await publicAdminGet.json()) as {
+      authenticated: boolean;
+      config: { priceCop: string; maxTrialCredits: number; checkoutUrlCop: string };
+    };
+    assert.equal(getJson.authenticated, false);
+    assert.equal(getJson.config.priceCop, "$79,000 COP");
+    assert.equal(getJson.config.maxTrialCredits, 4);
+    assert.equal(
+      getJson.config.checkoutUrlCop,
+      "https://checkout.wompi.co/l/vokaloom_pro_79k"
     );
   });
 });

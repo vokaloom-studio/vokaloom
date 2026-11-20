@@ -284,6 +284,7 @@ const en = {
   "admin.browserModeOperator": "Browser Mode: Unlimited Operator",
   "admin.browserModeTrial": "Browser Mode: Client Trial ({remaining}/{max})",
   "admin.returnToStudio": "Return to Studio (/)",
+  "admin.signOutButton": "Sign Out",
   "admin.loginTitle": "Operator Authentication Required",
   "admin.loginDescBefore": "Enter your server-side",
   "admin.loginDescAfter":
@@ -297,12 +298,14 @@ const en = {
   "admin.card1Desc":
     "Live server-side check of .env.local / Vercel environment variables without exposing secret keys to the browser.",
   "admin.engine.geminiVision":
-    "Gemini 2.5 Flash Vision (Boss Reference Matcher)",
-  "admin.engine.geminiTts": "Gemini 2.5 Native Neural TTS (Voiceover Engine)",
+    "Gemini Vision Reference Analyzer (Boss Reference Matcher)",
+  "admin.engine.geminiTts": "Gemini Native Neural TTS (Voiceover Engine)",
   "admin.engine.pexels": "Pexels Portrait Stock API",
   "admin.engine.unsplash": "Unsplash Portrait Stock API",
   "admin.engine.fal":
     "Fal.ai Serverless GPU (Kokoro-82M & F5-TTS Voice Cloning)",
+  "admin.engine.falBilling":
+    "Fal.ai Billing Telemetry Key (Read-Only Scope)",
   "admin.envLabel": "Env: {envVar}",
   "admin.statusActive": "Live Neural / API Active",
   "admin.statusFallback": "Zero-Key Fallback Active",
@@ -339,18 +342,24 @@ const en = {
     "Authenticated into Vokaloom Admin Control Center.",
   "admin.toast.verifyFailed": "Failed to verify admin credentials.",
   "admin.toast.savedConfig":
-    "Saved Commercial & Paywall Configuration for this workstation.",
+    "Saved Commercial & Paywall Configuration on the server.",
+  "admin.toast.saveConfigError":
+    "Could not save paywall configuration. Ensure checkout URLs use HTTPS (or localhost in dev) and trial credits are 0-100.",
   "admin.toast.copiedInvite": "Copied VIP Invite Link: {url}",
   "admin.toast.inviteFallback": "Invite Link: {url}",
   "admin.toast.operatorEnabled":
     "Unlimited Operator Mode enabled on this browser.",
   "admin.toast.clientViewEnabled":
-    "Switched to Normal Client View. You can now test the trial counter and paywall.",
+    "Switched to Normal Client View and cleared server operator session. You can now test the trial counter and paywall.",
+  "admin.toast.signedOut":
+    "Signed out of Operator Console and cleared server session cookies.",
   "admin.toast.trialReset":
     "Reset local trial credits to {remaining}/{max}.",
   "admin.vault.title": "2. Runtime API Keys Vault (AES-256-GCM)",
   "admin.vault.desc":
     "Paste API keys directly from this browser. Secrets are encrypted in an HttpOnly cookie (and persisted to .env.local in local dev) and never exposed to client JS or localStorage.",
+  "admin.vault.prodNotice":
+    "Production notice: keys saved here apply only to this browser's encrypted HttpOnly Vault cookie. Set hosting environment variables for global multi-user access.",
   "admin.vault.activeBadge": "Active: {masked}",
   "admin.vault.unsetBadge": "Not configured",
   "admin.vault.placeholder": "Paste new key to update (or CLEAR to remove)...",
@@ -396,7 +405,7 @@ const en = {
     "Model image must be a valid base64 JPEG, PNG, or WebP payload.",
   "api.modelSwap.modelImageTooLarge":
     "Model image exceeds the 5 MB maximum size limit.",
-  "api.modelSwap.geminiEngine": "Gemini 2.5 Visual Compositor",
+  "api.modelSwap.geminiEngine": "Gemini Visual Compositor",
   "api.modelSwap.fallbackEngine": "Client Canvas Compositor",
   "api.modelSwap.processError": "Unable to process model scene placement.",
   "api.voice.invalidLength":
@@ -407,13 +416,18 @@ const en = {
     "Reference audio exceeds the 3 MB maximum size limit.",
   "api.voice.engine.f5tts": "F5-TTS (MIT Clone)",
   "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
-  "api.voice.engine.geminiTts": "Gemini 2.5 Neural TTS",
+  "api.voice.engine.geminiTts": "Gemini Neural TTS",
   "api.voice.demoFallbackEngine":
     "Demo Fallback (Add FAL_KEY or GEMINI_API_KEY for Live Neural TTS)",
   "api.voice.processError": "Unable to process voice synthesis request.",
   "api.admin.unauthenticated": "Admin authentication required.",
   "api.admin.authenticated": "Admin session verified.",
   "api.admin.loggedOut": "Admin session closed.",
+  "api.admin.forbiddenOrigin": "Forbidden cross-origin admin mutation request.",
+  "api.admin.invalidBusinessConfig":
+    "Invalid commercial paywall settings or disallowed checkout URL.",
+  "api.admin.businessConfigSaved":
+    "Server-backed commercial & paywall settings updated.",
   "api.admin.missingCode": "Please provide an access code.",
   "api.admin.invalidAdminKey": "Invalid Master Admin Password.",
   "api.admin.invalidAccessCode": "Invalid Pro Pass or Operator access code.",
@@ -527,6 +541,10 @@ const en = {
   "admin.telemetry.toast.reset": "Hard-cap counters and circuit breakers reset.",
   "admin.telemetry.toast.actionError":
     "Could not update telemetry controls.",
+  "admin.telemetry.signingSecretWarningBadge":
+    "Warning: SESSION_SIGNING_SECRET unset — deriving signing key from ADMIN_MASTER_KEY",
+  "admin.telemetry.proFairUseRow":
+    "Pro Daily Fair-Use Caps: {image} img · {audio} audio · {vision} vision",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -815,6 +833,7 @@ const es: Record<TranslationKey, string> = {
   "admin.browserModeOperator": "Modo Navegador: Operador Ilimitado",
   "admin.browserModeTrial": "Modo Navegador: Prueba Cliente ({remaining}/{max})",
   "admin.returnToStudio": "Volver al Estudio (/)",
+  "admin.signOutButton": "Cerrar Sesión",
   "admin.loginTitle": "Autenticación de Operador Requerida",
   "admin.loginDescBefore": "Ingresa tu clave de servidor",
   "admin.loginDescAfter":
@@ -828,13 +847,15 @@ const es: Record<TranslationKey, string> = {
   "admin.card1Desc":
     "Verificación en vivo desde el servidor de variables .env.local / Vercel sin exponer claves secretas al navegador.",
   "admin.engine.geminiVision":
-    "Gemini 2.5 Flash Vision (Coincidencia por Referencia)",
+    "Analizador Visual Gemini Vision (Coincidencia por Referencia)",
   "admin.engine.geminiTts":
-    "Gemini 2.5 TTS Neural Nativo (Motor de Locución)",
+    "Gemini TTS Neural Nativo (Motor de Locución)",
   "admin.engine.pexels": "API Stock Retrato Pexels",
   "admin.engine.unsplash": "API Stock Retrato Unsplash",
   "admin.engine.fal":
     "Fal.ai GPU Serverless (Kokoro-82M y Clonación F5-TTS)",
+  "admin.engine.falBilling":
+    "Clave de Telemetría de Facturación Fal.ai (Solo Lectura)",
   "admin.envLabel": "Var: {envVar}",
   "admin.statusActive": "API / Neural Activa",
   "admin.statusFallback": "Respaldo Sin Clave Activo",
@@ -875,18 +896,24 @@ const es: Record<TranslationKey, string> = {
   "admin.toast.verifyFailed":
     "Error al verificar las credenciales de administrador.",
   "admin.toast.savedConfig":
-    "Configuración comercial y de paywall guardada para esta estación.",
+    "Configuración comercial y de paywall guardada en el servidor.",
+  "admin.toast.saveConfigError":
+    "No se pudo guardar el paywall. Verifica que las URLs usen HTTPS (o localhost en dev) y créditos de 0 a 100.",
   "admin.toast.copiedInvite": "Enlace de invitación VIP copiado: {url}",
   "admin.toast.inviteFallback": "Enlace de invitación: {url}",
   "admin.toast.operatorEnabled":
     "Modo Operador ilimitado activado en este navegador.",
   "admin.toast.clientViewEnabled":
-    "Cambiado a Vista de Cliente Normal. Ya puedes probar el contador de prueba y el paywall.",
+    "Cambiado a Vista de Cliente Normal y cerrada la sesión de operador en servidor. Ya puedes probar el contador de prueba y el paywall.",
+  "admin.toast.signedOut":
+    "Sesión cerrada de la Consola de Operador y cookies de sesión eliminadas.",
   "admin.toast.trialReset":
     "Créditos locales de prueba reiniciados a {remaining}/{max}.",
   "admin.vault.title": "2. Bóveda de Claves API en Tiempo Real (AES-256-GCM)",
   "admin.vault.desc":
     "Pega tus claves API directamente desde este navegador. Se cifran en una cookie HttpOnly (y se guardan en .env.local en desarrollo local) sin exponerse al JS del cliente ni a localStorage.",
+  "admin.vault.prodNotice":
+    "Aviso de producción: las claves guardadas aquí solo aplican a la cookie HttpOnly cifrada de este navegador. Configura variables de entorno en tu plataforma de hosting para acceso global.",
   "admin.vault.activeBadge": "Activa: {masked}",
   "admin.vault.unsetBadge": "Sin configurar",
   "admin.vault.placeholder":
@@ -936,7 +963,7 @@ const es: Record<TranslationKey, string> = {
     "La foto del modelo debe ser un payload base64 JPEG, PNG o WebP válido.",
   "api.modelSwap.modelImageTooLarge":
     "La foto del modelo supera el límite máximo de 5 MB.",
-  "api.modelSwap.geminiEngine": "Compositor Visual Gemini 2.5",
+  "api.modelSwap.geminiEngine": "Compositor Visual Gemini",
   "api.modelSwap.fallbackEngine": "Compositor Canvas Local",
   "api.modelSwap.processError":
     "No se pudo procesar la colocación del modelo en escena.",
@@ -948,7 +975,7 @@ const es: Record<TranslationKey, string> = {
     "El audio de referencia supera el límite máximo de 3 MB.",
   "api.voice.engine.f5tts": "F5-TTS (Clonación MIT)",
   "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
-  "api.voice.engine.geminiTts": "Gemini 2.5 TTS Neural",
+  "api.voice.engine.geminiTts": "Gemini TTS Neural",
   "api.voice.demoFallbackEngine":
     "Respaldo Demo (Agrega FAL_KEY o GEMINI_API_KEY para Voz Neural Real)",
   "api.voice.processError":
@@ -956,6 +983,12 @@ const es: Record<TranslationKey, string> = {
   "api.admin.unauthenticated": "Se requiere autenticación de administrador.",
   "api.admin.authenticated": "Sesión de administrador verificada.",
   "api.admin.loggedOut": "Sesión de administrador cerrada.",
+  "api.admin.forbiddenOrigin":
+    "Solicitud de mutación de administrador de origen cruzado prohibida.",
+  "api.admin.invalidBusinessConfig":
+    "Configuración comercial inválida o URL de pago no permitida.",
+  "api.admin.businessConfigSaved":
+    "Configuración comercial y de paywall actualizada en el servidor.",
   "api.admin.missingCode": "Por favor proporciona un código de acceso.",
   "api.admin.invalidAdminKey": "Contraseña maestra de administrador inválida.",
   "api.admin.invalidAccessCode": "Código de Pase Pro u Operador inválido.",
@@ -1076,6 +1109,10 @@ const es: Record<TranslationKey, string> = {
     "Contadores de tope duro y cortacircuitos reiniciados.",
   "admin.telemetry.toast.actionError":
     "No se pudieron actualizar los controles de telemetría.",
+  "admin.telemetry.signingSecretWarningBadge":
+    "Advertencia: SESSION_SIGNING_SECRET sin configurar — derivando firma desde ADMIN_MASTER_KEY",
+  "admin.telemetry.proFairUseRow":
+    "Límites Diarios Pase Pro: {image} img · {audio} audio · {vision} vision",
 };
 
 export const TRANSLATIONS: Record<Locale, Record<TranslationKey, string>> = {

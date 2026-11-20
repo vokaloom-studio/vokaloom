@@ -12,7 +12,28 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    const homeResponse = await page.goto("/");
+    expect(homeResponse?.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(homeResponse?.headers()["x-frame-options"]).toBe("DENY");
+    expect(homeResponse?.headers()["content-security-policy"]).toContain(
+      "default-src 'self'"
+    );
+
+    const manifestRes = await page.request.get("/manifest.webmanifest");
+    expect(manifestRes.status()).toBe(200);
+    const manifestJson = (await manifestRes.json()) as {
+      icons?: Array<{ src: string; type?: string }>;
+    };
+    expect(
+      manifestJson.icons?.some(
+        (icon) => icon.src === "/icons/icon-192.png" && icon.type === "image/png"
+      )
+    ).toBe(true);
+    expect((await page.request.get("/icons/icon-192.png")).status()).toBe(200);
+    expect((await page.request.get("/icons/icon-512.png")).status()).toBe(200);
+    expect(
+      (await page.request.get("/icons/apple-touch-icon.png")).status()
+    ).toBe(200);
 
     await expect(page.getByTestId("tab-backgrounds")).toBeVisible();
     await expect(page.getByTestId("tab-voice")).toBeVisible();
@@ -371,6 +392,8 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
         falMinBalanceUsd: 1,
         proClientDailyImageLimit: 25,
         proClientDailyAudioLimit: 100,
+        proClientDailyVisionLimit: 50,
+        usingDedicatedSigningSecret: false,
       },
       emergencyPause: {
         active: paused,
@@ -402,6 +425,7 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
       },
       fal: {
         configured: true,
+        billingKeyConfigured: true,
         balance: {
           currentBalance: 14.75,
           currency: "USD",
@@ -501,6 +525,14 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
       generatedAt: Date.now(),
     });
 
+    let businessConfig = {
+      priceCop: "$60,000 COP",
+      priceUsd: "$15 USD",
+      maxTrialCredits: 3,
+      checkoutUrlCop: "https://checkout.wompi.co/l/your_60000_cop_link",
+      checkoutUrlUsd: "https://buy.stripe.com/your_15_usd_link",
+    };
+
     await page.route("**/api/admin*", async (route) => {
       const req = route.request();
       if (req.method() === "GET") {
@@ -509,15 +541,19 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
           contentType: "application/json",
           body: JSON.stringify({
             authenticated: true,
+            isProduction: true,
+            config: businessConfig,
             health: {
               geminiConfigured: true,
               pexelsConfigured: true,
               unsplashConfigured: true,
               falConfigured: true,
+              falBillingConfigured: true,
             },
             maskedKeys: {
               GEMINI_API_KEY: "AIza••••5678",
               FAL_KEY: "fal_••••1234",
+              FAL_BILLING_KEY: "falb••••9012",
             },
             vipClientCodes: ["VOKALOOM-PRO-2026"],
             telemetry: buildTelemetry(),
@@ -526,7 +562,35 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
         return;
       }
 
-      const body = JSON.parse(req.postData() || "{}") as { action?: string };
+      const body = JSON.parse(req.postData() || "{}") as {
+        action?: string;
+        config?: typeof businessConfig;
+      };
+      if (body.action === "update-business-config" && body.config) {
+        businessConfig = { ...businessConfig, ...body.config };
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            config: businessConfig,
+          }),
+        });
+        return;
+      }
+
+      if (body.action === "admin-logout") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            valid: true,
+            loggedOut: true,
+          }),
+        });
+        return;
+      }
+
       if (body.action === "toggle-emergency-pause") {
         paused = !paused;
         await route.fulfill({
@@ -563,6 +627,10 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
     const card6 = page.getByTestId("admin-card-telemetry");
     await expect(card6).toBeVisible();
     await expect(page.getByTestId("telemetry-durable-warning")).toBeVisible();
+    await expect(
+      page.getByTestId("telemetry-signing-secret-warning")
+    ).toBeVisible();
+    await expect(page.getByTestId("vault-prod-notice")).toBeVisible();
     await expect(page.getByTestId("telemetry-fal-panel")).toContainText("$14.75");
     await expect(page.getByTestId("telemetry-stock-panel")).toContainText(
       "192 / 200"
@@ -570,6 +638,11 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
     await expect(page.getByTestId("telemetry-gemini-panel")).toContainText(
       "1/1 used"
     );
+
+    // Save server-backed commercial paywall config cleanly
+    await page.locator("#admin-price-cop").fill("$75,000 COP");
+    await page.getByTestId("btn-save-business-config").click();
+    expect(businessConfig.priceCop).toBe("$75,000 COP");
 
     // Toggle Emergency Pause ON and Reset Caps
     await page.getByTestId("btn-toggle-emergency-pause").click();
@@ -598,5 +671,9 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
       () => document.documentElement.scrollWidth > window.innerWidth
     );
     expect(mobileEnOverflow).toBe(false);
+
+    // Verify Sign Out button returns to operator login gate
+    await page.getByTestId("btn-admin-logout").click();
+    await expect(page.locator("#admin-master-password")).toBeVisible();
   });
 });

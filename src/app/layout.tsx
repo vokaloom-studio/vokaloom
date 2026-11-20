@@ -28,6 +28,19 @@ export const metadata: Metadata = {
   description:
     "Bilingual (EN/ES) commercial-safe content workstation: 15-Image Aesthetic Background Engine with Gemini Vision Matching + Realistic AI Voiceover & Zero-Shot Cloning Studio. / Estación comercial bilingüe: 15 fondos estéticos verticales y estudio de voz IA realista.",
   applicationName: "Vokaloom Studio",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      {
+        url: "/icons/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

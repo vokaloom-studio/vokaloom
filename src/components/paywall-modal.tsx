@@ -26,6 +26,7 @@ import {
   DEFAULT_CHECKOUT_URL_USD,
   getBusinessConfig,
   hasProAccess,
+  saveBusinessConfig,
   sanitizeCheckoutUrl,
   verifyAndActivateAccessCode,
   type BusinessConfig,
@@ -65,12 +66,32 @@ export function PaywallModal({
   });
 
   useEffect(() => {
-    if (open) {
-      queueMicrotask(() => {
+    if (!open) {
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
         setBusinessConfig(getBusinessConfig());
         setCodeError("");
-      });
-    }
+      }
+    });
+
+    void fetch("/api/admin", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return (await res.json()) as { config?: BusinessConfig };
+      })
+      .then((data) => {
+        if (cancelled || !data?.config) return;
+        const synced = saveBusinessConfig(data.config);
+        setBusinessConfig(synced);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const handleOpenCheckout = (
