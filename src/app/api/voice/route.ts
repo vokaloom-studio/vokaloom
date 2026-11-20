@@ -9,6 +9,7 @@ import {
   invalidateFalBalanceCache,
   isPaidModelFallbackDisabled,
   isProviderCircuitBroken,
+  isUpstreamConfigError,
   isUpstreamExhaustionError,
   recordGeminiUsage,
   recordProviderExhaustion,
@@ -397,9 +398,9 @@ export async function POST(request: Request) {
     const cookieHeader = request.headers.get("cookie") ?? undefined;
     const [entitlement, falKey, falBillingKey, geminiKey] = await Promise.all([
       resolveServerEntitlement(cookieHeader),
-      resolveApiKey("FAL_KEY"),
-      resolveApiKey("FAL_BILLING_KEY"),
-      resolveApiKey("GEMINI_API_KEY"),
+      resolveApiKey("FAL_KEY", cookieHeader),
+      resolveApiKey("FAL_BILLING_KEY", cookieHeader),
+      resolveApiKey("GEMINI_API_KEY", cookieHeader),
     ]);
     const effectiveBillingKey = falBillingKey || falKey;
     const clientIpKey = getRateLimitClientKey(request).key;
@@ -466,11 +467,23 @@ export async function POST(request: Request) {
           : "circuit_breaker"
         : undefined;
 
+    const activeProviders: Array<"gemini" | "fal"> = [];
+    if (falClient && !falBalanceStatus.belowMinFloor) {
+      activeProviders.push("fal");
+    }
+    if (
+      geminiKey &&
+      (!falClient || (!fallbackDisabled && !validatedReferenceAudio))
+    ) {
+      activeProviders.push("gemini");
+    }
+
     // Read-only eligibility check BEFORE consuming guest trial credits so
     // paused, capped, low-balance, or circuit-broken responses return 429/503 cleanly.
     const eligibility = await checkPaidGenerationEligibility("audio", {
       role: entitlement.role,
       userKey: initialUserKey,
+      providers: activeProviders,
       providerUnavailableReason,
     });
     if (!eligibility.allowed) {
@@ -504,6 +517,7 @@ export async function POST(request: Request) {
     const reservation = await reservePaidGenerationSlot("audio", {
       role: quota.role,
       userKey: reservationUserKey,
+      providers: activeProviders,
       providerUnavailableReason,
     });
     if (!reservation.allowed) {
@@ -523,6 +537,7 @@ export async function POST(request: Request) {
     }
 
     let falAttempted = false;
+    let lastConfigError: { statusCode?: number } | null = null;
 
     // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
     if (validatedReferenceAudio && falClient && canUseFal) {
@@ -571,6 +586,10 @@ export async function POST(request: Request) {
             exhaustion.statusCode,
             exhaustion.reason
           );
+        }
+        const cfgErr = isUpstreamConfigError(err);
+        if (cfgErr.isConfigError) {
+          lastConfigError = { statusCode: cfgErr.statusCode };
         }
         console.warn("F5-TTS live call failed:", err);
       }
@@ -641,6 +660,10 @@ export async function POST(request: Request) {
             exhaustion.statusCode,
             exhaustion.reason
           );
+        }
+        const cfgErr = isUpstreamConfigError(err);
+        if (cfgErr.isConfigError) {
+          lastConfigError = { statusCode: cfgErr.statusCode };
         }
         console.warn("Kokoro-82M live call failed:", err);
       }
@@ -731,11 +754,27 @@ export async function POST(request: Request) {
             exhaustion.reason
           );
         }
+        const cfgErr = isUpstreamConfigError(err);
+        if (cfgErr.isConfigError) {
+          lastConfigError = { statusCode: cfgErr.statusCode };
+        }
         console.warn(
           `Gemini Native TTS (${ttsModel}) call failed, falling back to demo synth:`,
           err
         );
       }
+    }
+
+    if (process.env.NODE_ENV === "production" && lastConfigError) {
+      return NextResponse.json(
+        {
+          error: translate(locale, "api.budget.providerConfigError"),
+          providerConfigError: true,
+          statusCode: lastConfigError.statusCode,
+          budget: await getPublicQuotaSnapshot(),
+        },
+        { status: 502 }
+      );
     }
 
     // Mode C: Zero-Key Instant Offline Fallback

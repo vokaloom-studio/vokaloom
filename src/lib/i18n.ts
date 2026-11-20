@@ -383,12 +383,17 @@ const en = {
   // API Route Messages
   "api.quota.exhausted":
     "Free trial credits exhausted. Unlock Vokaloom Pro or sign in as Operator to continue.",
+  "api.quota.proRevoked":
+    "This Pro Pass access code has been revoked by the operator. Enter a valid access code or upgrade to continue.",
+  "api.bg.forbiddenOrigin":
+    "Cross-site requests to the image proxy are forbidden.",
   "api.bg.invalidProxyOrigin": "Invalid or disallowed proxyUrl origin.",
   "api.bg.upstreamStatus": "Upstream image returned {status}",
   "api.bg.proxyFailed": "Failed to proxy image download.",
   "api.bg.proxyBusy":
     "Image proxy is temporarily busy. Please retry shortly.",
-  "api.bg.proxyTooLarge": "Upstream image exceeds 15 MB proxy limit.",
+  "api.bg.proxyTooLarge": "Upstream image exceeds 8 MB proxy limit.",
+  "api.bg.modelSwapTooLarge": "Background image exceeds 15 MB limit.",
   "api.bg.invalidUpstreamContentType":
     "Upstream resource did not return a supported image Content-Type.",
   "api.bg.invalidReferenceImage":
@@ -447,6 +452,9 @@ const en = {
   "api.admin.budgetReset": "Hard-cap counters and circuit breakers reset.",
   "api.admin.emergencyPaused": "Paid AI emergency pause activated.",
   "api.admin.emergencyResumed": "Paid AI emergency pause lifted.",
+  "api.admin.proCodeRevoked": "Pro Pass access code revoked immediately.",
+  "api.admin.codeRevoked": "This Pro Pass access code has been revoked.",
+  "api.admin.revokeFailed": "Could not revoke Pro Pass access code.",
 
   // Budget Guard & Quota Telemetry (API + Public Meter + Admin Card 06)
   "api.budget.resource.image": "Image",
@@ -466,6 +474,8 @@ const en = {
     "Server budget guard requires a shared Redis store in production.",
   "api.budget.visionCapNotice":
     "Gemini Vision cap or cooldown active — matched backgrounds using keyword search instead.",
+  "api.budget.providerConfigError":
+    "Upstream AI service configuration or model error. Please contact the workspace operator.",
 
   "budget.meter.title": "API Quota",
   "budget.meter.window.lifetime": "LIFETIME",
@@ -940,13 +950,19 @@ const es: Record<TranslationKey, string> = {
   // API Route Messages
   "api.quota.exhausted":
     "Créditos de prueba agotados. Desbloquea Vokaloom Pro o inicia sesión como Operador para continuar.",
+  "api.quota.proRevoked":
+    "Este código de Pase Pro fue revocado por el operador. Ingresa un código válido o adquiere acceso para continuar.",
+  "api.bg.forbiddenOrigin":
+    "Las solicitudes de origen cruzado al proxy de imágenes están prohibidas.",
   "api.bg.invalidProxyOrigin": "Origen de proxyUrl no válido o no permitido.",
   "api.bg.upstreamStatus": "La imagen de origen devolvió el estado {status}",
   "api.bg.proxyFailed": "No se pudo obtener la imagen a través del proxy.",
   "api.bg.proxyBusy":
     "El proxy de imágenes está ocupado temporalmente. Reintenta en unos segundos.",
   "api.bg.proxyTooLarge":
-    "La imagen de origen supera el límite de 15 MB del proxy.",
+    "La imagen de origen supera el límite de 8 MB del proxy.",
+  "api.bg.modelSwapTooLarge":
+    "La imagen de fondo supera el límite máximo de 15 MB.",
   "api.bg.invalidUpstreamContentType":
     "El recurso de origen no devolvió un Content-Type de imagen válido.",
   "api.bg.invalidReferenceImage":
@@ -1011,6 +1027,9 @@ const es: Record<TranslationKey, string> = {
     "Contadores de tope duro y cortacircuitos reiniciados.",
   "api.admin.emergencyPaused": "Pausa de emergencia de IA de pago activada.",
   "api.admin.emergencyResumed": "Pausa de emergencia de IA de pago levantada.",
+  "api.admin.proCodeRevoked": "Código de Pase Pro revocado de inmediato.",
+  "api.admin.codeRevoked": "Este código de Pase Pro ha sido revocado.",
+  "api.admin.revokeFailed": "No se pudo revocar el código de Pase Pro.",
 
   // Budget Guard & Quota Telemetry (API + Public Meter + Admin Card 06)
   "api.budget.resource.image": "Imagen",
@@ -1030,6 +1049,8 @@ const es: Record<TranslationKey, string> = {
     "El guardián de presupuesto del servidor requiere un almacén Redis compartido en producción.",
   "api.budget.visionCapNotice":
     "Tope o enfriamiento de Gemini Vision activo — se buscaron fondos usando palabras clave.",
+  "api.budget.providerConfigError":
+    "Error de configuración o modelo en el proveedor IA externo. Por favor contacta al operador del estudio.",
 
   "budget.meter.title": "Cuota API",
   "budget.meter.window.lifetime": "TOTAL",

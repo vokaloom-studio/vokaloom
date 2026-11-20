@@ -25,7 +25,6 @@ import {
 } from "@/lib/server-quota";
 import { resolveApiKey, type EntitlementRole } from "@/lib/server-secrets";
 import {
-  DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
   InvalidUpstreamContentTypeError,
   UpstreamConcurrencyLimitError,
@@ -39,7 +38,7 @@ import {
 export const maxDuration = 60;
 
 const UPSTREAM_FETCH_TIMEOUT_MS = DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS;
-const MAX_PROXY_IMAGE_BYTES = DEFAULT_MAX_IMAGE_BYTES; // 15 MB
+const MAX_PROXY_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
 const MAX_BACKGROUNDS_REQUEST_BYTES = 8 * 1024 * 1024; // 8 MB
 const GEMINI_VISION_TIMEOUT_MS = 15_000;
 
@@ -268,13 +267,14 @@ async function analyzeReferenceImageWithGemini(
   locale: Locale,
   role?: EntitlementRole | "guest",
   userKey?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cookieHeader?: string
 ): Promise<{
   resolvedQuery: string;
   visionUsed: boolean;
   visionCapNotice?: string;
 }> {
-  const apiKey = await resolveApiKey("GEMINI_API_KEY");
+  const apiKey = await resolveApiKey("GEMINI_API_KEY", cookieHeader);
   if (!apiKey) {
     return {
       resolvedQuery: `${fallbackQuery} candid vertical sunlight`,
@@ -374,9 +374,10 @@ interface PexelsPhoto {
 async function fetchFromPexels(
   query: string,
   page: number,
-  limit: number
+  limit: number,
+  cookieHeader?: string
 ): Promise<BackgroundItem[]> {
-  const apiKey = await resolveApiKey("PEXELS_API_KEY");
+  const apiKey = await resolveApiKey("PEXELS_API_KEY", cookieHeader);
   if (!apiKey) {
     return [];
   }
@@ -437,9 +438,10 @@ interface UnsplashPhoto {
 async function fetchFromUnsplash(
   query: string,
   page: number,
-  limit: number
+  limit: number,
+  cookieHeader?: string
 ): Promise<BackgroundItem[]> {
-  const accessKey = await resolveApiKey("UNSPLASH_ACCESS_KEY");
+  const accessKey = await resolveApiKey("UNSPLASH_ACCESS_KEY", cookieHeader);
   if (!accessKey) {
     return [];
   }
@@ -563,6 +565,16 @@ export async function GET(request: Request) {
     request,
     reqUrl.searchParams.get("locale")
   );
+  const secFetchSite = request.headers
+    .get("sec-fetch-site")
+    ?.trim()
+    .toLowerCase();
+  if (secFetchSite === "cross-site") {
+    return NextResponse.json(
+      { error: translate(locale, "api.bg.forbiddenOrigin") },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
   try {
     const rateLimit = await proxyRateLimitStore.tryConsume(
       getRateLimitClientKey(request).key
@@ -788,6 +800,7 @@ export async function POST(request: Request) {
       [vibe, rawQuery].filter(Boolean).join(" ").trim() ||
       "aesthetic travel lifestyle candid vertical";
 
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
     // Step A: Vision Reference Matcher via Gemini Vision
     let resolvedQuery = baseSearchTerms;
     let visionUsed = false;
@@ -804,7 +817,8 @@ export async function POST(request: Request) {
         locale,
         quota.role,
         visionUserKey,
-        request.signal
+        request.signal,
+        cookieHeader
       );
       resolvedQuery = visionResult.resolvedQuery;
       visionUsed = visionResult.visionUsed;
@@ -813,8 +827,8 @@ export async function POST(request: Request) {
 
     // Step B: Parallel Batch Fetch (Pexels 8/3 + Unsplash 7/2)
     const [pexelsResult, unsplashResult] = await Promise.allSettled([
-      fetchFromPexels(resolvedQuery, page, pexelsLimit),
-      fetchFromUnsplash(resolvedQuery, page, unsplashLimit),
+      fetchFromPexels(resolvedQuery, page, pexelsLimit, cookieHeader),
+      fetchFromUnsplash(resolvedQuery, page, unsplashLimit, cookieHeader),
     ]);
 
     const pexelsItems =

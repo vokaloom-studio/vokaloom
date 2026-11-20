@@ -17,13 +17,18 @@ import { getRateLimitClientKey } from "@/lib/client-ip";
 import {
   ADMIN_SESSION_COOKIE_NAME,
   ENTITLEMENT_COOKIE_NAME,
+  VAULT_COOKIE_NAME,
+  encryptSecretsPayload,
   signAdminSessionToken,
   signEntitlementToken,
   verifyEntitlementToken,
 } from "@/lib/server-secrets";
 import { POST as modelSwapPost } from "@/app/api/model-swap/route";
 import { POST as voicePost } from "@/app/api/voice/route";
-import { POST as backgroundsPost } from "@/app/api/backgrounds/route";
+import {
+  GET as backgroundsGet,
+  POST as backgroundsPost,
+} from "@/app/api/backgrounds/route";
 import { GET as quotaStatusGet } from "@/app/api/quota-status/route";
 import { GET as adminGet, POST as adminPost } from "@/app/api/admin/route";
 
@@ -1774,5 +1779,429 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
       getJson.config.checkoutUrlCop,
       "https://checkout.wompi.co/l/vokaloom_pro_79k"
     );
+  });
+
+  it("syncs guest quota limits dynamically with maxTrialCredits=0 and maxTrialCredits=5", async () => {
+    delete process.env.FAL_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    // 1. Set maxTrialCredits = 0 via admin server business config -> immediate 402
+    const cfgZero = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-admin-key": "UNIT-TEST-MASTER-KEY",
+        },
+        body: JSON.stringify({
+          action: "update-business-config",
+          config: { maxTrialCredits: 0 },
+        }),
+      })
+    );
+    assert.equal(cfgZero.status, 200);
+
+    const guestZero = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": `ZeroTrialGuest-${Date.now()}`,
+        },
+        body: JSON.stringify({
+          text: "Blocked immediately when trials disabled.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(guestZero.status, 402);
+
+    // 2. Raise maxTrialCredits = 5 -> guest gets 5 runs, 6th blocked at 402
+    const cfgFive = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-admin-key": "UNIT-TEST-MASTER-KEY",
+        },
+        body: JSON.stringify({
+          action: "update-business-config",
+          config: { maxTrialCredits: 5 },
+        }),
+      })
+    );
+    assert.equal(cfgFive.status, 200);
+
+    const ua5 = `FiveTrialGuest-${Date.now()}`;
+    for (let i = 0; i < 5; i += 1) {
+      const ok = await voicePost(
+        new Request("http://localhost/api/voice", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": ua5,
+          },
+          body: JSON.stringify({
+            text: `Trial run ${i + 1} of 5.`,
+            voiceId: "sofia-es",
+            language: "es",
+          }),
+        })
+      );
+      assert.equal(ok.status, 200);
+    }
+
+    const blocked6 = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": ua5,
+        },
+        body: JSON.stringify({
+          text: "6th run must fail with 402.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(blocked6.status, 402);
+  });
+
+  it("scopes Vault cookie strictly to valid Operator sessions and deletes it on admin-logout", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const vaultToken = encryptSecretsPayload({
+      GEMINI_API_KEY: "AIzaVaultSecretOverride123456",
+    });
+
+    let capturedApiKeyHeader = "";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("images.pexels.com/photos/321/")) {
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      if (url.includes("generativelanguage.googleapis.com")) {
+        const hdrs = new Headers(init?.headers);
+        capturedApiKeyHeader = hdrs.get("x-goog-api-key") || "";
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      inlineData: {
+                        mimeType: "image/png",
+                        data: TINY_PNG_BASE64.split(",")[1],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    // 1. Non-operator / guest sending vokaloom_vault_v1 MUST NOT decrypt Vault secret
+    const guestWithVault = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": `VaultGuest-${Date.now()}`,
+          cookie: `${VAULT_COOKIE_NAME}=${encodeURIComponent(vaultToken)}`,
+        },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/321/bg.png",
+        }),
+      })
+    );
+    assert.equal(guestWithVault.status, 200);
+    const guestJson = (await guestWithVault.json()) as {
+      fallbackComposite: boolean;
+    };
+    assert.equal(guestJson.fallbackComposite, true);
+    assert.equal(capturedApiKeyHeader, "");
+
+    // 2. Authenticated Operator with valid admin session + vault cookie uses Vault key
+    const opCookie = `${makeOperatorCookieHeader()}; ${VAULT_COOKIE_NAME}=${encodeURIComponent(vaultToken)}`;
+    const opWithVault = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: opCookie,
+        },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/321/bg.png",
+        }),
+      })
+    );
+    assert.equal(opWithVault.status, 200);
+    const opJson = (await opWithVault.json()) as { isFallback: boolean };
+    assert.equal(opJson.isFallback, false);
+    assert.equal(capturedApiKeyHeader, "AIzaVaultSecretOverride123456");
+
+    // 3. admin-logout deletes vokaloom_vault_v1 alongside admin session & entitlement cookies
+    const logoutRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "admin-logout" }),
+      })
+    );
+    assert.equal(logoutRes.status, 200);
+    const setCookies = logoutRes.headers.getSetCookie().join("\n");
+    assert.ok(setCookies.includes(`${ADMIN_SESSION_COOKIE_NAME}=`));
+    assert.ok(setCookies.includes(`${ENTITLEMENT_COOKIE_NAME}=`));
+    assert.ok(setCookies.includes(`${VAULT_COOKIE_NAME}=`));
+  });
+
+  it("returns 502 in production on permanent upstream 401/404 config errors instead of silent fallback", async () => {
+    process.env.SESSION_SIGNING_SECRET = "prod-test-signing-secret";
+    delete process.env.FAL_KEY;
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("images.pexels.com/photos/888/")) {
+        return new Response(Uint8Array.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "content-type": "image/png" },
+        });
+      }
+      if (url.includes("gemini-nano-banana-2.1")) {
+        return new Response(
+          JSON.stringify({ error: { code: 404, message: "NOT_FOUND" } }),
+          { status: 404, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("gemini-3.8-flash-lite-tts")) {
+        return new Response(
+          JSON.stringify({ error: { code: 401, message: "API_KEY_INVALID" } }),
+          { status: 401, headers: { "content-type": "application/json" } }
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const opCookie = makeOperatorCookieHeader();
+
+    // Non-production dev mode still falls back gracefully
+    (process.env as Record<string, string | undefined>).NODE_ENV = "test";
+    const devSwapRes = await modelSwapPost(
+      new Request("http://localhost/api/model-swap", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: opCookie },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/888/bg.png",
+        }),
+      })
+    );
+    assert.equal(devSwapRes.status, 200);
+    assert.equal((await devSwapRes.json()).fallbackComposite, true);
+
+    // Production returns HTTP 502 on permanent 404 / 401 config failures
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    const prodSwapRes = await modelSwapPost(
+      new Request("https://app.vokaloom.example/api/model-swap", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: opCookie },
+        body: JSON.stringify({
+          modelImageBase64: TINY_PNG_BASE64,
+          backgroundUrl: "https://images.pexels.com/photos/888/bg.png",
+        }),
+      })
+    );
+    assert.equal(prodSwapRes.status, 502);
+    const prodSwapJson = (await prodSwapRes.json()) as {
+      providerConfigError: boolean;
+      statusCode: number;
+    };
+    assert.equal(prodSwapJson.providerConfigError, true);
+    assert.equal(prodSwapJson.statusCode, 404);
+
+    const prodVoiceRes = await voicePost(
+      new Request("https://app.vokaloom.example/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: opCookie },
+        body: JSON.stringify({
+          text: "Production voice config error test.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(prodVoiceRes.status, 502);
+    const prodVoiceJson = (await prodVoiceRes.json()) as {
+      providerConfigError: boolean;
+      statusCode: number;
+    };
+    assert.equal(prodVoiceJson.providerConfigError, true);
+    assert.equal(prodVoiceJson.statusCode, 401);
+
+    // Also verify HTTPS origin matches internal http:// request behind TLS proxy in production
+    const tlsProxyLogin = await adminPost(
+      new Request("http://127.0.0.1:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "app.vokaloom.example",
+          origin: "https://app.vokaloom.example",
+        },
+        body: JSON.stringify({
+          action: "admin-login",
+          code: "UNIT-TEST-MASTER-KEY",
+        }),
+      })
+    );
+    assert.equal(tlsProxyLogin.status, 200);
+  });
+
+  it("blocks cross-site image proxy GET requests and enforces 8 MB proxy cap", async () => {
+    const crossSiteRes = await backgroundsGet(
+      new Request(
+        "http://localhost/api/backgrounds?proxyUrl=https://images.pexels.com/photos/1/bg.png",
+        {
+          headers: { "sec-fetch-site": "cross-site" },
+        }
+      )
+    );
+    assert.equal(crossSiteRes.status, 403);
+
+    // Upstream returning > 8 MB (9 MB Content-Length) must be rejected at 413
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array(16), {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+          "content-length": String(9 * 1024 * 1024),
+        },
+      })) as typeof fetch;
+
+    const oversizedProxyRes = await backgroundsGet(
+      new Request(
+        "http://localhost/api/backgrounds?proxyUrl=https://images.pexels.com/photos/2/big.jpg",
+        {
+          headers: { "sec-fetch-site": "same-origin" },
+        }
+      )
+    );
+    assert.equal(oversizedProxyRes.status, 413);
+  });
+
+  it("instantly revokes active 30-day pro_client cookies via POST /api/admin revoke-pro-code", async () => {
+    delete process.env.FAL_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    // 1. Activate VIP pass and capture 30-day cookie
+    const verifyRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "verify-code",
+          code: "UNIT-VIP-PASS",
+        }),
+      })
+    );
+    assert.equal(verifyRes.status, 200);
+    const cookieLine = verifyRes.headers
+      .getSetCookie()
+      .find((c) => c.startsWith(`${ENTITLEMENT_COOKIE_NAME}=`));
+    assert.ok(cookieLine);
+    const proCookie = cookieLine.split(";")[0]!;
+
+    // 2. Confirm Pro cookie currently works on /api/voice
+    const okVoice = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: proCookie },
+        body: JSON.stringify({
+          text: "Active Pro Pass works before revocation.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(okVoice.status, 200);
+
+    // 3. Operator revokes the leaked VIP code via admin route
+    const revokeRes = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-admin-key": "UNIT-TEST-MASTER-KEY",
+        },
+        body: JSON.stringify({
+          action: "revoke-pro-code",
+          code: "unit-vip-pass",
+        }),
+      })
+    );
+    assert.equal(revokeRes.status, 200);
+    const revokeJson = (await revokeRes.json()) as {
+      success: boolean;
+      revoked: boolean;
+    };
+    assert.equal(revokeJson.revoked, true);
+
+    // 4. Previously issued 30-day cookie is immediately killed across routes and cleared
+    const killedVoice = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: proCookie },
+        body: JSON.stringify({
+          text: "Revoked cookie must fail immediately.",
+          voiceId: "sofia-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(killedVoice.status, 402);
+    const killedJson = (await killedVoice.json()) as {
+      proRevoked: boolean;
+      quotaExceeded: boolean;
+    };
+    assert.equal(killedJson.proRevoked, true);
+    assert.equal(killedJson.quotaExceeded, true);
+    assert.ok(
+      killedVoice.headers
+        .getSetCookie()
+        .some((c) => c.startsWith(`${ENTITLEMENT_COOKIE_NAME}=;`))
+    );
+
+    const killedBg = await backgroundsPost(
+      new Request("http://localhost/api/backgrounds", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: proCookie },
+        body: JSON.stringify({ vibe: "Luxury Travel", batchSize: 5 }),
+      })
+    );
+    assert.equal(killedBg.status, 402);
+
+    // 5. Attempting to re-login with the revoked VIP code is also denied
+    const reVerify = await adminPost(
+      new Request("http://localhost:3000/api/admin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "verify-code",
+          code: "UNIT-VIP-PASS",
+        }),
+      })
+    );
+    assert.equal(reVerify.status, 401);
   });
 });

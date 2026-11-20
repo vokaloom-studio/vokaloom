@@ -121,6 +121,7 @@ interface BudgetLedgerData {
   };
   geminiUsage: Record<PaidResource, GeminiResourceUsage>;
   businessConfig?: ServerBusinessConfig;
+  revokedProSubjects?: Record<string, number>;
 }
 
 export interface GeminiUsageMetadataLike {
@@ -366,6 +367,7 @@ function createDefaultLedgerData(
       audio: createEmptyGeminiUsage(),
       vision: createEmptyGeminiUsage(),
     },
+    revokedProSubjects: {},
   };
 }
 
@@ -647,6 +649,25 @@ function normalizeLedgerData(
     base.businessConfig = sanitizeStoredBusinessConfig(obj.businessConfig);
   }
 
+  if (obj.revokedProSubjects && typeof obj.revokedProSubjects === "object") {
+    const cleanRevoked: Record<string, number> = {};
+    for (const [subKey, ts] of Object.entries(obj.revokedProSubjects)) {
+      const cleanSub = subKey.trim().toLowerCase();
+      if (
+        /^[a-z0-9_-]{4,64}$/.test(cleanSub) &&
+        typeof ts === "number" &&
+        Number.isFinite(ts) &&
+        ts > 0
+      ) {
+        cleanRevoked[cleanSub] = ts;
+      }
+      if (Object.keys(cleanRevoked).length >= MAX_PRO_DAILY_ENTRIES) {
+        break;
+      }
+    }
+    base.revokedProSubjects = cleanRevoked;
+  }
+
   return base;
 }
 
@@ -757,6 +778,7 @@ const REDIS_EPOCH_KEY = `${REDIS_PREFIX}epoch`;
 const REDIS_PAUSE_KEY = `${REDIS_PREFIX}pause`;
 const REDIS_FAL_BALANCE_KEY = `${REDIS_PREFIX}fal_balance`;
 const REDIS_BUSINESS_CONFIG_KEY = `${REDIS_PREFIX}business_config`;
+const REDIS_REVOKED_PRO_KEY = `${REDIS_PREFIX}revoked_pro`;
 
 function redisCapKey(
   epoch: number,
@@ -1994,21 +2016,16 @@ export function getBudgetCapErrorMessage(
 // Circuit Breakers & Upstream Exhaustion Tracking
 // ============================================================================
 
-export function isUpstreamExhaustionError(err: unknown): {
-  exhausted: boolean;
-  statusCode?: number;
-  reason?: string;
-} {
+function extractErrorStatusAndMessage(
+  err: unknown,
+  depth = 0
+): { statusCode?: number; message: string } | null {
+  if (depth > 4) return null;
+  if (typeof err === "string") {
+    return { message: err };
+  }
   if (!err || typeof err !== "object") {
-    if (typeof err === "string") {
-      if (/\b429\b|RESOURCE_EXHAUSTED|quota.?exceeded/i.test(err)) {
-        return { exhausted: true, statusCode: 429, reason: "rate_limited" };
-      }
-      if (/\b402\b|payment.?required|insufficient.?(?:credits|balance)/i.test(err)) {
-        return { exhausted: true, statusCode: 402, reason: "payment_required" };
-      }
-    }
-    return { exhausted: false };
+    return null;
   }
 
   const obj = err as {
@@ -2026,36 +2043,103 @@ export function isUpstreamExhaustionError(err: unknown): {
         : typeof obj.code === "number"
           ? obj.code
           : undefined;
+  const message = typeof obj.message === "string" ? obj.message : "";
 
-  if (numericStatus === 429 || numericStatus === 402) {
+  if (numericStatus !== undefined || message.length > 0) {
+    return { statusCode: numericStatus, message };
+  }
+  if (obj.cause && obj.cause !== err) {
+    return extractErrorStatusAndMessage(obj.cause, depth + 1);
+  }
+  return null;
+}
+
+export function isUpstreamExhaustionError(err: unknown): {
+  exhausted: boolean;
+  statusCode?: number;
+  reason?: string;
+} {
+  const info = extractErrorStatusAndMessage(err);
+  if (!info) {
+    return { exhausted: false };
+  }
+
+  if (info.statusCode === 429 || info.statusCode === 402) {
     return {
       exhausted: true,
-      statusCode: numericStatus,
-      reason: numericStatus === 402 ? "payment_required" : "rate_limited",
+      statusCode: info.statusCode,
+      reason: info.statusCode === 402 ? "payment_required" : "rate_limited",
     };
   }
 
-  const message = typeof obj.message === "string" ? obj.message : "";
   if (
     /\b429\b|RESOURCE_EXHAUSTED|too many requests|quota.?exceeded/i.test(
-      message
+      info.message
     )
   ) {
     return { exhausted: true, statusCode: 429, reason: "RESOURCE_EXHAUSTED" };
   }
   if (
     /\b402\b|payment.?required|insufficient.?(?:credits|balance|funds)|credit balance/i.test(
-      message
+      info.message
     )
   ) {
     return { exhausted: true, statusCode: 402, reason: "payment_required" };
   }
 
-  if (obj.cause && obj.cause !== err) {
-    return isUpstreamExhaustionError(obj.cause);
+  if (err && typeof err === "object") {
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause && cause !== err) {
+      return isUpstreamExhaustionError(cause);
+    }
   }
 
   return { exhausted: false };
+}
+
+export function isUpstreamConfigError(err: unknown): {
+  isConfigError: boolean;
+  statusCode?: number;
+  reason?: string;
+} {
+  const info = extractErrorStatusAndMessage(err);
+  if (!info) {
+    return { isConfigError: false };
+  }
+
+  if (
+    info.statusCode === 400 ||
+    info.statusCode === 401 ||
+    info.statusCode === 403 ||
+    info.statusCode === 404
+  ) {
+    return {
+      isConfigError: true,
+      statusCode: info.statusCode,
+      reason: `http_${info.statusCode}`,
+    };
+  }
+
+  const configRegex =
+    /(?:HTTP\s+|^|[\s{"':])(400|401|403|404)(?:\b|$)|INVALID_ARGUMENT|API_KEY_INVALID|API key not valid|PERMISSION_DENIED|NOT_FOUND/i;
+  const match = configRegex.exec(info.message);
+  if (match) {
+    const parsedCode = match[1] ? Number(match[1]) : undefined;
+    return {
+      isConfigError: true,
+      ...(parsedCode ? { statusCode: parsedCode } : {}),
+      reason: "provider_config_error",
+    };
+  }
+
+  if (err && typeof err === "object") {
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause && cause !== err) {
+      return isUpstreamConfigError(cause);
+    }
+  }
+
+  return { isConfigError: false };
 }
 
 export async function isProviderCircuitBroken(
@@ -2725,4 +2809,94 @@ export async function toggleEmergencyPause(
     ledger.emergencyPause = nextVal;
     return nextVal || isEnvEmergencyPaused();
   });
+}
+
+export function computeProSubjectId(code: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(code.trim().toUpperCase())
+    .digest("hex")
+    .slice(0, 16);
+}
+
+export async function revokeProSubject(rawSubjectId: string): Promise<boolean> {
+  const subjectId = rawSubjectId.trim().toLowerCase();
+  if (!/^[a-z0-9_-]{4,64}$/.test(subjectId)) {
+    return false;
+  }
+
+  const configuredBackend = resolveStorageBackend();
+  const requireDurable = isDurableStoreRequired();
+
+  if (configuredBackend === "memory" && requireDurable) {
+    return false;
+  }
+
+  if (configuredBackend === "redis") {
+    try {
+      await runRedisPipeline([["SADD", REDIS_REVOKED_PRO_KEY, subjectId]]);
+      return true;
+    } catch (err) {
+      if (requireDurable) {
+        console.error(
+          "Redis revokeProSubject failed with strict durability:",
+          err
+        );
+        return false;
+      }
+      console.warn(
+        "Redis revokeProSubject failed, falling back to local store:",
+        err
+      );
+    }
+  }
+
+  const localBackend: "file" | "memory" =
+    process.env.NODE_ENV !== "production" ? "file" : "memory";
+  await mutateLocalOrMemLedger(localBackend, (ledger, now) => {
+    if (!ledger.revokedProSubjects) {
+      ledger.revokedProSubjects = {};
+    }
+    ledger.revokedProSubjects[subjectId] = now;
+  });
+  return true;
+}
+
+export async function isProSubjectRevoked(
+  rawSubjectId: string | undefined
+): Promise<boolean> {
+  if (!rawSubjectId) return false;
+  const subjectId = rawSubjectId.trim().toLowerCase();
+  if (!/^[a-z0-9_-]{4,64}$/.test(subjectId)) {
+    return false;
+  }
+
+  const configuredBackend = resolveStorageBackend();
+  const requireDurable = isDurableStoreRequired();
+
+  if (configuredBackend === "redis") {
+    try {
+      const res = await runRedisPipeline([
+        ["SISMEMBER", REDIS_REVOKED_PRO_KEY, subjectId],
+      ]);
+      return Number(res[0]?.result ?? 0) === 1;
+    } catch (err) {
+      if (requireDurable) {
+        console.error(
+          "Redis isProSubjectRevoked failed with strict durability:",
+          err
+        );
+        return true;
+      }
+      console.warn(
+        "Redis isProSubjectRevoked failed, checking local fallback:",
+        err
+      );
+    }
+  }
+
+  const localBackend: "file" | "memory" =
+    process.env.NODE_ENV !== "production" ? "file" : "memory";
+  const ledger = await readLocalOrMemLedger(localBackend);
+  return Boolean(ledger.revokedProSubjects?.[subjectId]);
 }

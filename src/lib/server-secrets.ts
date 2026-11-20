@@ -530,21 +530,38 @@ export function decryptSecretsPayload(
   return decryptVaultStatePayload(token).secrets;
 }
 
-export async function getVaultStateFromCookie(): Promise<VaultState> {
+export async function getVaultStateFromCookie(
+  fallbackCookieHeader?: string
+): Promise<VaultState> {
+  const empty: VaultState = { secrets: {}, cleared: [] };
+  let adminToken: string | undefined;
+  let rawToken: string | undefined;
+
   try {
     const cookieStore = await cookies();
-    const rawToken = cookieStore.get(VAULT_COOKIE_NAME)?.value;
-    if (!rawToken) return { secrets: {}, cleared: [] };
-    return decryptVaultStatePayload(rawToken);
+    adminToken = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+    rawToken = cookieStore.get(VAULT_COOKIE_NAME)?.value;
   } catch {
-    return { secrets: {}, cleared: [] };
+    adminToken = readCookieFromHeader(
+      fallbackCookieHeader,
+      ADMIN_SESSION_COOKIE_NAME
+    );
+    rawToken = readCookieFromHeader(fallbackCookieHeader, VAULT_COOKIE_NAME);
   }
+
+  // Strictly scope browser Vault overrides to authenticated Operator sessions.
+  // Non-operator / guest traffic always resolves exclusively from server process.env.
+  if (!verifyAdminSessionToken(adminToken) || !rawToken) {
+    return empty;
+  }
+
+  return decryptVaultStatePayload(rawToken);
 }
 
-export async function getVaultSecretsFromCookie(): Promise<
-  Partial<Record<SecretKeyName, string>>
-> {
-  return (await getVaultStateFromCookie()).secrets;
+export async function getVaultSecretsFromCookie(
+  fallbackCookieHeader?: string
+): Promise<Partial<Record<SecretKeyName, string>>> {
+  return (await getVaultStateFromCookie(fallbackCookieHeader)).secrets;
 }
 
 export function resolveSecretValueForState(
@@ -569,9 +586,10 @@ export function resolveSecretValueForState(
 }
 
 export async function resolveApiKey(
-  name: SecretKeyName
+  name: SecretKeyName,
+  fallbackCookieHeader?: string
 ): Promise<string | undefined> {
-  const vault = await getVaultStateFromCookie();
+  const vault = await getVaultStateFromCookie(fallbackCookieHeader);
   return resolveSecretValueForState(name, vault);
 }
 

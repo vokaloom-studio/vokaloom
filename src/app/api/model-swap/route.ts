@@ -4,6 +4,7 @@ import {
   checkPaidGenerationEligibility,
   getBudgetCapErrorMessage,
   getPublicQuotaSnapshot,
+  isUpstreamConfigError,
   isUpstreamExhaustionError,
   recordGeminiUsage,
   recordProviderExhaustion,
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
       ? `sub:${entitlement.subjectId}`
       : clientIpKey;
 
-    const geminiKey = await resolveApiKey("GEMINI_API_KEY");
+    const geminiKey = await resolveApiKey("GEMINI_API_KEY", cookieHeader);
     if (!geminiKey) {
       const quota = await enforceServerGenerationQuota(request, locale);
       if (!quota.allowed) {
@@ -225,7 +226,7 @@ export async function POST(request: Request) {
       }
       if (fetchErr instanceof UpstreamImageTooLargeError) {
         return NextResponse.json(
-          { error: translate(locale, "api.bg.proxyTooLarge") },
+          { error: translate(locale, "api.bg.modelSwapTooLarge") },
           { status: 413 }
         );
       }
@@ -356,6 +357,18 @@ export async function POST(request: Request) {
         );
       }
       console.warn(`${imageModel} failed:`, primaryErr);
+      const cfgErr = isUpstreamConfigError(primaryErr);
+      if (process.env.NODE_ENV === "production" && cfgErr.isConfigError) {
+        return NextResponse.json(
+          {
+            error: translate(locale, "api.budget.providerConfigError"),
+            providerConfigError: true,
+            statusCode: cfgErr.statusCode,
+            budget: await getPublicQuotaSnapshot(),
+          },
+          { status: 502 }
+        );
+      }
     }
 
     return withQuotaCookie(

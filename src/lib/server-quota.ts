@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  getServerBusinessConfig,
+  isProSubjectRevoked,
+} from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { translate, type Locale } from "@/lib/i18n";
 import {
@@ -8,6 +12,7 @@ import {
   type RateLimitStore,
 } from "@/lib/rate-limit";
 import {
+  ENTITLEMENT_COOKIE_NAME,
   TRIAL_COOKIE_NAME,
   TRIAL_TTL_MS,
   getVerifiedTrialUsageFromCookie,
@@ -89,6 +94,26 @@ export async function enforceServerGenerationQuota(
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const entitlement = await resolveServerEntitlement(cookieHeader);
   if (entitlement.isPro) {
+    if (
+      entitlement.role === "pro_client" &&
+      entitlement.subjectId &&
+      (await isProSubjectRevoked(entitlement.subjectId))
+    ) {
+      const revokedResponse = NextResponse.json(
+        {
+          error: translate(locale, "api.quota.proRevoked"),
+          quotaExceeded: true,
+          proRevoked: true,
+        },
+        { status: 402 }
+      );
+      revokedResponse.cookies.delete(ENTITLEMENT_COOKIE_NAME);
+      return {
+        allowed: false,
+        response: revokedResponse,
+      };
+    }
+
     return {
       allowed: true,
       isPro: true,
@@ -98,11 +123,20 @@ export async function enforceServerGenerationQuota(
     };
   }
 
+  const businessConfig = await getServerBusinessConfig();
+  const maxTrialCredits = Math.max(0, Math.floor(businessConfig.maxTrialCredits));
+  if (maxTrialCredits <= 0) {
+    return {
+      allowed: false,
+      response: buildQuotaExhaustedResponse(locale),
+    };
+  }
+
   const now = Date.now();
   const cookieTrial = await getVerifiedTrialUsageFromCookie(now, cookieHeader);
   const cookieUsed = cookieTrial?.used ?? 0;
 
-  if (cookieUsed >= MAX_GUEST_TRIAL_CREDITS) {
+  if (cookieUsed >= maxTrialCredits) {
     return {
       allowed: false,
       response: buildQuotaExhaustedResponse(locale),
@@ -112,6 +146,7 @@ export async function enforceServerGenerationQuota(
   const clientKey = getRateLimitClientKey(request).key;
   const consumption = await getGuestTrialStore().tryConsume(clientKey, {
     floorCount: cookieUsed,
+    maxAttempts: maxTrialCredits,
   });
 
   if (!consumption.allowed) {

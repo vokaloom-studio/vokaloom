@@ -2,9 +2,12 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
+  computeProSubjectId,
   getAdminTelemetrySnapshot,
   getServerBusinessConfig,
+  isProSubjectRevoked,
   resetBudgetCaps,
+  revokeProSubject,
   saveServerBusinessConfig,
   toggleEmergencyPause,
   type ServerBusinessConfig,
@@ -183,6 +186,12 @@ function verifySameOriginForAdminPost(request: Request): boolean {
   if (!expectedHost || parsedOrigin.host.toLowerCase() !== expectedHost) {
     return false;
   }
+  if (
+    process.env.NODE_ENV === "production" &&
+    parsedOrigin.protocol === "https:"
+  ) {
+    return true;
+  }
   if (expectedProtocol && parsedOrigin.protocol !== expectedProtocol) {
     return false;
   }
@@ -223,13 +232,13 @@ function buildDiagnosticsFromValues(
   };
 }
 
-async function resolveAllDiagnostics() {
+async function resolveAllDiagnostics(cookieHeader?: string) {
   const [gemini, pexels, unsplash, fal, falBilling] = await Promise.all([
-    resolveApiKey("GEMINI_API_KEY"),
-    resolveApiKey("PEXELS_API_KEY"),
-    resolveApiKey("UNSPLASH_ACCESS_KEY"),
-    resolveApiKey("FAL_KEY"),
-    resolveApiKey("FAL_BILLING_KEY"),
+    resolveApiKey("GEMINI_API_KEY", cookieHeader),
+    resolveApiKey("PEXELS_API_KEY", cookieHeader),
+    resolveApiKey("UNSPLASH_ACCESS_KEY", cookieHeader),
+    resolveApiKey("FAL_KEY", cookieHeader),
+    resolveApiKey("FAL_BILLING_KEY", cookieHeader),
   ]);
 
   return {
@@ -382,13 +391,19 @@ export async function GET(request: Request) {
 
   const isProduction = process.env.NODE_ENV === "production";
   const serverConfig = await getServerBusinessConfig();
+  const effectiveEntitlement =
+    entitlement.role === "pro_client" &&
+    entitlement.subjectId &&
+    (await isProSubjectRevoked(entitlement.subjectId))
+      ? { role: "guest" as const, isPro: false, isOperator: false }
+      : entitlement;
 
   if (!authResult.authorized) {
     return NextResponse.json(
       {
         authenticated: false,
         isProduction,
-        entitlement,
+        entitlement: effectiveEntitlement,
         config: serverConfig,
         message: translate(locale, "api.admin.unauthenticated"),
       },
@@ -397,7 +412,7 @@ export async function GET(request: Request) {
   }
 
   const { diagnostics, falKey, falBillingKey, geminiKey } =
-    await resolveAllDiagnostics();
+    await resolveAllDiagnostics(cookieHeader);
   const telemetry = await getAdminTelemetrySnapshot({
     falKey,
     falBillingKey,
@@ -409,7 +424,7 @@ export async function GET(request: Request) {
     {
       authenticated: true,
       isProduction,
-      entitlement,
+      entitlement: effectiveEntitlement,
       config: serverConfig,
       message: translate(locale, "api.admin.authenticated"),
       ...diagnostics,
@@ -432,6 +447,7 @@ export async function POST(request: Request) {
     );
   }
   try {
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
     const rawBody = await readJsonBodyWithLimit(request, 16 * 1024);
     const body = rawBody as {
       action?:
@@ -442,7 +458,8 @@ export async function POST(request: Request) {
         | "clear-vault"
         | "reset-budget-caps"
         | "toggle-emergency-pause"
-        | "update-business-config";
+        | "update-business-config"
+        | "revoke-pro-code";
       code?: string;
       adminKey?: string;
       keys?: Partial<Record<SecretKeyName, string>>;
@@ -453,6 +470,45 @@ export async function POST(request: Request) {
     };
     if (body.locale !== undefined) {
       locale = resolveRequestLocale(request, body.locale);
+    }
+
+    if (body.action === "revoke-pro-code") {
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
+
+      const targetCode = typeof body.code === "string" ? body.code.trim() : "";
+      if (!targetCode) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, "api.admin.missingCode"),
+          },
+          { status: 400 }
+        );
+      }
+
+      const subjectId = computeProSubjectId(targetCode);
+      const revoked = await revokeProSubject(subjectId);
+      if (!revoked) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: translate(locale, "api.admin.revokeFailed"),
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        revoked: true,
+        subjectId,
+        message: translate(locale, "api.admin.proCodeRevoked"),
+      });
     }
 
     if (body.action === "update-business-config") {
@@ -501,7 +557,7 @@ export async function POST(request: Request) {
 
       await resetBudgetCaps();
       const { falKey, falBillingKey, geminiKey } =
-        await resolveAllDiagnostics();
+        await resolveAllDiagnostics(cookieHeader);
       const telemetry = await getAdminTelemetrySnapshot({
         falKey,
         falBillingKey,
@@ -527,7 +583,7 @@ export async function POST(request: Request) {
         typeof body.paused === "boolean" ? body.paused : undefined;
       await toggleEmergencyPause(explicitPause);
       const { falKey, falBillingKey, geminiKey } =
-        await resolveAllDiagnostics();
+        await resolveAllDiagnostics(cookieHeader);
       const telemetry = await getAdminTelemetrySnapshot({
         falKey,
         falBillingKey,
@@ -555,6 +611,7 @@ export async function POST(request: Request) {
       });
       res.cookies.delete(ADMIN_SESSION_COOKIE_NAME);
       res.cookies.delete(ENTITLEMENT_COOKIE_NAME);
+      res.cookies.delete(VAULT_COOKIE_NAME);
       return res;
     }
 
@@ -577,7 +634,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const existingVault = await getVaultStateFromCookie();
+      const existingVault = await getVaultStateFromCookie(cookieHeader);
       const mergedKeys: Partial<Record<SecretKeyName, string>> = {
         ...existingVault.secrets,
       };
@@ -769,13 +826,18 @@ export async function POST(request: Request) {
 
     const role: EntitlementRole = isOperator ? "operator" : "pro_client";
     const subjectId =
-      role === "pro_client"
-        ? crypto
-            .createHash("sha256")
-            .update(submitted.trim().toUpperCase())
-            .digest("hex")
-            .slice(0, 16)
-        : undefined;
+      role === "pro_client" ? computeProSubjectId(submitted) : undefined;
+    if (subjectId && (await isProSubjectRevoked(subjectId))) {
+      await recordFailedLogin(clientIp);
+      return NextResponse.json(
+        {
+          valid: false,
+          codeRevoked: true,
+          error: translate(locale, "api.admin.codeRevoked"),
+        },
+        { status: 401 }
+      );
+    }
     const response = NextResponse.json({
       valid: true,
       role,

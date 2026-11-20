@@ -12,6 +12,7 @@ export interface RateLimitStoreOptions {
 
 export interface RateLimitConsumeOptions {
   floorCount?: number;
+  maxAttempts?: number;
 }
 
 export interface RateLimitConsumeResult {
@@ -177,10 +178,14 @@ export class InMemoryRateLimitStore implements RateLimitStore {
         existing = undefined;
       }
 
+      const effectiveMaxAttempts =
+        options.maxAttempts !== undefined
+          ? Math.max(1, Math.floor(options.maxAttempts))
+          : this.maxAttempts;
       const floor = Math.max(0, Math.floor(options.floorCount ?? 0));
       const currentCount = Math.max(existing?.count ?? 0, floor);
 
-      if (currentCount >= this.maxAttempts) {
+      if (currentCount >= effectiveMaxAttempts) {
         return {
           allowed: false,
           count: currentCount,
@@ -350,9 +355,13 @@ export class UpstashRestRateLimitStore implements RateLimitStore {
     key: string,
     options: RateLimitConsumeOptions = {}
   ): Promise<RateLimitConsumeResult> {
+    const effectiveMaxAttempts =
+      options.maxAttempts !== undefined
+        ? Math.max(1, Math.floor(options.maxAttempts))
+        : this.maxAttempts;
     const floor = Math.max(0, Math.floor(options.floorCount ?? 0));
     const now = Date.now();
-    if (floor >= this.maxAttempts) {
+    if (floor >= effectiveMaxAttempts) {
       return {
         allowed: false,
         count: floor,
@@ -370,7 +379,7 @@ export class UpstashRestRateLimitStore implements RateLimitStore {
             TRY_CONSUME_LUA_SCRIPT,
             "1",
             redisKey,
-            String(this.maxAttempts),
+            String(effectiveMaxAttempts),
             String(this.windowMs),
             String(floor),
           ],
@@ -425,16 +434,16 @@ export class UpstashRestRateLimitStore implements RateLimitStore {
         Number.isFinite(rawTtl) && rawTtl > 0 ? rawTtl : this.windowMs;
       const resetAt = Date.now() + ttlMs;
 
-      if (count > this.maxAttempts) {
+      if (count > effectiveMaxAttempts) {
         return {
           allowed: false,
-          count: this.maxAttempts,
+          count: effectiveMaxAttempts,
           resetAt,
         };
       }
 
       if (floor > 0 && count <= floor) {
-        const syncedCount = Math.min(this.maxAttempts, floor + 1);
+        const syncedCount = Math.min(effectiveMaxAttempts, floor + 1);
         await this.runPipeline([
           ["SET", redisKey, String(syncedCount), "PX", String(ttlMs)],
         ]);
