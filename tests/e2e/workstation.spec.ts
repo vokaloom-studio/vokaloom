@@ -216,4 +216,387 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
     await expect(page.locator("#admin-master-password")).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
+
+  test("renders API Quota Meter & low-quota advisory banner without overflow in EN/ES and handles 429 cap cleanly without opening paywall", async ({
+    page,
+  }) => {
+    const lowSnapshot = {
+      window: "lifetime",
+      paidAiPaused: false,
+      stockLow: false,
+      hasAnyHardCap: true,
+      resources: {
+        image: { used: 0, limit: 1, remaining: 1, status: "low", resetAt: null },
+        audio: { used: 0, limit: 1, remaining: 1, status: "low", resetAt: null },
+        vision: {
+          used: 0,
+          limit: null,
+          remaining: null,
+          status: "healthy",
+          resetAt: null,
+        },
+      },
+      advisories: [
+        {
+          code: "image_cap_low",
+          severity: "warning",
+          resource: "image",
+          remaining: 1,
+          limit: 1,
+        },
+        {
+          code: "audio_cap_low",
+          severity: "warning",
+          resource: "audio",
+          remaining: 1,
+          limit: 1,
+        },
+      ],
+      updatedAt: Date.now(),
+    };
+
+    const exhaustedSnapshot = {
+      ...lowSnapshot,
+      resources: {
+        ...lowSnapshot.resources,
+        audio: {
+          used: 1,
+          limit: 1,
+          remaining: 0,
+          status: "exhausted",
+          resetAt: null,
+        },
+      },
+      advisories: [
+        {
+          code: "image_cap_low",
+          severity: "warning",
+          resource: "image",
+          remaining: 1,
+          limit: 1,
+        },
+        {
+          code: "audio_cap_exhausted",
+          severity: "critical",
+          resource: "audio",
+          remaining: 0,
+          limit: 1,
+        },
+      ],
+    };
+
+    await page.route("**/api/quota-status", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(lowSnapshot),
+      });
+    });
+
+    await page.route("**/api/voice", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Audio AI generation hard cap reached (1/1).",
+          capReached: true,
+          resource: "audio",
+          reason: "hard_cap",
+          budget: exhaustedSnapshot,
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+
+    await expect(page.getByTestId("quota-meter")).toBeVisible();
+    await expect(page.getByTestId("quota-meter-image")).toContainText("1/1");
+    await expect(page.getByTestId("quota-meter-audio")).toContainText("1/1");
+    await expect(page.getByTestId("quota-advisory-banner")).toBeVisible();
+
+    const desktopEnOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(desktopEnOverflow).toBe(false);
+
+    // Check Spanish + mobile 390x844 overflow with Quota Meter visible
+    await page.getByTestId("lang-es").click();
+    await expect(page.getByTestId("quota-advisory-banner")).toContainText(
+      /Cuota baja/i
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileEsOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(mobileEsOverflow).toBe(false);
+
+    await page.getByTestId("lang-en").click();
+    const mobileEnOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(mobileEnOverflow).toBe(false);
+
+    // Trigger 429 cap response on Voice Studio and verify meter updates without opening Paywall modal
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByTestId("tab-voice").click();
+    await page.getByTestId("btn-clone-toggle").click();
+    await page.getByTestId("btn-synthesize").click();
+
+    await expect(page.getByTestId("quota-meter-audio")).toContainText("0/1");
+    await expect(page.getByTestId("quota-advisory-banner")).toContainText(
+      /Audio AI cap reached/i
+    );
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("renders Admin Card 06 telemetry, durable warning badge, pause toggle & reset caps without overflow in EN/ES", async ({
+    page,
+  }) => {
+    let paused = false;
+    let imageUsed = 1;
+
+    const buildTelemetry = () => ({
+      storage: {
+        backend: "memory",
+        durable: false,
+        durableStoreWarning: true,
+        requireDurableStore: false,
+      },
+      config: {
+        window: "24h",
+        disablePaidModelFallback: true,
+        lowQuotaWarnRatio: 0.2,
+        falLowBalanceWarnUsd: 5,
+        falMinBalanceUsd: 1,
+        proClientDailyImageLimit: 25,
+        proClientDailyAudioLimit: 100,
+      },
+      emergencyPause: {
+        active: paused,
+        envForced: false,
+        runtimePaused: paused,
+      },
+      hardCaps: {
+        image: {
+          used: imageUsed,
+          limit: 1,
+          remaining: Math.max(0, 1 - imageUsed),
+          status: imageUsed >= 1 ? "exhausted" : "low",
+          resetAt: null,
+        },
+        audio: {
+          used: 0,
+          limit: 1,
+          remaining: 1,
+          status: "low",
+          resetAt: null,
+        },
+        vision: {
+          used: 0,
+          limit: null,
+          remaining: null,
+          status: "healthy",
+          resetAt: null,
+        },
+      },
+      fal: {
+        configured: true,
+        balance: {
+          currentBalance: 14.75,
+          currency: "USD",
+          permissionRestricted: false,
+          fetchedAt: Date.now(),
+        },
+        lowBalanceWarning: false,
+        belowMinFloor: false,
+        circuitBreaker: null,
+      },
+      stock: {
+        pexels: {
+          provider: "pexels",
+          limit: 200,
+          remaining: 192,
+          resetAt: Date.now() + 3600_000,
+          rateLimited: false,
+          updatedAt: Date.now(),
+        },
+        unsplash: {
+          provider: "unsplash",
+          limit: 50,
+          remaining: 45,
+          resetAt: null,
+          rateLimited: false,
+          updatedAt: Date.now(),
+        },
+      },
+      gemini: {
+        configured: true,
+        circuitBreaker: null,
+        usage: {
+          image: {
+            calls: 1,
+            promptTokens: 120,
+            candidatesTokens: 1290,
+            totalTokens: 1410,
+            estimatedUsd: 0.039,
+            lastCallAt: Date.now(),
+          },
+          audio: {
+            calls: 0,
+            promptTokens: 0,
+            candidatesTokens: 0,
+            totalTokens: 0,
+            estimatedUsd: 0,
+            lastCallAt: null,
+          },
+          vision: {
+            calls: 0,
+            promptTokens: 0,
+            candidatesTokens: 0,
+            totalTokens: 0,
+            estimatedUsd: 0,
+            lastCallAt: null,
+          },
+        },
+        totals: {
+          calls: 1,
+          promptTokens: 120,
+          candidatesTokens: 1290,
+          totalTokens: 1410,
+          estimatedUsd: 0.039,
+        },
+      },
+      publicSnapshot: {
+        window: "24h",
+        paidAiPaused: paused,
+        stockLow: false,
+        hasAnyHardCap: true,
+        resources: {
+          image: {
+            used: imageUsed,
+            limit: 1,
+            remaining: Math.max(0, 1 - imageUsed),
+            status: imageUsed >= 1 ? "exhausted" : "low",
+            resetAt: null,
+          },
+          audio: {
+            used: 0,
+            limit: 1,
+            remaining: 1,
+            status: "low",
+            resetAt: null,
+          },
+          vision: {
+            used: 0,
+            limit: null,
+            remaining: null,
+            status: "healthy",
+            resetAt: null,
+          },
+        },
+        advisories: [],
+        updatedAt: Date.now(),
+      },
+      generatedAt: Date.now(),
+    });
+
+    await page.route("**/api/admin*", async (route) => {
+      const req = route.request();
+      if (req.method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            authenticated: true,
+            health: {
+              geminiConfigured: true,
+              pexelsConfigured: true,
+              unsplashConfigured: true,
+              falConfigured: true,
+            },
+            maskedKeys: {
+              GEMINI_API_KEY: "AIza••••5678",
+              FAL_KEY: "fal_••••1234",
+            },
+            vipClientCodes: ["VOKALOOM-PRO-2026"],
+            telemetry: buildTelemetry(),
+          }),
+        });
+        return;
+      }
+
+      const body = JSON.parse(req.postData() || "{}") as { action?: string };
+      if (body.action === "toggle-emergency-pause") {
+        paused = !paused;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            paidAiPaused: paused,
+            telemetry: buildTelemetry(),
+          }),
+        });
+        return;
+      }
+
+      if (body.action === "reset-budget-caps") {
+        imageUsed = 0;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            telemetry: buildTelemetry(),
+          }),
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/admin");
+
+    const card6 = page.getByTestId("admin-card-telemetry");
+    await expect(card6).toBeVisible();
+    await expect(page.getByTestId("telemetry-durable-warning")).toBeVisible();
+    await expect(page.getByTestId("telemetry-fal-panel")).toContainText("$14.75");
+    await expect(page.getByTestId("telemetry-stock-panel")).toContainText(
+      "192 / 200"
+    );
+    await expect(page.getByTestId("telemetry-gemini-panel")).toContainText(
+      "1/1 used"
+    );
+
+    // Toggle Emergency Pause ON and Reset Caps
+    await page.getByTestId("btn-toggle-emergency-pause").click();
+    await expect(page.getByTestId("telemetry-paused-badge")).toBeVisible();
+
+    await page.getByTestId("btn-reset-budget-caps").click();
+    await expect(page.getByTestId("telemetry-gemini-panel")).toContainText(
+      "0/1 used"
+    );
+
+    const desktopOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(desktopOverflow).toBe(false);
+
+    // Check ES & 390x844 mobile viewport overflow
+    await page.getByTestId("lang-es").click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileEsOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(mobileEsOverflow).toBe(false);
+
+    await page.getByTestId("lang-en").click();
+    const mobileEnOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(mobileEnOverflow).toBe(false);
+  });
 });

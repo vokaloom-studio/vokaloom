@@ -38,6 +38,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# runtime budget ledger
+.vokaloom-budget-ledger.json
+.vokaloom-budget-ledger.json.tmp-*
+
 # vercel
 .vercel
 

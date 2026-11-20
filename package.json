@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:unit": "node --import ./tests/unit/tsconfig-loader.mjs --test tests/unit/budget-guard.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

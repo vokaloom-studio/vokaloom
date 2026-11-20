@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import {
+  getAdminTelemetrySnapshot,
+  resetBudgetCaps,
+  toggleEmergencyPause,
+} from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
 import {
@@ -141,12 +146,36 @@ async function resolveAllDiagnostics() {
     resolveApiKey("FAL_KEY"),
   ]);
 
-  return buildDiagnosticsFromValues({
-    GEMINI_API_KEY: gemini,
-    PEXELS_API_KEY: pexels,
-    UNSPLASH_ACCESS_KEY: unsplash,
-    FAL_KEY: fal,
-  });
+  return {
+    diagnostics: buildDiagnosticsFromValues({
+      GEMINI_API_KEY: gemini,
+      PEXELS_API_KEY: pexels,
+      UNSPLASH_ACCESS_KEY: unsplash,
+      FAL_KEY: fal,
+    }),
+    geminiKey: gemini,
+    falKey: fal,
+  };
+}
+
+function readCookieFromHeader(
+  cookieHeader: string | null,
+  name: string
+): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const pair of cookieHeader.split(";")) {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx <= 0) continue;
+    if (pair.slice(0, eqIdx).trim() === name) {
+      const raw = pair.slice(eqIdx + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+  }
+  return undefined;
 }
 
 type AdminAuthCheckResult =
@@ -172,8 +201,16 @@ async function authorizeAdminRequest(
   const bodyKey = typeof bodyAdminKey === "string" ? bodyAdminKey.trim() : "";
   const hasNonEmptyKey = headerKey.length > 0 || bodyKey.length > 0;
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+  let sessionCookie: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    sessionCookie = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
+  } catch {
+    sessionCookie = readCookieFromHeader(
+      request.headers.get("cookie"),
+      ADMIN_SESSION_COOKIE_NAME
+    );
+  }
   const hasValidSession = verifyAdminSessionToken(sessionCookie);
 
   if (!hasNonEmptyKey && hasValidSession) {
@@ -238,9 +275,12 @@ async function ensurePrivilegedAdminAccess(
 
 export async function GET(request: Request) {
   const locale = resolveRequestLocale(request);
+  const reqUrl = new URL(request.url);
+  const refreshFal = reqUrl.searchParams.get("refresh") === "1";
+  const cookieHeader = request.headers.get("cookie") ?? undefined;
   const [authResult, entitlement] = await Promise.all([
     authorizeAdminRequest(request),
-    resolveServerEntitlement(),
+    resolveServerEntitlement(cookieHeader),
   ]);
 
   if (!authResult.authorized && authResult.rateLimited) {
@@ -266,22 +306,35 @@ export async function GET(request: Request) {
   };
 
   if (!authResult.authorized) {
-    return NextResponse.json({
-      authenticated: false,
-      entitlement,
-      config: publicDefaults,
-      message: translate(locale, "api.admin.unauthenticated"),
-    });
+    return NextResponse.json(
+      {
+        authenticated: false,
+        entitlement,
+        config: publicDefaults,
+        message: translate(locale, "api.admin.unauthenticated"),
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
 
-  const diagnostics = await resolveAllDiagnostics();
-  return NextResponse.json({
-    authenticated: true,
-    entitlement,
-    config: publicDefaults,
-    message: translate(locale, "api.admin.authenticated"),
-    ...diagnostics,
+  const { diagnostics, falKey, geminiKey } = await resolveAllDiagnostics();
+  const telemetry = await getAdminTelemetrySnapshot({
+    falKey,
+    geminiKey,
+    refreshFal,
   });
+
+  return NextResponse.json(
+    {
+      authenticated: true,
+      entitlement,
+      config: publicDefaults,
+      message: translate(locale, "api.admin.authenticated"),
+      ...diagnostics,
+      telemetry,
+    },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -294,15 +347,70 @@ export async function POST(request: Request) {
         | "admin-login"
         | "admin-logout"
         | "update-keys"
-        | "clear-vault";
+        | "clear-vault"
+        | "reset-budget-caps"
+        | "toggle-emergency-pause";
       code?: string;
       adminKey?: string;
       keys?: Partial<Record<SecretKeyName, string>>;
       removeFromDisk?: boolean;
+      paused?: boolean;
       locale?: unknown;
     };
     if (body.locale !== undefined) {
       locale = resolveRequestLocale(request, body.locale);
+    }
+
+    if (body.action === "reset-budget-caps") {
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
+
+      await resetBudgetCaps();
+      const { falKey, geminiKey } = await resolveAllDiagnostics();
+      const telemetry = await getAdminTelemetrySnapshot({
+        falKey,
+        geminiKey,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: translate(locale, "api.admin.budgetReset"),
+        telemetry,
+      });
+    }
+
+    if (body.action === "toggle-emergency-pause") {
+      const authError = await ensurePrivilegedAdminAccess(
+        request,
+        locale,
+        body.adminKey
+      );
+      if (authError) return authError;
+
+      const explicitPause =
+        typeof body.paused === "boolean" ? body.paused : undefined;
+      await toggleEmergencyPause(explicitPause);
+      const { falKey, geminiKey } = await resolveAllDiagnostics();
+      const telemetry = await getAdminTelemetrySnapshot({
+        falKey,
+        geminiKey,
+      });
+
+      return NextResponse.json({
+        success: true,
+        paidAiPaused: telemetry.emergencyPause.active,
+        message: translate(
+          locale,
+          telemetry.emergencyPause.active
+            ? "api.admin.emergencyPaused"
+            : "api.admin.emergencyResumed"
+        ),
+        telemetry,
+      });
     }
 
     if (body.action === "admin-logout") {

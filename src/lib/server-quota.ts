@@ -13,6 +13,7 @@ import {
   getVerifiedTrialUsageFromCookie,
   resolveServerEntitlement,
   signTrialToken,
+  type EntitlementRole,
 } from "@/lib/server-secrets";
 
 export const MAX_GUEST_TRIAL_CREDITS = 3;
@@ -55,6 +56,8 @@ export type ServerQuotaEnforcementResult =
   | {
       allowed: true;
       isPro: boolean;
+      isOperator: boolean;
+      role: EntitlementRole | "guest";
       trialCookieToken?: string;
       resetAt?: number;
     }
@@ -85,7 +88,12 @@ export async function enforceServerGenerationQuota(
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const entitlement = await resolveServerEntitlement(cookieHeader);
   if (entitlement.isPro) {
-    return { allowed: true, isPro: true };
+    return {
+      allowed: true,
+      isPro: true,
+      isOperator: entitlement.isOperator,
+      role: entitlement.role,
+    };
   }
 
   const now = Date.now();
@@ -118,6 +126,8 @@ export async function enforceServerGenerationQuota(
   return {
     allowed: true,
     isPro: false,
+    isOperator: false,
+    role: "guest",
     trialCookieToken,
     resetAt,
   };

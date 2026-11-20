@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { createFalClient, type FalClient } from "@fal-ai/client";
 import { GoogleGenAI } from "@google/genai";
+import {
+  getBudgetCapErrorMessage,
+  getCachedFalBalanceStatus,
+  getPublicQuotaSnapshot,
+  invalidateFalBalanceCache,
+  isPaidModelFallbackDisabled,
+  isProviderCircuitBroken,
+  isUpstreamExhaustionError,
+  recordGeminiUsage,
+  recordProviderExhaustion,
+  refreshFalBalanceSnapshotAsync,
+  reservePaidGenerationSlot,
+} from "@/lib/budget-guard";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import {
   MalformedJsonBodyError,
@@ -377,8 +391,83 @@ export async function POST(request: Request) {
       ? createFalClient({ credentials: falKey })
       : null;
 
+    if (!falClient && !geminiKey) {
+      // Mode C: Zero-Key Instant Offline Fallback
+      const synth = synthesizePlayableWavDataUri(
+        text,
+        voiceId,
+        Boolean(validatedReferenceAudio)
+      );
+      return withQuotaCookie(
+        NextResponse.json({
+          audioUrl: synth.dataUri,
+          engine: translate(locale, "api.voice.demoFallbackEngine"),
+          language,
+          durationMs: synth.durationMs,
+          isFallback: true,
+          budget: await getPublicQuotaSnapshot(),
+        })
+      );
+    }
+
+    const fallbackDisabled = isPaidModelFallbackDisabled();
+    const [falBalanceStatus, falBroken, geminiBroken] = await Promise.all([
+      falClient
+        ? getCachedFalBalanceStatus()
+        : Promise.resolve({
+            known: false,
+            belowMinFloor: false,
+            lowWarning: false,
+            snapshot: null,
+          }),
+      falClient ? isProviderCircuitBroken("fal") : Promise.resolve(false),
+      geminiKey ? isProviderCircuitBroken("gemini") : Promise.resolve(false),
+    ]);
+
+    const canUseFal =
+      Boolean(falClient) && !falBroken && !falBalanceStatus.belowMinFloor;
+    const canUseGeminiFallback =
+      Boolean(geminiKey) &&
+      !geminiBroken &&
+      (!falClient || (!fallbackDisabled && !validatedReferenceAudio));
+
+    const providerUnavailableReason =
+      !canUseFal && !canUseGeminiFallback
+        ? falClient &&
+          falBalanceStatus.belowMinFloor &&
+          (!geminiKey || fallbackDisabled || Boolean(validatedReferenceAudio))
+          ? "fal_min_balance"
+          : "circuit_breaker"
+        : undefined;
+
+    const reservation = await reservePaidGenerationSlot("audio", {
+      role: quota.role,
+      userKey: getRateLimitClientKey(request).key,
+      providerUnavailableReason,
+    });
+    if (!reservation.allowed) {
+      const budget = await getPublicQuotaSnapshot();
+      const status = reservation.statusCode ?? 429;
+      return withQuotaCookie(
+        NextResponse.json(
+          {
+            error: getBudgetCapErrorMessage(locale, reservation),
+            capReached: status !== 503,
+            durableStoreUnavailable: status === 503,
+            resource: "audio",
+            reason: reservation.reason,
+            budget,
+          },
+          { status }
+        )
+      );
+    }
+
+    let falAttempted = false;
+
     // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
-    if (validatedReferenceAudio && falClient) {
+    if (validatedReferenceAudio && falClient && canUseFal) {
+      falAttempted = true;
       try {
         const result = await subscribeFalWithTimeout(
           falClient,
@@ -395,6 +484,10 @@ export async function POST(request: Request) {
         );
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
+          await invalidateFalBalanceCache();
+          if (falKey) {
+            refreshFalBalanceSnapshotAsync(falKey);
+          }
           return withQuotaCookie(
             NextResponse.json({
               audioUrl,
@@ -402,6 +495,7 @@ export async function POST(request: Request) {
               language,
               durationMs: Date.now() - startTime,
               isFallback: false,
+              budget: await getPublicQuotaSnapshot(),
             })
           );
         }
@@ -409,12 +503,21 @@ export async function POST(request: Request) {
         if (request.signal?.aborted) {
           throw err;
         }
-        console.warn("F5-TTS live call failed, trying next engine:", err);
+        const exhaustion = isUpstreamExhaustionError(err);
+        if (exhaustion.exhausted) {
+          await recordProviderExhaustion(
+            "fal",
+            exhaustion.statusCode,
+            exhaustion.reason
+          );
+        }
+        console.warn("F5-TTS live call failed:", err);
       }
     }
 
     // Mode B: Standard Realistic TTS via Apache-2.0 Kokoro-82M
-    if (!validatedReferenceAudio && falClient) {
+    if (!validatedReferenceAudio && falClient && canUseFal) {
+      falAttempted = true;
       try {
         const result =
           language === "es"
@@ -449,6 +552,10 @@ export async function POST(request: Request) {
               );
         const audioUrl = extractFalAudioUrl(result);
         if (audioUrl) {
+          await invalidateFalBalanceCache();
+          if (falKey) {
+            refreshFalBalanceSnapshotAsync(falKey);
+          }
           return withQuotaCookie(
             NextResponse.json({
               audioUrl,
@@ -456,6 +563,7 @@ export async function POST(request: Request) {
               language,
               durationMs: Date.now() - startTime,
               isFallback: false,
+              budget: await getPublicQuotaSnapshot(),
             })
           );
         }
@@ -463,12 +571,25 @@ export async function POST(request: Request) {
         if (request.signal?.aborted) {
           throw err;
         }
-        console.warn("Kokoro-82M live call failed, trying Gemini TTS:", err);
+        const exhaustion = isUpstreamExhaustionError(err);
+        if (exhaustion.exhausted) {
+          await recordProviderExhaustion(
+            "fal",
+            exhaustion.statusCode,
+            exhaustion.reason
+          );
+        }
+        console.warn("Kokoro-82M live call failed:", err);
       }
     }
 
     // Mode B2: Gemini 2.5 Flash Native Neural TTS via GEMINI_API_KEY
-    if (geminiKey) {
+    // Never fall through from Fal to Gemini when DISABLE_PAID_MODEL_FALLBACK is active.
+    if (
+      geminiKey &&
+      !geminiBroken &&
+      (!falAttempted || (!fallbackDisabled && !validatedReferenceAudio))
+    ) {
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const voiceName =
@@ -512,6 +633,8 @@ export async function POST(request: Request) {
           },
         });
 
+        await recordGeminiUsage("audio", response.usageMetadata);
+
         const base64Pcm =
           response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (base64Pcm) {
@@ -528,11 +651,26 @@ export async function POST(request: Request) {
               language,
               durationMs,
               isFallback: false,
+              budget: await getPublicQuotaSnapshot(),
             })
           );
         }
       } catch (err) {
-        console.warn("Gemini 2.5 Native TTS call failed, falling back to demo synth:", err);
+        if (request.signal?.aborted) {
+          throw err;
+        }
+        const exhaustion = isUpstreamExhaustionError(err);
+        if (exhaustion.exhausted) {
+          await recordProviderExhaustion(
+            "gemini",
+            exhaustion.statusCode,
+            exhaustion.reason
+          );
+        }
+        console.warn(
+          "Gemini 2.5 Native TTS call failed, falling back to demo synth:",
+          err
+        );
       }
     }
 
@@ -549,6 +687,7 @@ export async function POST(request: Request) {
         language,
         durationMs: synth.durationMs,
         isFallback: true,
+        budget: await getPublicQuotaSnapshot(),
       })
     );
   } catch (error) {

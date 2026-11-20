@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import {
+  getBudgetCapErrorMessage,
+  getPublicQuotaSnapshot,
+  isPaidModelFallbackDisabled,
+  isUpstreamExhaustionError,
+  recordGeminiUsage,
+  recordProviderExhaustion,
+  reservePaidGenerationSlot,
+} from "@/lib/budget-guard";
+import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
 import {
   MalformedJsonBodyError,
@@ -147,7 +157,31 @@ export async function POST(request: Request) {
           fallbackComposite: true,
           engine: translate(locale, "api.modelSwap.fallbackEngine"),
           isFallback: true,
+          budget: await getPublicQuotaSnapshot(),
         })
+      );
+    }
+
+    const reservation = await reservePaidGenerationSlot("image", {
+      role: quota.role,
+      userKey: getRateLimitClientKey(request).key,
+      providers: ["gemini"],
+    });
+    if (!reservation.allowed) {
+      const budget = await getPublicQuotaSnapshot();
+      const status = reservation.statusCode ?? 429;
+      return withQuotaCookie(
+        NextResponse.json(
+          {
+            error: getBudgetCapErrorMessage(locale, reservation),
+            capReached: status !== 503,
+            durableStoreUnavailable: status === 503,
+            resource: "image",
+            reason: reservation.reason,
+            budget,
+          },
+          { status }
+        )
       );
     }
 
@@ -170,6 +204,7 @@ export async function POST(request: Request) {
             fallbackComposite: true,
             engine: translate(locale, "api.modelSwap.fallbackEngine"),
             isFallback: true,
+            budget: await getPublicQuotaSnapshot(),
           })
         );
       }
@@ -238,6 +273,8 @@ export async function POST(request: Request) {
       },
     ];
 
+    const fallbackDisabled = isPaidModelFallbackDisabled();
+
     // Primary: gemini-2.5-flash-image
     try {
       const response = await ai.models.generateContent({
@@ -252,6 +289,8 @@ export async function POST(request: Request) {
         },
       });
 
+      await recordGeminiUsage("image", response.usageMetadata);
+
       const generated = extractImagePart(response);
       if (generated) {
         return withQuotaCookie(
@@ -259,6 +298,20 @@ export async function POST(request: Request) {
             resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
             engine: translate(locale, "api.modelSwap.geminiEngine"),
             isFallback: false,
+            budget: await getPublicQuotaSnapshot(),
+          })
+        );
+      }
+
+      if (fallbackDisabled) {
+        return withQuotaCookie(
+          NextResponse.json({
+            resultImageUrl: null,
+            fallbackComposite: true,
+            engine: translate(locale, "api.modelSwap.fallbackEngine"),
+            isFallback: true,
+            fallbackBlocked: true,
+            budget: await getPublicQuotaSnapshot(),
           })
         );
       }
@@ -266,35 +319,68 @@ export async function POST(request: Request) {
       if (request.signal?.aborted) {
         throw primaryErr;
       }
+      const exhaustion = isUpstreamExhaustionError(primaryErr);
+      if (exhaustion.exhausted) {
+        await recordProviderExhaustion(
+          "gemini",
+          exhaustion.statusCode,
+          exhaustion.reason
+        );
+      }
       console.warn(
-        "gemini-2.5-flash-image failed, trying fallback model:",
+        "gemini-2.5-flash-image failed:",
         primaryErr
       );
-    }
-
-    // Fallback: gemini-2.0-flash-exp-image-generation
-    try {
-      const fallbackResponse = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp-image-generation",
-        contents,
-        config: {
-          abortSignal: createGeminiAbortSignal(),
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-      });
-
-      const generated = extractImagePart(fallbackResponse);
-      if (generated) {
+      if (fallbackDisabled || exhaustion.exhausted) {
         return withQuotaCookie(
           NextResponse.json({
-            resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
-            engine: translate(locale, "api.modelSwap.geminiEngine"),
-            isFallback: false,
+            resultImageUrl: null,
+            fallbackComposite: true,
+            engine: translate(locale, "api.modelSwap.fallbackEngine"),
+            isFallback: true,
+            fallbackBlocked: true,
+            budget: await getPublicQuotaSnapshot(),
           })
         );
       }
-    } catch (fallbackErr) {
-      console.warn("gemini-2.0-flash-exp-image-generation failed:", fallbackErr);
+    }
+
+    // Fallback: gemini-2.0-flash-exp-image-generation
+    if (!fallbackDisabled) {
+      try {
+        const fallbackResponse = await ai.models.generateContent({
+          model: "gemini-2.0-flash-exp-image-generation",
+          contents,
+          config: {
+            abortSignal: createGeminiAbortSignal(),
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        });
+
+        await recordGeminiUsage("image", fallbackResponse.usageMetadata);
+
+        const generated = extractImagePart(fallbackResponse);
+        if (generated) {
+          return withQuotaCookie(
+            NextResponse.json({
+              resultImageUrl: `data:${generated.mimeType};base64,${generated.data}`,
+              engine: translate(locale, "api.modelSwap.geminiEngine"),
+              isFallback: false,
+              budget: await getPublicQuotaSnapshot(),
+            })
+          );
+        }
+      } catch (fallbackErr) {
+        const exhaustion = isUpstreamExhaustionError(fallbackErr);
+        if (exhaustion.exhausted) {
+          await recordProviderExhaustion(
+            "gemini",
+            exhaustion.statusCode,
+            exhaustion.reason
+          );
+        }
+        console.warn("gemini-2.0-flash-exp-image-generation failed:", fallbackErr);
+      }
     }
 
     return withQuotaCookie(
@@ -303,6 +389,7 @@ export async function POST(request: Request) {
         fallbackComposite: true,
         engine: translate(locale, "api.modelSwap.fallbackEngine"),
         isFallback: true,
+        budget: await getPublicQuotaSnapshot(),
       })
     );
   } catch (error) {

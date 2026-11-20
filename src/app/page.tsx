@@ -16,10 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BackgroundFinder } from "@/components/background-finder";
 import { VoiceStudio } from "@/components/voice-studio";
 import { PaywallModal } from "@/components/paywall-modal";
+import { QuotaMeter } from "@/components/quota-meter";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
+import type { PublicQuotaSnapshot } from "@/lib/budget-types";
 import { getStoredClientLocale, translate } from "@/lib/i18n";
 import {
+  BUDGET_UPDATED_EVENT,
   getQuotaState,
   hasOperatorAccess,
   hasProAccess,
@@ -45,10 +48,13 @@ export default function VokaloomStudioPage() {
   });
   const [activeTab, setActiveTab] = useState<string>("backgrounds");
   const [isPaywallOpen, setIsPaywallOpen] = useState<boolean>(false);
+  const [budgetSnapshot, setBudgetSnapshot] =
+    useState<PublicQuotaSnapshot | null>(null);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
+    let active = true;
     queueMicrotask(() => {
       const currentLocale = getStoredClientLocale();
       const params = new URLSearchParams(window.location.search);
@@ -57,6 +63,7 @@ export default function VokaloomStudioPage() {
       if (keyParam) {
         void verifyAndActivateAccessCode(keyParam, currentLocale).then(
           (res) => {
+            if (!active) return;
             if (res.success) {
               setQuota(res.state);
               toast.success(
@@ -72,6 +79,17 @@ export default function VokaloomStudioPage() {
       }
     });
 
+    fetch("/api/quota-status", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((snap: PublicQuotaSnapshot | null) => {
+        if (active && snap && snap.resources) {
+          setBudgetSnapshot(snap);
+        }
+      })
+      .catch(() => {
+        // Ignore transient status fetch failure
+      });
+
     const handleQuotaUpdate = (event: Event) => {
       const customEvent = event as CustomEvent<QuotaState>;
       if (customEvent.detail) {
@@ -81,15 +99,25 @@ export default function VokaloomStudioPage() {
       }
     };
 
+    const handleBudgetUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<PublicQuotaSnapshot>;
+      if (customEvent.detail && customEvent.detail.resources) {
+        setBudgetSnapshot(customEvent.detail);
+      }
+    };
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
     window.addEventListener(QUOTA_UPDATED_EVENT, handleQuotaUpdate);
+    window.addEventListener(BUDGET_UPDATED_EVENT, handleBudgetUpdate);
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     return () => {
+      active = false;
       window.removeEventListener(QUOTA_UPDATED_EVENT, handleQuotaUpdate);
+      window.removeEventListener(BUDGET_UPDATED_EVENT, handleBudgetUpdate);
       window.removeEventListener(
         "beforeinstallprompt",
         handleBeforeInstallPrompt
@@ -298,6 +326,7 @@ export default function VokaloomStudioPage() {
 
         {/* Main Studio Workspace */}
         <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 lg:py-5">
+          <QuotaMeter snapshot={budgetSnapshot} />
           <TabsContent value="backgrounds" className="studio-tab-panel mt-0 flex-1">
             <BackgroundFinder
               onRequirePaywall={() => setIsPaywallOpen(true)}

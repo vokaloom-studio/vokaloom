@@ -1,9 +1,21 @@
 import { LOCALE_HEADER, type Locale } from "@/lib/i18n";
+import type { PublicQuotaSnapshot } from "@/lib/budget-types";
 
 export const QUOTA_STORAGE_KEY = "vokaloom_quota_v1";
 export const BUSINESS_CONFIG_STORAGE_KEY = "vokaloom_business_config_v1";
 export const DEFAULT_TRIAL_CREDITS = 3;
 export const QUOTA_UPDATED_EVENT = "vokaloom-quota-updated";
+export const BUDGET_UPDATED_EVENT = "vokaloom-budget-updated";
+
+export function dispatchBudgetUpdated(snapshot: PublicQuotaSnapshot): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<PublicQuotaSnapshot>(BUDGET_UPDATED_EVENT, {
+        detail: snapshot,
+      })
+    );
+  }
+}
 
 export interface QuotaState {
   creditsRemaining: number;
@@ -415,4 +427,27 @@ export function reconcileServerQuotaExhausted(payload?: {
     role: "guest",
   };
   return saveQuotaState(reconciled);
+}
+
+/**
+ * Refunds an optimistically-consumed client trial credit when an API call is
+ * blocked by an operator hard cap, emergency pause, or upstream circuit breaker (HTTP 429/503).
+ */
+export function refundClientCreditOnCap(): QuotaState {
+  const current = getQuotaState();
+  const nextTotal = Math.max(0, current.totalGenerations - 1);
+  if (hasProAccess(current)) {
+    return saveQuotaState({
+      ...current,
+      totalGenerations: nextTotal,
+    });
+  }
+  return saveQuotaState({
+    ...current,
+    creditsRemaining: Math.min(
+      current.maxTrialCredits,
+      current.creditsRemaining + 1
+    ),
+    totalGenerations: nextTotal,
+  });
 }

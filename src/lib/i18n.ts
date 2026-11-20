@@ -430,6 +430,103 @@ const en = {
   "api.admin.noKeysProvided": "No key updates were provided.",
   "api.admin.vaultUpdated": "API Key Vault encrypted and updated.",
   "api.admin.vaultCleared": "API Key Vault cookie cleared.",
+  "api.admin.budgetReset": "Hard-cap counters and circuit breakers reset.",
+  "api.admin.emergencyPaused": "Paid AI emergency pause activated.",
+  "api.admin.emergencyResumed": "Paid AI emergency pause lifted.",
+
+  // Budget Guard & Quota Telemetry (API + Public Meter + Admin Card 06)
+  "api.budget.resource.image": "Image",
+  "api.budget.resource.audio": "Audio",
+  "api.budget.resource.vision": "Vision",
+  "api.budget.hardCapReached":
+    "{resource} AI generation hard cap reached ({used}/{limit}). Wait for reset or ask the operator to raise/reset limits.",
+  "api.budget.proDailyCapReached":
+    "Pro Pass daily {resource} fair-use limit reached ({used}/{limit}). Your quota resets automatically in 24 hours.",
+  "api.budget.emergencyPaused":
+    "Paid AI generations are temporarily paused by the workspace operator.",
+  "api.budget.circuitBroken":
+    "Upstream AI provider is in temporary cooldown after rate-limit or credit exhaustion. Please retry shortly.",
+  "api.budget.falMinBalance":
+    "Voice AI provider reserve floor reached; live Fal.ai generation is temporarily paused.",
+  "api.budget.durableStoreUnavailable":
+    "Server budget guard requires a shared Redis store in production.",
+  "api.budget.visionCapNotice":
+    "Gemini Vision cap or cooldown active — matched backgrounds using keyword search instead.",
+
+  "budget.meter.title": "API Quota",
+  "budget.meter.window.lifetime": "LIFETIME",
+  "budget.meter.window.24h": "24H",
+  "budget.meter.window.30d": "30D",
+  "budget.meter.pausedBadge": "PAUSED",
+  "budget.meter.imgShort": "IMG",
+  "budget.meter.audShort": "AUD",
+  "budget.meter.visShort": "VIS",
+  "budget.meter.slotTitle": "{label}: {remaining} of {limit} live runs remaining",
+  "budget.meter.advisory.paused":
+    "Paid AI generations are paused by the operator. Curated 9:16 backgrounds and local previews remain available.",
+  "budget.meter.advisory.imageExhausted":
+    "Image AI cap reached (0/{limit} left). New live AI model placements are paused until reset.",
+  "budget.meter.advisory.imageLow":
+    "Low Image AI quota: {remaining} of {limit} live placement run(s) left before cap lock.",
+  "budget.meter.advisory.audioExhausted":
+    "Audio AI cap reached (0/{limit} left). New live voiceovers are paused until reset.",
+  "budget.meter.advisory.audioLow":
+    "Low Audio AI quota: {remaining} of {limit} live voiceover run(s) left before cap lock.",
+  "budget.meter.advisory.visionExhausted":
+    "Vision AI cap reached (0/{limit} left). Reference image uploads will use keyword search.",
+  "budget.meter.advisory.visionLow":
+    "Low Vision AI quota: {remaining} of {limit} reference match run(s) left.",
+  "budget.meter.advisory.stockLow":
+    "Stock photo API rate limit is running low or throttled. Curated 9:16 archive fallback will top up batches automatically.",
+  "budget.meter.advisory.circuitBroken":
+    "Upstream AI provider cooldown is active after a 429/402 response. Live AI calls will resume automatically after cooldown.",
+  "budget.meter.advisory.providerLowBalance":
+    "Voice AI provider capacity is running low; live synthesis availability may become restricted soon.",
+  "budget.meter.advisory.providerFloor":
+    "Voice AI provider safety floor reached; live Fal.ai calls are temporarily protected.",
+  "budget.toast.capReached":
+    "Live AI generation limit reached. Check the API Quota banner for remaining capacity.",
+
+  "admin.card6Title": "6. Live API Quota, Spend & Hard-Cap Telemetry",
+  "admin.card6Desc":
+    "Monitor upstream credit balances, stock rate-limit headers, Gemini token spend, circuit breakers, and role-agnostic hard caps.",
+  "admin.telemetry.storageRedis": "Store: Shared Redis",
+  "admin.telemetry.storageFile": "Store: Local File Ledger",
+  "admin.telemetry.storageMemory": "Store: In-Memory",
+  "admin.telemetry.durableWarningBadge":
+    "Warning: Production running without shared Redis store",
+  "admin.telemetry.pauseButton": "Emergency Pause Paid AI",
+  "admin.telemetry.resumeButton": "Resume Paid AI",
+  "admin.telemetry.envPausedNote":
+    "Forced active via PAID_AI_EMERGENCY_PAUSE environment variable",
+  "admin.telemetry.resetCapsButton": "Reset Cap Counters",
+  "admin.telemetry.activePauseBadge": "PAID AI PAUSED",
+  "admin.telemetry.falTitle": "Fal.ai Billing Balance & Guard",
+  "admin.telemetry.falUnconfigured": "FAL_KEY not configured",
+  "admin.telemetry.falPermissionRestricted":
+    "Permission Restricted (HTTP 403) — billing read scope required on key",
+  "admin.telemetry.falBalanceUnavailable": "Balance snapshot unavailable",
+  "admin.telemetry.falThresholds":
+    "Warn <= ${warn} · Hard floor <= ${min}",
+  "admin.telemetry.stockTitle": "Stock APIs (Pexels & Unsplash)",
+  "admin.telemetry.stockAwaiting": "Awaiting first live request headers",
+  "admin.telemetry.stockRemaining": "{remaining} / {limit} remaining",
+  "admin.telemetry.stockRateLimited": "429 Rate Limited",
+  "admin.telemetry.stockResetAt": "Resets at {time}",
+  "admin.telemetry.geminiTitle": "Gemini Usage, Spend & Hard Caps",
+  "admin.telemetry.geminiTotals":
+    "{calls} calls · {tokens} tokens · ~${usd} USD",
+  "admin.telemetry.geminiResourceRow":
+    "{calls} calls · {tokens} tok · ~${usd}",
+  "admin.telemetry.circuitHealthy": "Circuit: Healthy",
+  "admin.telemetry.circuitTripped": "Circuit: Tripped until {time}",
+  "admin.telemetry.capUsedUnlimited": "{used} used · Unlimited",
+  "admin.telemetry.capUsedLimited": "{used}/{limit} used ({remaining} left)",
+  "admin.telemetry.toast.paused": "Emergency pause activated for all paid AI calls.",
+  "admin.telemetry.toast.resumed": "Paid AI generations resumed.",
+  "admin.telemetry.toast.reset": "Hard-cap counters and circuit breakers reset.",
+  "admin.telemetry.toast.actionError":
+    "Could not update telemetry controls.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -877,6 +974,108 @@ const es: Record<TranslationKey, string> = {
   "api.admin.noKeysProvided": "No se enviaron actualizaciones de claves.",
   "api.admin.vaultUpdated": "Bóveda de claves API cifrada y actualizada.",
   "api.admin.vaultCleared": "Cookie de bóveda de claves API eliminada.",
+  "api.admin.budgetReset":
+    "Contadores de tope duro y cortacircuitos reiniciados.",
+  "api.admin.emergencyPaused": "Pausa de emergencia de IA de pago activada.",
+  "api.admin.emergencyResumed": "Pausa de emergencia de IA de pago levantada.",
+
+  // Budget Guard & Quota Telemetry (API + Public Meter + Admin Card 06)
+  "api.budget.resource.image": "Imagen",
+  "api.budget.resource.audio": "Audio",
+  "api.budget.resource.vision": "Vision",
+  "api.budget.hardCapReached":
+    "Se alcanzó el tope máximo de generación IA de {resource} ({used}/{limit}). Espera el reinicio o pide al operador ampliar/reiniciar los límites.",
+  "api.budget.proDailyCapReached":
+    "Se alcanzó el límite diario de uso justo de {resource} del Pase Pro ({used}/{limit}). Tu cuota se reinicia automáticamente en 24 horas.",
+  "api.budget.emergencyPaused":
+    "Las generaciones IA de pago están pausadas temporalmente por el operador del estudio.",
+  "api.budget.circuitBroken":
+    "El proveedor IA está en enfriamiento temporal tras alcanzar límite de tasa o saldo. Reintenta en unos minutos.",
+  "api.budget.falMinBalance":
+    "Se alcanzó el piso de reserva del proveedor de voz; las llamadas en vivo a Fal.ai están protegidas temporalmente.",
+  "api.budget.durableStoreUnavailable":
+    "El guardián de presupuesto del servidor requiere un almacén Redis compartido en producción.",
+  "api.budget.visionCapNotice":
+    "Tope o enfriamiento de Gemini Vision activo — se buscaron fondos usando palabras clave.",
+
+  "budget.meter.title": "Cuota API",
+  "budget.meter.window.lifetime": "TOTAL",
+  "budget.meter.window.24h": "24H",
+  "budget.meter.window.30d": "30D",
+  "budget.meter.pausedBadge": "PAUSADO",
+  "budget.meter.imgShort": "IMG",
+  "budget.meter.audShort": "AUD",
+  "budget.meter.visShort": "VIS",
+  "budget.meter.slotTitle":
+    "{label}: {remaining} de {limit} ejecuciones en vivo disponibles",
+  "budget.meter.advisory.paused":
+    "Las generaciones IA de pago están pausadas por el operador. Los fondos curados 9:16 y vistas previas locales siguen disponibles.",
+  "budget.meter.advisory.imageExhausted":
+    "Tope de IA de Imagen alcanzado (0/{limit} rest.). Las composiciones neurales están pausadas hasta el reinicio.",
+  "budget.meter.advisory.imageLow":
+    "Cuota baja de IA de Imagen: queda(n) {remaining} de {limit} ejecución(es) en vivo antes del bloqueo.",
+  "budget.meter.advisory.audioExhausted":
+    "Tope de IA de Audio alcanzado (0/{limit} rest.). Las nuevas locuciones en vivo están pausadas hasta el reinicio.",
+  "budget.meter.advisory.audioLow":
+    "Cuota baja de IA de Audio: queda(n) {remaining} de {limit} locución(es) en vivo antes del bloqueo.",
+  "budget.meter.advisory.visionExhausted":
+    "Tope de IA Vision alcanzado (0/{limit} rest.). Las referencias usarán búsqueda por palabras clave.",
+  "budget.meter.advisory.visionLow":
+    "Cuota baja de IA Vision: queda(n) {remaining} de {limit} análisis de referencia restante(s).",
+  "budget.meter.advisory.stockLow":
+    "La cuota de búsqueda de fotos Stock (Pexels/Unsplash) está baja o limitada. El archivo curado 9:16 completará los lotes.",
+  "budget.meter.advisory.circuitBroken":
+    "Enfriamiento del proveedor IA activo tras respuesta 429/402. Las llamadas en vivo se reanudarán automáticamente tras la espera.",
+  "budget.meter.advisory.providerLowBalance":
+    "La capacidad del proveedor de voz IA está baja; la síntesis en vivo podría restringirse pronto.",
+  "budget.meter.advisory.providerFloor":
+    "Se alcanzó el piso de reserva del proveedor de voz IA; las llamadas Fal.ai en vivo están protegidas.",
+  "budget.toast.capReached":
+    "Se alcanzó el límite de generación IA en vivo. Revisa el aviso de Cuota API para ver la capacidad restante.",
+
+  "admin.card6Title": "6. Cuota API en Vivo, Gasto y Telemetría de Topes",
+  "admin.card6Desc":
+    "Monitorea saldos en vivo, cabeceras de límite Stock, consumo de tokens Gemini, cortacircuitos y topes duros sin distinción de rol.",
+  "admin.telemetry.storageRedis": "Almacén: Redis Compartido",
+  "admin.telemetry.storageFile": "Almacén: Libro Local en Archivo",
+  "admin.telemetry.storageMemory": "Almacén: En Memoria",
+  "admin.telemetry.durableWarningBadge":
+    "Advertencia: Producción ejecutándose sin almacén Redis compartido",
+  "admin.telemetry.pauseButton": "Pausa de Emergencia IA",
+  "admin.telemetry.resumeButton": "Reanudar IA de Pago",
+  "admin.telemetry.envPausedNote":
+    "Forzada por la variable de entorno PAID_AI_EMERGENCY_PAUSE",
+  "admin.telemetry.resetCapsButton": "Reiniciar Contadores de Tope",
+  "admin.telemetry.activePauseBadge": "IA DE PAGO PAUSADA",
+  "admin.telemetry.falTitle": "Saldo de Fal.ai y Guardia",
+  "admin.telemetry.falUnconfigured": "FAL_KEY sin configurar",
+  "admin.telemetry.falPermissionRestricted":
+    "Permiso Restringido (HTTP 403) — la clave requiere alcance de facturación",
+  "admin.telemetry.falBalanceUnavailable": "Saldo no disponible",
+  "admin.telemetry.falThresholds":
+    "Aviso <= ${warn} · Piso duro <= ${min}",
+  "admin.telemetry.stockTitle": "APIs Stock (Pexels y Unsplash)",
+  "admin.telemetry.stockAwaiting":
+    "Esperando cabeceras de la primera consulta en vivo",
+  "admin.telemetry.stockRemaining": "{remaining} / {limit} restantes",
+  "admin.telemetry.stockRateLimited": "429 Límite Alcanzado",
+  "admin.telemetry.stockResetAt": "Reinicia a las {time}",
+  "admin.telemetry.geminiTitle": "Uso de Gemini, Gasto y Topes Duros",
+  "admin.telemetry.geminiTotals":
+    "{calls} llamadas · {tokens} tokens · ~${usd} USD",
+  "admin.telemetry.geminiResourceRow":
+    "{calls} llam. · {tokens} tok · ~${usd}",
+  "admin.telemetry.circuitHealthy": "Circuito: Saludable",
+  "admin.telemetry.circuitTripped": "Circuito: Cortado hasta {time}",
+  "admin.telemetry.capUsedUnlimited": "{used} usados · Ilimitado",
+  "admin.telemetry.capUsedLimited": "{used}/{limit} usados ({remaining} rest.)",
+  "admin.telemetry.toast.paused":
+    "Pausa de emergencia activada para todas las llamadas IA de pago.",
+  "admin.telemetry.toast.resumed": "Generaciones IA de pago reanudadas.",
+  "admin.telemetry.toast.reset":
+    "Contadores de tope duro y cortacircuitos reiniciados.",
+  "admin.telemetry.toast.actionError":
+    "No se pudieron actualizar los controles de telemetría.",
 };
 
 export const TRANSLATIONS: Record<Locale, Record<TranslationKey, string>> = {

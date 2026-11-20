@@ -31,9 +31,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/components/locale-provider";
 import { LOCALE_HEADER, type TranslationKey } from "@/lib/i18n";
+import type { PublicQuotaSnapshot } from "@/lib/budget-types";
 import {
   consumeCredit,
+  dispatchBudgetUpdated,
   reconcileServerQuotaExhausted,
+  refundClientCreditOnCap,
 } from "@/lib/quota";
 
 export interface VoiceStudioProps {
@@ -455,7 +458,13 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         isFallback?: boolean;
         error?: string;
         quotaExceeded?: boolean;
+        capReached?: boolean;
+        budget?: PublicQuotaSnapshot;
       };
+
+      if (data.budget) {
+        dispatchBudgetUpdated(data.budget);
+      }
 
       if (!response.ok || !data.audioUrl) {
         if (response.status === 402) {
@@ -468,6 +477,11 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
               })
           );
           onRequirePaywall();
+          return;
+        }
+        if (response.status === 429 || response.status === 503) {
+          refundClientCreditOnCap();
+          toast.error(data.error || t("budget.toast.capReached"));
           return;
         }
         throw new Error(data.error || t("voice.toast.synthFailed"));

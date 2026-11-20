@@ -39,8 +39,11 @@ import {
 } from "@/lib/i18n";
 import {
   consumeCredit,
+  dispatchBudgetUpdated,
   reconcileServerQuotaExhausted,
+  refundClientCreditOnCap,
 } from "@/lib/quota";
+import type { PublicQuotaSnapshot } from "@/lib/budget-types";
 import type { BackgroundItem } from "@/app/api/backgrounds/route";
 
 export interface BackgroundFinderProps {
@@ -66,9 +69,11 @@ interface BackgroundsApiResponse {
   resolvedQuery: string;
   extractedTags: string[];
   visionUsed: boolean;
+  visionCapNotice?: string;
   isCuratedFallback: boolean;
   notice?: string;
   page: number;
+  budget?: PublicQuotaSnapshot;
 }
 
 interface ModelSwapApiResponse {
@@ -77,6 +82,8 @@ interface ModelSwapApiResponse {
   engine?: string;
   isFallback?: boolean;
   error?: string;
+  capReached?: boolean;
+  budget?: PublicQuotaSnapshot;
 }
 
 interface SavedModelData {
@@ -757,15 +764,30 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
         const errPayload = (await response.json().catch(() => ({}))) as {
           error?: string;
           quotaExceeded?: boolean;
+          capReached?: boolean;
+          budget?: PublicQuotaSnapshot;
         };
+        if (errPayload.budget) {
+          dispatchBudgetUpdated(errPayload.budget);
+        }
         if (response.status === 402) {
           handleQuotaExceeded402(errPayload);
+          return;
+        }
+        if (response.status === 429 || response.status === 503) {
+          if (opts.consumeQuota) {
+            refundClientCreditOnCap();
+          }
+          toast.error(errPayload.error || t("budget.toast.capReached"));
           return;
         }
         throw new Error(errPayload.error || t("bg.toast.fetchError"));
       }
 
       const data = (await response.json()) as BackgroundsApiResponse;
+      if (data.budget) {
+        dispatchBudgetUpdated(data.budget);
+      }
       setItems(data.items || []);
       setSelectedIds(new Set());
       setResolvedQuery(data.resolvedQuery || "");
@@ -773,6 +795,9 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       setIsCuratedFallback(Boolean(data.isCuratedFallback));
       setPage(opts.targetPage);
 
+      if (data.visionCapNotice) {
+        toast.warning(data.visionCapNotice);
+      }
       if (data.notice) {
         toast.info(data.notice);
       } else if (opts.consumeQuota) {
@@ -1027,10 +1052,19 @@ export function BackgroundFinder({ onRequirePaywall }: BackgroundFinderProps) {
       const data = (await res.json().catch(() => ({}))) as ModelSwapApiResponse & {
         quotaExceeded?: boolean;
       };
+      if (data.budget) {
+        dispatchBudgetUpdated(data.budget);
+      }
       if (!res.ok) {
         if (res.status === 402) {
           setSwapModalOpen(false);
           handleQuotaExceeded402(data);
+          return;
+        }
+        if (res.status === 429 || res.status === 503) {
+          refundClientCreditOnCap();
+          setSwapModalOpen(false);
+          toast.error(data.error || t("budget.toast.capReached"));
           return;
         }
         throw new Error(data.error || t("bg.toast.modelSwapError"));

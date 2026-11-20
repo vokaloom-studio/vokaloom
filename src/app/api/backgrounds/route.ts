@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import {
+  getBudgetCapErrorMessage,
+  getPublicQuotaSnapshot,
+  isStockProviderRateLimited,
+  isUpstreamExhaustionError,
+  recordGeminiUsage,
+  recordProviderExhaustion,
+  recordStockRateLimit,
+  reservePaidGenerationSlot,
+} from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
-import { resolveRequestLocale, translate } from "@/lib/i18n";
+import { resolveRequestLocale, translate, type Locale } from "@/lib/i18n";
 import { createRateLimitStore } from "@/lib/rate-limit";
 import {
   MalformedJsonBodyError,
@@ -12,7 +22,7 @@ import {
   attachServerTrialCookie,
   enforceServerGenerationQuota,
 } from "@/lib/server-quota";
-import { resolveApiKey } from "@/lib/server-secrets";
+import { resolveApiKey, type EntitlementRole } from "@/lib/server-secrets";
 import {
   DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_UPSTREAM_FETCH_TIMEOUT_MS,
@@ -254,13 +264,34 @@ async function analyzeReferenceImageWithGemini(
   base64Data: string,
   mimeType: string,
   fallbackQuery: string,
+  locale: Locale,
+  role?: EntitlementRole | "guest",
   signal?: AbortSignal
-): Promise<{ resolvedQuery: string; visionUsed: boolean }> {
+): Promise<{
+  resolvedQuery: string;
+  visionUsed: boolean;
+  visionCapNotice?: string;
+}> {
   const apiKey = await resolveApiKey("GEMINI_API_KEY");
   if (!apiKey) {
     return {
       resolvedQuery: `${fallbackQuery} candid vertical sunlight`,
       visionUsed: false,
+    };
+  }
+
+  const reservation = await reservePaidGenerationSlot("vision", {
+    role,
+    providers: ["gemini"],
+    skipProDailyCap: true,
+  });
+  if (!reservation.allowed) {
+    return {
+      resolvedQuery: `${fallbackQuery} candid vertical aesthetic`,
+      visionUsed: false,
+      visionCapNotice:
+        getBudgetCapErrorMessage(locale, reservation) ||
+        translate(locale, "api.budget.visionCapNotice"),
     };
   }
 
@@ -298,6 +329,8 @@ async function analyzeReferenceImageWithGemini(
       },
     });
 
+    await recordGeminiUsage("vision", response.usageMetadata);
+
     const extracted = response.text
       ?.trim()
       .replace(/["'.]/g, "")
@@ -307,6 +340,14 @@ async function analyzeReferenceImageWithGemini(
       return { resolvedQuery: extracted, visionUsed: true };
     }
   } catch (err) {
+    const exhaustion = isUpstreamExhaustionError(err);
+    if (exhaustion.exhausted) {
+      await recordProviderExhaustion(
+        "gemini",
+        exhaustion.statusCode,
+        exhaustion.reason
+      );
+    }
     console.warn("Gemini Vision fallback triggered:", err);
   }
 
@@ -337,6 +378,9 @@ async function fetchFromPexels(
   if (!apiKey) {
     return [];
   }
+  if (await isStockProviderRateLimited("pexels")) {
+    return [];
+  }
 
   try {
     const url = new URL("https://api.pexels.com/v1/search");
@@ -350,6 +394,13 @@ async function fetchFromPexels(
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
     });
+
+    await recordStockRateLimit("pexels", {
+      headers: res.headers,
+      status: res.status,
+      rateLimited: res.status === 429 ? true : undefined,
+    });
+
     if (!res.ok) return [];
 
     const data = (await res.json()) as { photos?: PexelsPhoto[] };
@@ -390,6 +441,9 @@ async function fetchFromUnsplash(
   if (!accessKey) {
     return [];
   }
+  if (await isStockProviderRateLimited("unsplash")) {
+    return [];
+  }
 
   try {
     const url = new URL("https://api.unsplash.com/search/photos");
@@ -403,6 +457,13 @@ async function fetchFromUnsplash(
       next: { revalidate: 300 },
       signal: AbortSignal.timeout(UPSTREAM_FETCH_TIMEOUT_MS),
     });
+
+    await recordStockRateLimit("unsplash", {
+      headers: res.headers,
+      status: res.status,
+      rateLimited: res.status === 429 ? true : undefined,
+    });
+
     if (!res.ok) return [];
 
     const data = (await res.json()) as { results?: UnsplashPhoto[] };
@@ -728,16 +789,20 @@ export async function POST(request: Request) {
     // Step A: Vision Reference Matcher via Gemini 2.5 Flash
     let resolvedQuery = baseSearchTerms;
     let visionUsed = false;
+    let visionCapNotice: string | undefined;
 
     if (validatedRefImage) {
       const visionResult = await analyzeReferenceImageWithGemini(
         validatedRefImage.data,
         validatedRefImage.mimeType,
         baseSearchTerms,
+        locale,
+        quota.role,
         request.signal
       );
       resolvedQuery = visionResult.resolvedQuery;
       visionUsed = visionResult.visionUsed;
+      visionCapNotice = visionResult.visionCapNotice;
     }
 
     // Step B: Parallel Batch Fetch (Pexels 8/3 + Unsplash 7/2)
@@ -780,8 +845,10 @@ export async function POST(request: Request) {
         resolvedQuery,
         extractedTags,
         visionUsed,
+        ...(visionCapNotice ? { visionCapNotice } : {}),
         isCuratedFallback: combined.length === 0,
         page,
+        budget: await getPublicQuotaSnapshot(),
       })
     );
   } catch (error) {
@@ -797,6 +864,7 @@ export async function POST(request: Request) {
         isCuratedFallback: true,
         notice: translate(locale, "api.bg.fallbackNotice"),
         page: 1,
+        budget: await getPublicQuotaSnapshot(),
       })
     );
   }

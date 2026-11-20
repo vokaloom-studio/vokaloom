@@ -22,6 +22,10 @@ import {
   KeyRound,
   Trash2,
   X,
+  Gauge,
+  PauseCircle,
+  PlayCircle,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
+import type { AdminTelemetrySnapshot } from "@/lib/budget-types";
 import { LOCALE_HEADER } from "@/lib/i18n";
 import type { SecretKeyName } from "@/lib/server-secrets";
 import {
@@ -64,6 +69,7 @@ interface AdminApiGetResponse {
   health?: EngineHealth;
   maskedKeys?: MaskedKeysMap;
   vipClientCodes?: string[];
+  telemetry?: AdminTelemetrySnapshot;
 }
 
 const VAULT_KEY_FIELDS: ReadonlyArray<{
@@ -112,6 +118,11 @@ export default function VokaloomAdminPage() {
 
   const [vipCodes, setVipCodes] = useState<string[]>([]);
   const [customInviteCode, setCustomInviteCode] = useState<string>("");
+  const [telemetry, setTelemetry] = useState<AdminTelemetrySnapshot | null>(
+    null
+  );
+  const [isTogglingPause, setIsTogglingPause] = useState<boolean>(false);
+  const [isResettingCaps, setIsResettingCaps] = useState<boolean>(false);
 
   const [businessForm, setBusinessForm] = useState<BusinessConfig>({
     priceCop: "$60,000 COP",
@@ -137,39 +148,46 @@ export default function VokaloomAdminPage() {
     totalGenerations: 0,
   });
 
-  const fetchAdminStatus = useCallback(async (adminKeyHeader?: string) => {
-    setIsRefreshingHealth(true);
-    try {
-      const headers: Record<string, string> = {
-        [LOCALE_HEADER]: localeRef.current,
-      };
-      if (adminKeyHeader) {
-        headers["x-admin-key"] = adminKeyHeader;
-      }
-      const res = await fetch("/api/admin", { headers });
-      if (!res.ok) return;
+  const fetchAdminStatus = useCallback(
+    async (adminKeyHeader?: string, refreshFal = false) => {
+      setIsRefreshingHealth(true);
+      try {
+        const headers: Record<string, string> = {
+          [LOCALE_HEADER]: localeRef.current,
+        };
+        if (adminKeyHeader) {
+          headers["x-admin-key"] = adminKeyHeader;
+        }
+        const url = refreshFal ? "/api/admin?refresh=1" : "/api/admin";
+        const res = await fetch(url, { headers, cache: "no-store" });
+        if (!res.ok) return;
 
-      const data = (await res.json()) as AdminApiGetResponse;
-      if (data.authenticated) {
-        setIsAuthenticated(true);
-        if (data.health) {
-          setHealth(data.health);
+        const data = (await res.json()) as AdminApiGetResponse;
+        if (data.authenticated) {
+          setIsAuthenticated(true);
+          if (data.health) {
+            setHealth(data.health);
+          }
+          if (data.maskedKeys) {
+            setMaskedKeys(data.maskedKeys);
+          }
+          if (Array.isArray(data.vipClientCodes)) {
+            setVipCodes(data.vipClientCodes);
+            setCustomInviteCode(data.vipClientCodes[0] ?? "");
+          }
+          if (data.telemetry) {
+            setTelemetry(data.telemetry);
+          }
         }
-        if (data.maskedKeys) {
-          setMaskedKeys(data.maskedKeys);
-        }
-        if (Array.isArray(data.vipClientCodes)) {
-          setVipCodes(data.vipClientCodes);
-          setCustomInviteCode(data.vipClientCodes[0] ?? "");
-        }
+      } catch {
+        // Ignore network error during initial status check
+      } finally {
+        setIsCheckingSession(false);
+        setIsRefreshingHealth(false);
       }
-    } catch {
-      // Ignore network error during initial status check
-    } finally {
-      setIsCheckingSession(false);
-      setIsRefreshingHealth(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -281,6 +299,7 @@ export default function VokaloomAdminPage() {
       if (data.health) setHealth(data.health);
       if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
       setVaultInputs({ ...EMPTY_VAULT_INPUTS });
+      void fetchAdminStatus();
       toast.success(
         data.persistedToDisk
           ? t("admin.vault.toast.savedDisk")
@@ -324,6 +343,7 @@ export default function VokaloomAdminPage() {
       if (data.health) setHealth(data.health);
       if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
       setVaultInputs((prev) => ({ ...prev, [keyName]: "" }));
+      void fetchAdminStatus();
       toast.info(t("admin.vault.toast.clearedSingle", { keyName }));
     } catch {
       toast.error(t("admin.vault.toast.saveError"));
@@ -362,6 +382,7 @@ export default function VokaloomAdminPage() {
       if (data.health) setHealth(data.health);
       if (data.maskedKeys) setMaskedKeys(data.maskedKeys);
       setVaultInputs({ ...EMPTY_VAULT_INPUTS });
+      void fetchAdminStatus();
       toast.info(t("admin.vault.toast.cleared"));
     } catch {
       toast.error(t("admin.vault.toast.clearError"));
@@ -412,6 +433,90 @@ export default function VokaloomAdminPage() {
         remaining: updated.creditsRemaining,
         max: updated.maxTrialCredits,
       })
+    );
+  };
+
+  const handleToggleEmergencyPause = async () => {
+    setIsTogglingPause(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          action: "toggle-emergency-pause",
+          locale,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        paidAiPaused?: boolean;
+        telemetry?: AdminTelemetrySnapshot;
+        error?: string;
+      };
+      if (!res.ok || !data.success) {
+        toast.error(data.error || t("admin.telemetry.toast.actionError"));
+        return;
+      }
+      if (data.telemetry) {
+        setTelemetry(data.telemetry);
+      }
+      toast.success(
+        data.paidAiPaused
+          ? t("admin.telemetry.toast.paused")
+          : t("admin.telemetry.toast.resumed")
+      );
+    } catch {
+      toast.error(t("admin.telemetry.toast.actionError"));
+    } finally {
+      setIsTogglingPause(false);
+    }
+  };
+
+  const handleResetBudgetCaps = async () => {
+    setIsResettingCaps(true);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [LOCALE_HEADER]: locale,
+        },
+        body: JSON.stringify({
+          action: "reset-budget-caps",
+          locale,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        telemetry?: AdminTelemetrySnapshot;
+        error?: string;
+      };
+      if (!res.ok || !data.success) {
+        toast.error(data.error || t("admin.telemetry.toast.actionError"));
+        return;
+      }
+      if (data.telemetry) {
+        setTelemetry(data.telemetry);
+      }
+      toast.success(t("admin.telemetry.toast.reset"));
+    } catch {
+      toast.error(t("admin.telemetry.toast.actionError"));
+    } finally {
+      setIsResettingCaps(false);
+    }
+  };
+
+  const formatTimestampShort = (ms: number | null | undefined): string => {
+    if (!ms || !Number.isFinite(ms)) return "—";
+    return new Date(ms).toLocaleTimeString(
+      locale === "es" ? "es-ES" : "en-US",
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      }
     );
   };
 
@@ -688,7 +793,7 @@ export default function VokaloomAdminPage() {
                       type="button"
                       variant="outline"
                       size="xs"
-                      onClick={() => void fetchAdminStatus()}
+                      onClick={() => void fetchAdminStatus(undefined, true)}
                       disabled={isRefreshingHealth}
                       className="h-9 border-white/[0.1] bg-[#13151D] text-[#E4E4E7] hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
                     >
@@ -1155,6 +1260,346 @@ export default function VokaloomAdminPage() {
                       })}
                     </span>
                   </Button>
+                </CardContent>
+              </Card>
+
+              {/* Card 06: Live API Quota, Spend & Hard-Cap Telemetry */}
+              <Card
+                data-testid="admin-card-telemetry"
+                className="studio-deck rounded-lg ring-0 text-[#F4F4F5] lg:col-span-2"
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2.5">
+                    <CardTitle className="flex items-center gap-2 font-heading text-base font-semibold text-[#F4F4F5]">
+                      <span className="inline-flex h-5 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-[#050507] px-1.5 font-mono text-[11px] font-semibold tracking-wider tabular-nums text-[#9CA3B2] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]">
+                        06
+                      </span>
+                      <Gauge className="size-4 shrink-0 text-amber-400" />
+                      <span>{stripLeadingIndex(t("admin.card6Title"))}</span>
+                    </CardTitle>
+
+                    {telemetry && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className="rounded-md border-white/[0.1] bg-[#050507] font-mono text-[11px] text-[#E4E4E7]"
+                        >
+                          {telemetry.storage.backend === "redis"
+                            ? t("admin.telemetry.storageRedis")
+                            : telemetry.storage.backend === "file"
+                              ? t("admin.telemetry.storageFile")
+                              : t("admin.telemetry.storageMemory")}
+                        </Badge>
+                        {telemetry.storage.durableStoreWarning && (
+                          <Badge
+                            data-testid="telemetry-durable-warning"
+                            className="rounded-md border border-amber-500/45 bg-amber-500/15 font-mono text-[11px] font-medium text-amber-300"
+                          >
+                            <AlertTriangle className="mr-1 size-3" />
+                            {t("admin.telemetry.durableWarningBadge")}
+                          </Badge>
+                        )}
+                        {telemetry.emergencyPause.active && (
+                          <Badge
+                            data-testid="telemetry-paused-badge"
+                            className="rounded-md border border-red-500/45 bg-red-500/15 font-mono text-[11px] font-semibold text-red-300"
+                          >
+                            <ShieldAlert className="mr-1 size-3" />
+                            {t("admin.telemetry.activePauseBadge")}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <CardDescription className="text-xs text-[#9CA3B2]">
+                    {t("admin.card6Desc")}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* Operator Telemetry Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-[#050507] p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        data-testid="btn-toggle-emergency-pause"
+                        onClick={() => void handleToggleEmergencyPause()}
+                        disabled={
+                          isTogglingPause ||
+                          Boolean(telemetry?.emergencyPause.envForced)
+                        }
+                        className={
+                          telemetry?.emergencyPause.active
+                            ? "h-10 border border-emerald-400/50 bg-emerald-500 px-3.5 text-xs font-semibold text-[#09090B] hover:bg-emerald-400 md:h-8.5"
+                            : "h-10 border border-red-500/50 bg-red-500/15 px-3.5 text-xs font-semibold text-red-200 hover:bg-red-500/25 md:h-8.5"
+                        }
+                      >
+                        {isTogglingPause ? (
+                          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        ) : telemetry?.emergencyPause.active ? (
+                          <PlayCircle className="mr-1.5 size-3.5" />
+                        ) : (
+                          <PauseCircle className="mr-1.5 size-3.5" />
+                        )}
+                        <span>
+                          {telemetry?.emergencyPause.active
+                            ? t("admin.telemetry.resumeButton")
+                            : t("admin.telemetry.pauseButton")}
+                        </span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        data-testid="btn-reset-budget-caps"
+                        onClick={() => void handleResetBudgetCaps()}
+                        disabled={isResettingCaps}
+                        className="h-10 border-white/[0.12] bg-[#13151D] px-3.5 text-xs font-medium text-[#F4F4F5] hover:border-white/[0.2] hover:bg-[#191c26] md:h-8.5"
+                      >
+                        {isResettingCaps ? (
+                          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="mr-1.5 size-3.5 text-amber-400" />
+                        )}
+                        <span>{t("admin.telemetry.resetCapsButton")}</span>
+                      </Button>
+                    </div>
+
+                    {telemetry?.emergencyPause.envForced && (
+                      <p className="font-mono text-[11px] text-amber-300">
+                        {t("admin.telemetry.envPausedNote")}
+                      </p>
+                    )}
+                  </div>
+
+                  {telemetry && (
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                      {/* Panel A: Fal.ai Live Balance & Guard */}
+                      <div
+                        data-testid="telemetry-fal-panel"
+                        className="studio-well flex flex-col justify-between gap-2.5 rounded-lg p-3.5"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-[#F4F4F5]">
+                              {t("admin.telemetry.falTitle")}
+                            </span>
+                            <span
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                                telemetry.fal.circuitBreaker
+                                  ? "border-red-500/45 bg-red-500/15 text-red-300"
+                                  : "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
+                              }`}
+                            >
+                              {telemetry.fal.circuitBreaker
+                                ? t("admin.telemetry.circuitTripped", {
+                                    time: formatTimestampShort(
+                                      telemetry.fal.circuitBreaker.blockedUntil
+                                    ),
+                                  })
+                                : t("admin.telemetry.circuitHealthy")}
+                            </span>
+                          </div>
+
+                          {!telemetry.fal.configured ? (
+                            <p className="font-mono text-[11px] text-[#9CA3B2]">
+                              {t("admin.telemetry.falUnconfigured")}
+                            </p>
+                          ) : telemetry.fal.balance?.permissionRestricted ? (
+                            <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 font-mono text-[11px] text-amber-200">
+                              {t("admin.telemetry.falPermissionRestricted")}
+                            </p>
+                          ) : telemetry.fal.balance?.currentBalance !== null &&
+                            telemetry.fal.balance?.currentBalance !== undefined ? (
+                            <div className="space-y-1">
+                              <p
+                                className={`font-mono text-lg font-semibold tabular-nums ${
+                                  telemetry.fal.belowMinFloor
+                                    ? "text-red-400"
+                                    : telemetry.fal.lowBalanceWarning
+                                      ? "text-amber-300"
+                                      : "text-emerald-400"
+                                }`}
+                              >
+                                ${telemetry.fal.balance.currentBalance.toFixed(2)}{" "}
+                                <span className="text-xs font-normal text-[#9CA3B2]">
+                                  {telemetry.fal.balance.currency}
+                                </span>
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="font-mono text-[11px] text-[#9CA3B2]">
+                              {telemetry.fal.balance?.error ||
+                                t("admin.telemetry.falBalanceUnavailable")}
+                            </p>
+                          )}
+                        </div>
+
+                        <p className="border-t border-white/[0.06] pt-2 font-mono text-[11px] text-[#9CA3B2]">
+                          {t("admin.telemetry.falThresholds", {
+                            warn: telemetry.config.falLowBalanceWarnUsd.toFixed(2),
+                            min: telemetry.config.falMinBalanceUsd.toFixed(2),
+                          })}
+                        </p>
+                      </div>
+
+                      {/* Panel B: Stock APIs Rate Limits */}
+                      <div
+                        data-testid="telemetry-stock-panel"
+                        className="studio-well space-y-2.5 rounded-lg p-3.5"
+                      >
+                        <span className="block text-xs font-semibold text-[#F4F4F5]">
+                          {t("admin.telemetry.stockTitle")}
+                        </span>
+
+                        {(["pexels", "unsplash"] as const).map((provider) => {
+                          const snap = telemetry.stock[provider];
+                          const pct =
+                            snap &&
+                            snap.limit !== null &&
+                            snap.limit > 0 &&
+                            snap.remaining !== null
+                              ? Math.max(
+                                  0,
+                                  Math.min(
+                                    100,
+                                    Math.round((snap.remaining / snap.limit) * 100)
+                                  )
+                                )
+                              : 0;
+                          return (
+                            <div
+                              key={provider}
+                              className="space-y-1 rounded border border-white/[0.06] bg-[#0B0C10] px-2.5 py-2"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                <span className="font-mono text-[11px] font-semibold uppercase text-[#E4E4E7]">
+                                  {provider}
+                                </span>
+                                {snap?.rateLimited ? (
+                                  <span className="rounded border border-red-500/45 bg-red-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-300">
+                                    {t("admin.telemetry.stockRateLimited")}
+                                  </span>
+                                ) : snap &&
+                                  snap.limit !== null &&
+                                  snap.remaining !== null ? (
+                                  <span className="font-mono text-[11px] tabular-nums text-emerald-300">
+                                    {t("admin.telemetry.stockRemaining", {
+                                      remaining: snap.remaining,
+                                      limit: snap.limit,
+                                    })}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-[10px] text-[#9CA3B2]">
+                                    {t("admin.telemetry.stockAwaiting")}
+                                  </span>
+                                )}
+                              </div>
+                              {snap && snap.limit !== null && snap.remaining !== null && (
+                                <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-900">
+                                  <div
+                                    className={`h-full ${
+                                      snap.rateLimited
+                                        ? "bg-red-400"
+                                        : pct <= 20
+                                          ? "bg-amber-400"
+                                          : "bg-emerald-400"
+                                    }`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              )}
+                              {snap?.resetAt && (
+                                <p className="font-mono text-[10px] text-[#9CA3B2]">
+                                  {t("admin.telemetry.stockResetAt", {
+                                    time: formatTimestampShort(snap.resetAt),
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Panel C: Gemini Usage, Spend & Hard Caps */}
+                      <div
+                        data-testid="telemetry-gemini-panel"
+                        className="studio-well space-y-2.5 rounded-lg p-3.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-[#F4F4F5]">
+                            {t("admin.telemetry.geminiTitle")}
+                          </span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                              telemetry.gemini.circuitBreaker
+                                ? "border-red-500/45 bg-red-500/15 text-red-300"
+                                : "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
+                            }`}
+                          >
+                            {telemetry.gemini.circuitBreaker
+                              ? t("admin.telemetry.circuitTripped", {
+                                  time: formatTimestampShort(
+                                    telemetry.gemini.circuitBreaker.blockedUntil
+                                  ),
+                                })
+                              : t("admin.telemetry.circuitHealthy")}
+                          </span>
+                        </div>
+
+                        <p className="font-mono text-[11px] tabular-nums text-amber-300">
+                          {t("admin.telemetry.geminiTotals", {
+                            calls: telemetry.gemini.totals.calls,
+                            tokens: telemetry.gemini.totals.totalTokens,
+                            usd: telemetry.gemini.totals.estimatedUsd.toFixed(4),
+                          })}
+                        </p>
+
+                        <div className="space-y-1.5">
+                          {(["image", "audio", "vision"] as const).map((resKey) => {
+                            const cap = telemetry.hardCaps[resKey];
+                            const gem = telemetry.gemini.usage[resKey];
+                            return (
+                              <div
+                                key={resKey}
+                                className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-white/[0.06] bg-[#0B0C10] px-2.5 py-1.5 font-mono text-[11px]"
+                              >
+                                <span className="font-semibold uppercase text-[#E4E4E7]">
+                                  {resKey}
+                                </span>
+                                <span
+                                  className={
+                                    cap.status === "exhausted"
+                                      ? "text-red-300"
+                                      : cap.status === "low"
+                                        ? "text-amber-300"
+                                        : "text-emerald-300"
+                                  }
+                                >
+                                  {cap.limit === null
+                                    ? t("admin.telemetry.capUsedUnlimited", {
+                                        used: cap.used,
+                                      })
+                                    : t("admin.telemetry.capUsedLimited", {
+                                        used: cap.used,
+                                        limit: cap.limit,
+                                        remaining: cap.remaining ?? 0,
+                                      })}
+                                </span>
+                                <span className="w-full text-[10px] text-[#9CA3B2]">
+                                  {t("admin.telemetry.geminiResourceRow", {
+                                    calls: gem.calls,
+                                    tokens: gem.totalTokens,
+                                    usd: gem.estimatedUsd.toFixed(4),
+                                  })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
