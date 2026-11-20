@@ -218,27 +218,24 @@ function buildDiagnosticsFromValues(
       geminiConfigured: Boolean(values.GEMINI_API_KEY),
       pexelsConfigured: Boolean(values.PEXELS_API_KEY),
       unsplashConfigured: Boolean(values.UNSPLASH_ACCESS_KEY),
-      falConfigured: Boolean(values.FAL_KEY),
-      falBillingConfigured: Boolean(values.FAL_BILLING_KEY),
+      gradiumConfigured: Boolean(values.GRADIUM_API_KEY),
     },
     maskedKeys: {
       GEMINI_API_KEY: maskSecret(values.GEMINI_API_KEY),
       PEXELS_API_KEY: maskSecret(values.PEXELS_API_KEY),
       UNSPLASH_ACCESS_KEY: maskSecret(values.UNSPLASH_ACCESS_KEY),
-      FAL_KEY: maskSecret(values.FAL_KEY),
-      FAL_BILLING_KEY: maskSecret(values.FAL_BILLING_KEY),
+      GRADIUM_API_KEY: maskSecret(values.GRADIUM_API_KEY),
     },
     vipClientCodes: getVipClientCodes(),
   };
 }
 
 async function resolveAllDiagnostics(cookieHeader?: string) {
-  const [gemini, pexels, unsplash, fal, falBilling] = await Promise.all([
+  const [gemini, pexels, unsplash, gradium] = await Promise.all([
     resolveApiKey("GEMINI_API_KEY", cookieHeader),
     resolveApiKey("PEXELS_API_KEY", cookieHeader),
     resolveApiKey("UNSPLASH_ACCESS_KEY", cookieHeader),
-    resolveApiKey("FAL_KEY", cookieHeader),
-    resolveApiKey("FAL_BILLING_KEY", cookieHeader),
+    resolveApiKey("GRADIUM_API_KEY", cookieHeader),
   ]);
 
   return {
@@ -246,12 +243,10 @@ async function resolveAllDiagnostics(cookieHeader?: string) {
       GEMINI_API_KEY: gemini,
       PEXELS_API_KEY: pexels,
       UNSPLASH_ACCESS_KEY: unsplash,
-      FAL_KEY: fal,
-      FAL_BILLING_KEY: falBilling,
+      GRADIUM_API_KEY: gradium,
     }),
     geminiKey: gemini,
-    falKey: fal,
-    falBillingKey: falBilling,
+    gradiumKey: gradium,
   };
 }
 
@@ -371,8 +366,6 @@ async function ensurePrivilegedAdminAccess(
 
 export async function GET(request: Request) {
   const locale = resolveRequestLocale(request);
-  const reqUrl = new URL(request.url);
-  const refreshFal = reqUrl.searchParams.get("refresh") === "1";
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const [authResult, entitlement] = await Promise.all([
     authorizeAdminRequest(request),
@@ -411,13 +404,11 @@ export async function GET(request: Request) {
     );
   }
 
-  const { diagnostics, falKey, falBillingKey, geminiKey } =
+  const { diagnostics, gradiumKey, geminiKey } =
     await resolveAllDiagnostics(cookieHeader);
   const telemetry = await getAdminTelemetrySnapshot({
-    falKey,
-    falBillingKey,
+    gradiumKey,
     geminiKey,
-    refreshFal,
   });
 
   return NextResponse.json(
@@ -556,11 +547,10 @@ export async function POST(request: Request) {
       if (authError) return authError;
 
       await resetBudgetCaps();
-      const { falKey, falBillingKey, geminiKey } =
+      const { gradiumKey, geminiKey } =
         await resolveAllDiagnostics(cookieHeader);
       const telemetry = await getAdminTelemetrySnapshot({
-        falKey,
-        falBillingKey,
+        gradiumKey,
         geminiKey,
       });
 
@@ -582,11 +572,10 @@ export async function POST(request: Request) {
       const explicitPause =
         typeof body.paused === "boolean" ? body.paused : undefined;
       await toggleEmergencyPause(explicitPause);
-      const { falKey, falBillingKey, geminiKey } =
+      const { gradiumKey, geminiKey } =
         await resolveAllDiagnostics(cookieHeader);
       const telemetry = await getAdminTelemetrySnapshot({
-        falKey,
-        falBillingKey,
+        gradiumKey,
         geminiKey,
       });
 

@@ -180,13 +180,14 @@ const en = {
     "Attach a reference clip or turn Clone Mode OFF",
   "voice.presetOverriddenNote":
     "Overridden while custom clone sample is attached",
-  "voice.sampleReady": "Ready for zero-shot F5-TTS synthesis",
+  "voice.sampleReady": "Ready for Gradium AI zero-shot cloning",
   "voice.removeAudioAria": "Remove reference audio sample",
   "voice.synthesizingButton": "Synthesizing Neural Voiceover...",
   "voice.synthesizingWaveformStatus": "Rendering neural waveform...",
   "voice.synthesizingSubtext":
     "Aligning prosody, room tone, and broadcast dynamics",
-  "voice.generateCloneButton": "Generate Zero-Shot Cloned Voiceover (F5-TTS)",
+  "voice.generateCloneButton":
+    "Generate Zero-Shot Cloned Voiceover (Gradium AI)",
   "voice.generatePresetButton": "Generate Voiceover ({name})",
   "voice.cloneVoiceLabel": "Zero-Shot Clone ({name})",
   "voice.outputTitle": "Master Output",
@@ -220,7 +221,7 @@ const en = {
   "voice.toast.audioTooLarge":
     "Reference voice sample must be under 3 MB. Tip: upload a 10-to-20 second .OGG, .MP3, or .WAV clip under 3 MB.",
   "voice.toast.loadedAudioSample":
-    "Loaded voice sample \"{name}\" for MIT F5-TTS zero-shot cloning.",
+    "Loaded voice sample \"{name}\" for Gradium AI zero-shot cloning.",
   "voice.toast.emptyScript": "Please enter a voiceover script first.",
   "voice.toast.scriptTooLong": "Script cannot exceed 1,500 characters.",
   "voice.toast.missingCloneAudio":
@@ -250,7 +251,7 @@ const en = {
   "paywall.benefit2":
     "Vision reference matching & 9:16 model compositing",
   "paywall.benefit3":
-    "Spanish & English neural voiceovers with F5-TTS cloning",
+    "Spanish & English neural voiceovers with Gradium AI cloning",
   "paywall.checkoutCopButton":
     "Subscribe for {priceCop} / month (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":
@@ -302,10 +303,8 @@ const en = {
   "admin.engine.geminiTts": "Gemini Native Neural TTS (Voiceover Engine)",
   "admin.engine.pexels": "Pexels Portrait Stock API",
   "admin.engine.unsplash": "Unsplash Portrait Stock API",
-  "admin.engine.fal":
-    "Fal.ai Serverless GPU (Kokoro-82M & F5-TTS Voice Cloning)",
-  "admin.engine.falBilling":
-    "Fal.ai Billing Telemetry Key (Read-Only Scope)",
+  "admin.engine.gradium":
+    "Gradium AI Voice Engine (Neural TTS & Zero-Shot Voice Cloning)",
   "admin.envLabel": "Env: {envVar}",
   "admin.statusActive": "Live Neural / API Active",
   "admin.statusFallback": "Zero-Key Fallback Active",
@@ -419,11 +418,11 @@ const en = {
     "Reference audio must be a valid base64 audio data URI (.ogg, .opus, .mp3, .wav, .m4a, .aac, .webm).",
   "api.voice.referenceAudioTooLarge":
     "Reference audio exceeds the 3 MB maximum size limit.",
-  "api.voice.engine.f5tts": "F5-TTS (MIT Clone)",
-  "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
+  "api.voice.engine.gradiumClone": "Gradium AI (Zero-Shot Clone)",
+  "api.voice.engine.gradiumTts": "Gradium AI Neural TTS",
   "api.voice.engine.geminiTts": "Gemini Neural TTS",
   "api.voice.demoFallbackEngine":
-    "Demo Fallback (Add FAL_KEY or GEMINI_API_KEY for Live Neural TTS)",
+    "Demo Fallback (Add GRADIUM_API_KEY or GEMINI_API_KEY for Live Neural TTS)",
   "api.voice.processError": "Unable to process voice synthesis request.",
   "api.admin.unauthenticated": "Admin authentication required.",
   "api.admin.authenticated": "Admin session verified.",
@@ -468,8 +467,6 @@ const en = {
     "Paid AI generations are temporarily paused by the workspace operator.",
   "api.budget.circuitBroken":
     "Upstream AI provider is in temporary cooldown after rate-limit or credit exhaustion. Please retry shortly.",
-  "api.budget.falMinBalance":
-    "Voice AI provider reserve floor reached; live Fal.ai generation is temporarily paused.",
   "api.budget.durableStoreUnavailable":
     "Server budget guard requires a shared Redis store in production.",
   "api.budget.visionCapNotice":
@@ -504,10 +501,6 @@ const en = {
     "Stock photo API rate limit is running low or throttled. Curated 9:16 archive fallback will top up batches automatically.",
   "budget.meter.advisory.circuitBroken":
     "Upstream AI provider cooldown is active after a 429/402 response. Live AI calls will resume automatically after cooldown.",
-  "budget.meter.advisory.providerLowBalance":
-    "Voice AI provider capacity is running low; live synthesis availability may become restricted soon.",
-  "budget.meter.advisory.providerFloor":
-    "Voice AI provider safety floor reached; live Fal.ai calls are temporarily protected.",
   "budget.toast.capReached":
     "Live AI generation limit reached. Check the API Quota banner for remaining capacity.",
 
@@ -525,13 +518,13 @@ const en = {
     "Forced active via PAID_AI_EMERGENCY_PAUSE environment variable",
   "admin.telemetry.resetCapsButton": "Reset Cap Counters",
   "admin.telemetry.activePauseBadge": "PAID AI PAUSED",
-  "admin.telemetry.falTitle": "Fal.ai Billing Balance & Guard",
-  "admin.telemetry.falUnconfigured": "FAL_KEY not configured",
-  "admin.telemetry.falPermissionRestricted":
-    "Permission Restricted (HTTP 403) — billing read scope required on key",
-  "admin.telemetry.falBalanceUnavailable": "Balance snapshot unavailable",
-  "admin.telemetry.falThresholds":
-    "Warn <= ${warn} · Hard floor <= ${min}",
+  "admin.telemetry.gradiumTitle": "Gradium AI Voice Engine & Guard",
+  "admin.telemetry.gradiumUnconfigured": "GRADIUM_API_KEY not configured",
+  "admin.telemetry.gradiumConfiguredReady": "API Key Active (TTS & Voice Clone)",
+  "admin.telemetry.gradiumUsageRow":
+    "{calls} calls · {chars} chars · {clones} clone(s)",
+  "admin.telemetry.gradiumMeteringNote":
+    "Character-metered neural voice & instant cloning (~1 credit/char).",
   "admin.telemetry.stockTitle": "Stock APIs (Pexels & Unsplash)",
   "admin.telemetry.stockAwaiting": "Awaiting first live request headers",
   "admin.telemetry.stockRemaining": "{remaining} / {limit} remaining",
@@ -737,14 +730,14 @@ const es: Record<TranslationKey, string> = {
     "Adjunta un clip de referencia o desactiva la clonación",
   "voice.presetOverriddenNote":
     "Anulado mientras haya una muestra clonada adjunta",
-  "voice.sampleReady": "Lista para síntesis zero-shot con F5-TTS",
+  "voice.sampleReady": "Lista para clonación zero-shot con Gradium AI",
   "voice.removeAudioAria": "Quitar muestra de audio de referencia",
   "voice.synthesizingButton": "Sintetizando locución neural...",
   "voice.synthesizingWaveformStatus": "Renderizando onda neural...",
   "voice.synthesizingSubtext":
     "Alineando prosodia, timbre y dinámica de emisión",
   "voice.generateCloneButton":
-    "Generar Locución Clonada Zero-Shot (F5-TTS)",
+    "Generar Locución Clonada Zero-Shot (Gradium AI)",
   "voice.generatePresetButton": "Generar Locución ({name})",
   "voice.cloneVoiceLabel": "Clon Zero-Shot ({name})",
   "voice.outputTitle": "Salida Maestra",
@@ -778,7 +771,7 @@ const es: Record<TranslationKey, string> = {
   "voice.toast.audioTooLarge":
     "La muestra de voz debe pesar menos de 3 MB. Consejo: sube un clip .OGG, .MP3 o .WAV de 10 a 20 segundos.",
   "voice.toast.loadedAudioSample":
-    "Muestra de voz \"{name}\" cargada para clonación zero-shot con MIT F5-TTS.",
+    "Muestra de voz \"{name}\" cargada para clonación zero-shot con Gradium AI.",
   "voice.toast.emptyScript": "Ingresa primero un guion para la locución.",
   "voice.toast.scriptTooLong": "El guion no puede superar los 1,500 caracteres.",
   "voice.toast.missingCloneAudio":
@@ -808,7 +801,7 @@ const es: Record<TranslationKey, string> = {
   "paywall.benefit2":
     "Emparejamiento visual y composición de modelo 9:16",
   "paywall.benefit3":
-    "Locuciones neurales ES/EN con clonación zero-shot F5-TTS",
+    "Locuciones neurales ES/EN con clonación zero-shot Gradium AI",
   "paywall.checkoutCopButton":
     "Suscribirse por {priceCop} / mes (Nequi / PSE / Wompi)",
   "paywall.checkoutUsdButton":
@@ -862,10 +855,8 @@ const es: Record<TranslationKey, string> = {
     "Gemini TTS Neural Nativo (Motor de Locución)",
   "admin.engine.pexels": "API Stock Retrato Pexels",
   "admin.engine.unsplash": "API Stock Retrato Unsplash",
-  "admin.engine.fal":
-    "Fal.ai GPU Serverless (Kokoro-82M y Clonación F5-TTS)",
-  "admin.engine.falBilling":
-    "Clave de Telemetría de Facturación Fal.ai (Solo Lectura)",
+  "admin.engine.gradium":
+    "Motor de Voz Gradium AI (TTS Neural y Clonación Zero-Shot)",
   "admin.envLabel": "Var: {envVar}",
   "admin.statusActive": "API / Neural Activa",
   "admin.statusFallback": "Respaldo Sin Clave Activo",
@@ -989,11 +980,11 @@ const es: Record<TranslationKey, string> = {
     "El audio de referencia debe ser un URI de datos base64 de audio válido (.ogg, .opus, .mp3, .wav, .m4a, .aac, .webm).",
   "api.voice.referenceAudioTooLarge":
     "El audio de referencia supera el límite máximo de 3 MB.",
-  "api.voice.engine.f5tts": "F5-TTS (Clonación MIT)",
-  "api.voice.engine.kokoro": "Kokoro-82M (Apache-2.0)",
+  "api.voice.engine.gradiumClone": "Gradium AI (Clonación Zero-Shot)",
+  "api.voice.engine.gradiumTts": "Gradium AI TTS Neural",
   "api.voice.engine.geminiTts": "Gemini TTS Neural",
   "api.voice.demoFallbackEngine":
-    "Respaldo Demo (Agrega FAL_KEY o GEMINI_API_KEY para Voz Neural Real)",
+    "Respaldo Demo (Agrega GRADIUM_API_KEY o GEMINI_API_KEY para Voz Neural Real)",
   "api.voice.processError":
     "No se pudo procesar la solicitud de síntesis de voz.",
   "api.admin.unauthenticated": "Se requiere autenticación de administrador.",
@@ -1043,8 +1034,6 @@ const es: Record<TranslationKey, string> = {
     "Las generaciones IA de pago están pausadas temporalmente por el operador del estudio.",
   "api.budget.circuitBroken":
     "El proveedor IA está en enfriamiento temporal tras alcanzar límite de tasa o saldo. Reintenta en unos minutos.",
-  "api.budget.falMinBalance":
-    "Se alcanzó el piso de reserva del proveedor de voz; las llamadas en vivo a Fal.ai están protegidas temporalmente.",
   "api.budget.durableStoreUnavailable":
     "El guardián de presupuesto del servidor requiere un almacén Redis compartido en producción.",
   "api.budget.visionCapNotice":
@@ -1080,10 +1069,6 @@ const es: Record<TranslationKey, string> = {
     "La cuota de búsqueda de fotos Stock (Pexels/Unsplash) está baja o limitada. El archivo curado 9:16 completará los lotes.",
   "budget.meter.advisory.circuitBroken":
     "Enfriamiento del proveedor IA activo tras respuesta 429/402. Las llamadas en vivo se reanudarán automáticamente tras la espera.",
-  "budget.meter.advisory.providerLowBalance":
-    "La capacidad del proveedor de voz IA está baja; la síntesis en vivo podría restringirse pronto.",
-  "budget.meter.advisory.providerFloor":
-    "Se alcanzó el piso de reserva del proveedor de voz IA; las llamadas Fal.ai en vivo están protegidas.",
   "budget.toast.capReached":
     "Se alcanzó el límite de generación IA en vivo. Revisa el aviso de Cuota API para ver la capacidad restante.",
 
@@ -1101,13 +1086,13 @@ const es: Record<TranslationKey, string> = {
     "Forzada por la variable de entorno PAID_AI_EMERGENCY_PAUSE",
   "admin.telemetry.resetCapsButton": "Reiniciar Contadores de Tope",
   "admin.telemetry.activePauseBadge": "IA DE PAGO PAUSADA",
-  "admin.telemetry.falTitle": "Saldo de Fal.ai y Guardia",
-  "admin.telemetry.falUnconfigured": "FAL_KEY sin configurar",
-  "admin.telemetry.falPermissionRestricted":
-    "Permiso Restringido (HTTP 403) — la clave requiere alcance de facturación",
-  "admin.telemetry.falBalanceUnavailable": "Saldo no disponible",
-  "admin.telemetry.falThresholds":
-    "Aviso <= ${warn} · Piso duro <= ${min}",
+  "admin.telemetry.gradiumTitle": "Motor de Voz Gradium AI y Guardia",
+  "admin.telemetry.gradiumUnconfigured": "GRADIUM_API_KEY sin configurar",
+  "admin.telemetry.gradiumConfiguredReady": "Clave API Activa (TTS y Clonación)",
+  "admin.telemetry.gradiumUsageRow":
+    "{calls} llam. · {chars} car. · {clones} clon(es)",
+  "admin.telemetry.gradiumMeteringNote":
+    "Voz neural medida por carácter y clonación instantánea (~1 crédito/carácter).",
   "admin.telemetry.stockTitle": "APIs Stock (Pexels y Unsplash)",
   "admin.telemetry.stockAwaiting":
     "Esperando cabeceras de la primera consulta en vivo",

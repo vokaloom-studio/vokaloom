@@ -1,21 +1,19 @@
 import { after, NextResponse } from "next/server";
-import { createFalClient, type FalClient } from "@fal-ai/client";
 import { GoogleGenAI, Modality } from "@google/genai";
 import {
   checkPaidGenerationEligibility,
-  ensureFreshFalBalanceStatus,
   getBudgetCapErrorMessage,
   getPublicQuotaSnapshot,
-  invalidateFalBalanceCache,
   isPaidModelFallbackDisabled,
   isProviderCircuitBroken,
   isUpstreamConfigError,
   isUpstreamExhaustionError,
   recordGeminiUsage,
+  recordGradiumUsage,
   recordProviderExhaustion,
-  refreshFalBalanceSnapshot,
   reservePaidGenerationSlot,
   resolveGeminiTtsModel,
+  resolveGradiumApiBaseUrl,
 } from "@/lib/budget-guard";
 import { getRateLimitClientKey } from "@/lib/client-ip";
 import { resolveRequestLocale, translate } from "@/lib/i18n";
@@ -35,8 +33,29 @@ import {
 
 export const maxDuration = 60;
 
-const FAL_SUBSCRIBE_TIMEOUT_MS = 20_000;
+const GRADIUM_REQUEST_TIMEOUT_MS = 35_000;
+const GRADIUM_CLEANUP_TIMEOUT_MS = 5_000;
 const GEMINI_TTS_TIMEOUT_MS = 25_000;
+
+const GRADIUM_PRESET_VOICES: Record<string, string> = {
+  "mateo-es": "sVLgzKMqaptUdaY8",
+  "sofia-es": "3p0eIGbkmny71GlA",
+  "lucas-es": "n7vovxcDTVG4gClo",
+  "abella-en": "YTpq7expH9539ERJ",
+  "adam-en": "3jUdJyOi9pgbxBTK",
+};
+
+function resolveGradiumPresetVoiceId(
+  voiceId: string,
+  language: "es" | "en"
+): string {
+  return (
+    GRADIUM_PRESET_VOICES[voiceId] ??
+    (language === "en"
+      ? GRADIUM_PRESET_VOICES["abella-en"]
+      : GRADIUM_PRESET_VOICES["mateo-es"])
+  );
+}
 const MAX_VOICE_REQUEST_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_REFERENCE_AUDIO_BYTES = 3 * 1024 * 1024; // 3 MB
 const MAX_REFERENCE_AUDIO_BASE64_CHARS =
@@ -62,7 +81,7 @@ type ReferenceAudioValidationResult =
 
 /**
  * Validates optional zero-shot clone reference audio as a strict base64 audio data URI
- * within the 3 MB decoded size cap so raw URLs or oversized blobs never reach Fal.ai.
+ * within the 3 MB decoded size cap so raw URLs or oversized blobs never reach Gradium AI.
  */
 function validateReferenceAudioDataUri(
   rawValue: unknown
@@ -129,17 +148,11 @@ function validateReferenceAudioDataUri(
   return { provided: true, valid: true, dataUri: trimmed };
 }
 
-/**
- * Wraps a per-request `FalClient.subscribe` call with an explicit AbortController and
- * deadline race so hung GPU jobs or disconnected clients never hold serverless workers open.
- */
-async function subscribeFalWithTimeout(
-  falClient: FalClient,
-  endpointId: Parameters<FalClient["subscribe"]>[0],
-  options: Parameters<FalClient["subscribe"]>[1],
-  requestSignal?: AbortSignal,
-  timeoutMs = FAL_SUBSCRIBE_TIMEOUT_MS
-) {
+function createTimeoutAbortControl(
+  requestSignal: AbortSignal | undefined,
+  timeoutMs: number,
+  timeoutLabel: string
+): { signal: AbortSignal; cleanup: () => void } {
   if (requestSignal?.aborted) {
     throw requestSignal.reason instanceof Error
       ? requestSignal.reason
@@ -147,50 +160,214 @@ async function subscribeFalWithTimeout(
   }
 
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let removeAbortListener: (() => void) | undefined;
+  const onAbort = () => {
+    const reason =
+      requestSignal?.reason instanceof Error
+        ? requestSignal.reason
+        : new DOMException("Voice synthesis request aborted", "AbortError");
+    controller.abort(reason);
+  };
 
-  const guardPromise = new Promise<never>((_, reject) => {
-    const onAbort = () => {
-      const reason =
-        requestSignal?.reason instanceof Error
-          ? requestSignal.reason
-          : new DOMException("Voice synthesis request aborted", "AbortError");
-      controller.abort(reason);
-      reject(reason);
-    };
-
-    if (requestSignal) {
-      requestSignal.addEventListener("abort", onAbort, { once: true });
-      removeAbortListener = () =>
-        requestSignal.removeEventListener("abort", onAbort);
-    }
-
-    timer = setTimeout(() => {
-      const timeoutError = new Error(
-        `Fal.ai subscribe to ${endpointId} timed out after ${timeoutMs}ms`
-      );
-      timeoutError.name = "TimeoutError";
-      controller.abort(timeoutError);
-      reject(timeoutError);
-    }, timeoutMs);
-  });
-
-  try {
-    const subscribePromise = falClient.subscribe(endpointId, {
-      ...options,
-      timeout: timeoutMs,
-      abortSignal: controller.signal,
-    });
-    subscribePromise.catch(() => {});
-
-    return await Promise.race([subscribePromise, guardPromise]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-    removeAbortListener?.();
+  if (requestSignal) {
+    requestSignal.addEventListener("abort", onAbort, { once: true });
   }
+
+  const timer = setTimeout(() => {
+    const timeoutError = new Error(
+      `${timeoutLabel} timed out after ${timeoutMs}ms`
+    );
+    timeoutError.name = "TimeoutError";
+    controller.abort(timeoutError);
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      if (requestSignal) {
+        requestSignal.removeEventListener("abort", onAbort);
+      }
+    },
+  };
+}
+
+function createGradiumHttpError(status: number, bodyText: string): Error {
+  const detail = bodyText.trim().slice(0, 320);
+  const err = new Error(
+    detail ? `Gradium API HTTP ${status}: ${detail}` : `Gradium API HTTP ${status}`
+  ) as Error & { status: number };
+  err.status = status;
+  return err;
+}
+
+function decodeAudioDataUri(dataUri: string): {
+  mimeType: string;
+  buffer: Buffer;
+  extension: string;
+} {
+  const commaIndex = dataUri.indexOf(",");
+  const header = dataUri.slice(5, commaIndex).toLowerCase();
+  const mimeType = header.split(";")[0]?.trim() || "audio/wav";
+  const base64 = dataUri.slice(commaIndex + 1);
+  const buffer = Buffer.from(base64, "base64");
+
+  let extension = "wav";
+  if (mimeType.includes("ogg") || mimeType.includes("opus")) {
+    extension = "ogg";
+  } else if (mimeType.includes("mpeg") || mimeType.includes("mp3")) {
+    extension = "mp3";
+  } else if (mimeType.includes("mp4") || mimeType.includes("m4a")) {
+    extension = "m4a";
+  } else if (mimeType.includes("aac")) {
+    extension = "aac";
+  } else if (mimeType.includes("webm")) {
+    extension = "webm";
+  }
+
+  return { mimeType, buffer, extension };
+}
+
+async function createGradiumClonedVoice(params: {
+  apiKey: string;
+  baseUrl: string;
+  dataUri: string;
+  language: "es" | "en";
+  requestSignal?: AbortSignal;
+}): Promise<string> {
+  const { mimeType, buffer, extension } = decodeAudioDataUri(params.dataUri);
+  const formData = new FormData();
+  const audioBlob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+  formData.append("audio_file", audioBlob, `reference.${extension}`);
+  formData.append("name", `vokaloom-clone-${Date.now()}`);
+  formData.append("language", params.language);
+  formData.append("enhance", "true");
+
+  const { signal, cleanup } = createTimeoutAbortControl(
+    params.requestSignal,
+    GRADIUM_REQUEST_TIMEOUT_MS,
+    "Gradium voice clone upload"
+  );
+  try {
+    const res = await fetch(`${params.baseUrl}/voices/`, {
+      method: "POST",
+      headers: {
+        "x-api-key": params.apiKey,
+      },
+      body: formData,
+      signal,
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw createGradiumHttpError(res.status, errText);
+    }
+
+    const payload = (await res.json().catch(() => null)) as {
+      uid?: unknown;
+      voice_id?: unknown;
+    } | null;
+    const rawUid =
+      typeof payload?.uid === "string"
+        ? payload.uid
+        : typeof payload?.voice_id === "string"
+          ? payload.voice_id
+          : "";
+    const voiceUid = rawUid.trim();
+    if (!voiceUid) {
+      throw new Error("Gradium /voices/ response missing uid");
+    }
+    return voiceUid;
+  } finally {
+    cleanup();
+  }
+}
+
+async function synthesizeGradiumTts(params: {
+  apiKey: string;
+  baseUrl: string;
+  text: string;
+  voiceId: string;
+  requestSignal?: AbortSignal;
+}): Promise<string | null> {
+  const { signal, cleanup } = createTimeoutAbortControl(
+    params.requestSignal,
+    GRADIUM_REQUEST_TIMEOUT_MS,
+    "Gradium TTS synthesis"
+  );
+  try {
+    const res = await fetch(`${params.baseUrl}/post/speech/tts`, {
+      method: "POST",
+      headers: {
+        "x-api-key": params.apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/wav, application/octet-stream",
+      },
+      body: JSON.stringify({
+        text: params.text,
+        voice_id: params.voiceId,
+        output_format: "wav",
+        model_name: "default",
+        only_audio: true,
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw createGradiumHttpError(res.status, errText);
+    }
+
+    const contentType = (res.headers.get("content-type") || "").toLowerCase();
+    const audioBuffer = Buffer.from(await res.arrayBuffer());
+    if (audioBuffer.length === 0) {
+      return null;
+    }
+
+    if (contentType.includes("application/json")) {
+      const parsed = JSON.parse(audioBuffer.toString("utf8")) as {
+        audio?: unknown;
+        error?: unknown;
+        detail?: unknown;
+      };
+      if (typeof parsed?.audio === "string" && parsed.audio.trim()) {
+        const cleanB64 = parsed.audio.trim();
+        return cleanB64.startsWith("data:")
+          ? cleanB64
+          : `data:audio/wav;base64,${cleanB64}`;
+      }
+      throw new Error(
+        typeof parsed?.detail === "string"
+          ? parsed.detail
+          : typeof parsed?.error === "string"
+            ? parsed.error
+            : "Gradium returned JSON payload without audio bytes"
+      );
+    }
+
+    const mimeType =
+      contentType.startsWith("audio/")
+        ? contentType.split(";")[0].trim()
+        : "audio/wav";
+    return `data:${mimeType};base64,${audioBuffer.toString("base64")}`;
+  } finally {
+    cleanup();
+  }
+}
+
+async function deleteGradiumVoice(params: {
+  apiKey: string;
+  baseUrl: string;
+  voiceUid: string;
+}): Promise<void> {
+  await fetch(
+    `${params.baseUrl}/voices/${encodeURIComponent(params.voiceUid)}`,
+    {
+      method: "DELETE",
+      headers: {
+        "x-api-key": params.apiKey,
+      },
+      signal: AbortSignal.timeout(GRADIUM_CLEANUP_TIMEOUT_MS),
+    }
+  ).catch(() => undefined);
 }
 
 /**
@@ -229,7 +406,7 @@ function wrapPcmInWavHeader(
 /**
  * Generates a valid, playable 24kHz 16-bit PCM WAV data URI with realistic
  * speech-cadence harmonic formants so the audio player, download button,
- * and session history work 100% offline/keyless when neither FAL_KEY nor GEMINI_API_KEY is configured.
+ * and session history work 100% offline/keyless when neither GRADIUM_API_KEY nor GEMINI_API_KEY is configured.
  */
 function synthesizePlayableWavDataUri(
   text: string,
@@ -287,33 +464,6 @@ function synthesizePlayableWavDataUri(
     dataUri: `data:audio/wav;base64,${wavBuffer.toString("base64")}`,
     durationMs: Math.round(durationSec * 1000),
   };
-}
-
-function extractFalAudioUrl(result: unknown): string | null {
-  if (!result || typeof result !== "object") return null;
-  const obj = result as Record<string, unknown>;
-  const data =
-    obj.data && typeof obj.data === "object"
-      ? (obj.data as Record<string, unknown>)
-      : obj;
-
-  if (typeof data.audio_url === "string") return data.audio_url;
-  if (
-    data.audio_url &&
-    typeof data.audio_url === "object" &&
-    typeof (data.audio_url as { url?: unknown }).url === "string"
-  ) {
-    return (data.audio_url as { url: string }).url;
-  }
-  if (
-    data.audio &&
-    typeof data.audio === "object" &&
-    typeof (data.audio as { url?: unknown }).url === "string"
-  ) {
-    return (data.audio as { url: string }).url;
-  }
-  if (typeof data.audio === "string") return data.audio;
-  return null;
 }
 
 function schedulePostResponseTask(task: () => Promise<unknown>): void {
@@ -396,23 +546,18 @@ export async function POST(request: Request) {
       : undefined;
 
     const cookieHeader = request.headers.get("cookie") ?? undefined;
-    const [entitlement, falKey, falBillingKey, geminiKey] = await Promise.all([
+    const [entitlement, gradiumKey, geminiKey] = await Promise.all([
       resolveServerEntitlement(cookieHeader),
-      resolveApiKey("FAL_KEY", cookieHeader),
-      resolveApiKey("FAL_BILLING_KEY", cookieHeader),
+      resolveApiKey("GRADIUM_API_KEY", cookieHeader),
       resolveApiKey("GEMINI_API_KEY", cookieHeader),
     ]);
-    const effectiveBillingKey = falBillingKey || falKey;
+    const gradiumBaseUrl = resolveGradiumApiBaseUrl();
     const clientIpKey = getRateLimitClientKey(request).key;
     const initialUserKey = entitlement.subjectId
       ? `sub:${entitlement.subjectId}`
       : clientIpKey;
 
-    const falClient = falKey
-      ? createFalClient({ credentials: falKey })
-      : null;
-
-    if (!falClient && !geminiKey) {
+    if (!gradiumKey && !geminiKey) {
       const quota = await enforceServerGenerationQuota(request, locale);
       if (!quota.allowed) {
         return quota.response;
@@ -438,42 +583,29 @@ export async function POST(request: Request) {
     }
 
     const fallbackDisabled = isPaidModelFallbackDisabled();
-    const [falBalanceStatus, falBroken, geminiBroken] = await Promise.all([
-      falClient
-        ? ensureFreshFalBalanceStatus(effectiveBillingKey)
-        : Promise.resolve({
-            known: false,
-            belowMinFloor: false,
-            lowWarning: false,
-            snapshot: null,
-          }),
-      falClient ? isProviderCircuitBroken("fal") : Promise.resolve(false),
+    const [gradiumBroken, geminiBroken] = await Promise.all([
+      gradiumKey
+        ? isProviderCircuitBroken("gradium")
+        : Promise.resolve(false),
       geminiKey ? isProviderCircuitBroken("gemini") : Promise.resolve(false),
     ]);
 
-    const canUseFal =
-      Boolean(falClient) && !falBroken && !falBalanceStatus.belowMinFloor;
+    const canUseGradium = Boolean(gradiumKey) && !gradiumBroken;
     const canUseGeminiFallback =
       Boolean(geminiKey) &&
       !geminiBroken &&
-      (!falClient || (!fallbackDisabled && !validatedReferenceAudio));
+      (!gradiumKey || (!fallbackDisabled && !validatedReferenceAudio));
 
     const providerUnavailableReason =
-      !canUseFal && !canUseGeminiFallback
-        ? falClient &&
-          falBalanceStatus.belowMinFloor &&
-          (!geminiKey || fallbackDisabled || Boolean(validatedReferenceAudio))
-          ? "fal_min_balance"
-          : "circuit_breaker"
-        : undefined;
+      !canUseGradium && !canUseGeminiFallback ? "circuit_breaker" : undefined;
 
-    const activeProviders: Array<"gemini" | "fal"> = [];
-    if (falClient && !falBalanceStatus.belowMinFloor) {
-      activeProviders.push("fal");
+    const activeProviders: Array<"gemini" | "gradium"> = [];
+    if (gradiumKey) {
+      activeProviders.push("gradium");
     }
     if (
       geminiKey &&
-      (!falClient || (!fallbackDisabled && !validatedReferenceAudio))
+      (!gradiumKey || (!fallbackDisabled && !validatedReferenceAudio))
     ) {
       activeProviders.push("gemini");
     }
@@ -536,38 +668,42 @@ export async function POST(request: Request) {
       );
     }
 
-    let falAttempted = false;
+    let gradiumAttempted = false;
     let lastConfigError: { statusCode?: number } | null = null;
 
-    // Mode A: Zero-Shot Voice Cloning via MIT F5-TTS
-    if (validatedReferenceAudio && falClient && canUseFal) {
-      falAttempted = true;
+    // Mode A: Zero-Shot Voice Cloning via Gradium AI (POST /voices/ -> POST /post/speech/tts)
+    if (validatedReferenceAudio && gradiumKey && canUseGradium) {
+      gradiumAttempted = true;
+      let clonedVoiceUid: string | null = null;
       try {
-        const result = await subscribeFalWithTimeout(
-          falClient,
-          "fal-ai/f5-tts",
-          {
-            input: {
-              gen_text: text,
-              ref_audio_url: validatedReferenceAudio,
-              model_type: "F5-TTS",
-              remove_silence: true,
-            },
-          },
-          request.signal
-        );
-        const audioUrl = extractFalAudioUrl(result);
+        clonedVoiceUid = await createGradiumClonedVoice({
+          apiKey: gradiumKey,
+          baseUrl: gradiumBaseUrl,
+          dataUri: validatedReferenceAudio,
+          language,
+          requestSignal: request.signal,
+        });
+        const audioUrl = await synthesizeGradiumTts({
+          apiKey: gradiumKey,
+          baseUrl: gradiumBaseUrl,
+          text,
+          voiceId: clonedVoiceUid,
+          requestSignal: request.signal,
+        });
         if (audioUrl) {
-          await invalidateFalBalanceCache();
-          if (effectiveBillingKey) {
-            schedulePostResponseTask(() =>
-              refreshFalBalanceSnapshot(effectiveBillingKey)
-            );
-          }
+          await recordGradiumUsage({ characters: text.length, isClone: true });
+          const uidToDelete = clonedVoiceUid;
+          schedulePostResponseTask(() =>
+            deleteGradiumVoice({
+              apiKey: gradiumKey,
+              baseUrl: gradiumBaseUrl,
+              voiceUid: uidToDelete,
+            })
+          );
           return withQuotaCookie(
             NextResponse.json({
               audioUrl,
-              engine: translate(locale, "api.voice.engine.f5tts"),
+              engine: translate(locale, "api.voice.engine.gradiumClone"),
               language,
               durationMs: Date.now() - startTime,
               isFallback: false,
@@ -576,13 +712,23 @@ export async function POST(request: Request) {
           );
         }
       } catch (err) {
+        if (clonedVoiceUid) {
+          const uidToDelete = clonedVoiceUid;
+          schedulePostResponseTask(() =>
+            deleteGradiumVoice({
+              apiKey: gradiumKey,
+              baseUrl: gradiumBaseUrl,
+              voiceUid: uidToDelete,
+            })
+          );
+        }
         if (request.signal?.aborted) {
           throw err;
         }
         const exhaustion = isUpstreamExhaustionError(err);
         if (exhaustion.exhausted) {
           await recordProviderExhaustion(
-            "fal",
+            "gradium",
             exhaustion.statusCode,
             exhaustion.reason
           );
@@ -591,57 +737,31 @@ export async function POST(request: Request) {
         if (cfgErr.isConfigError) {
           lastConfigError = { statusCode: cfgErr.statusCode };
         }
-        console.warn("F5-TTS live call failed:", err);
+        console.warn("Gradium AI zero-shot cloning call failed:", err);
       }
     }
 
-    // Mode B: Standard Realistic TTS via Apache-2.0 Kokoro-82M
-    if (!validatedReferenceAudio && falClient && canUseFal) {
-      falAttempted = true;
+    // Mode B: Preset Neural TTS via Gradium AI (POST /post/speech/tts)
+    if (!validatedReferenceAudio && gradiumKey && canUseGradium) {
+      gradiumAttempted = true;
       try {
-        const result =
-          language === "es"
-            ? await subscribeFalWithTimeout(
-                falClient,
-                "fal-ai/kokoro/spanish",
-                {
-                  input: {
-                    prompt: text,
-                    voice:
-                      voiceId === "sofia-es"
-                        ? "ef_dora"
-                        : voiceId === "lucas-es"
-                          ? "em_santa"
-                          : "em_alex",
-                    speed: 1.0,
-                  },
-                },
-                request.signal
-              )
-            : await subscribeFalWithTimeout(
-                falClient,
-                "fal-ai/kokoro/american-english",
-                {
-                  input: {
-                    prompt: text,
-                    voice: voiceId === "adam-en" ? "am_adam" : "af_bella",
-                    speed: 1.0,
-                  },
-                },
-                request.signal
-              );
-        const audioUrl = extractFalAudioUrl(result);
+        const gradiumVoiceId = resolveGradiumPresetVoiceId(voiceId, language);
+        const audioUrl = await synthesizeGradiumTts({
+          apiKey: gradiumKey,
+          baseUrl: gradiumBaseUrl,
+          text,
+          voiceId: gradiumVoiceId,
+          requestSignal: request.signal,
+        });
         if (audioUrl) {
-          await invalidateFalBalanceCache();
-          if (effectiveBillingKey) {
-            schedulePostResponseTask(() =>
-              refreshFalBalanceSnapshot(effectiveBillingKey)
-            );
-          }
+          await recordGradiumUsage({
+            characters: text.length,
+            isClone: false,
+          });
           return withQuotaCookie(
             NextResponse.json({
               audioUrl,
-              engine: translate(locale, "api.voice.engine.kokoro"),
+              engine: translate(locale, "api.voice.engine.gradiumTts"),
               language,
               durationMs: Date.now() - startTime,
               isFallback: false,
@@ -656,7 +776,7 @@ export async function POST(request: Request) {
         const exhaustion = isUpstreamExhaustionError(err);
         if (exhaustion.exhausted) {
           await recordProviderExhaustion(
-            "fal",
+            "gradium",
             exhaustion.statusCode,
             exhaustion.reason
           );
@@ -665,16 +785,16 @@ export async function POST(request: Request) {
         if (cfgErr.isConfigError) {
           lastConfigError = { statusCode: cfgErr.statusCode };
         }
-        console.warn("Kokoro-82M live call failed:", err);
+        console.warn("Gradium AI preset TTS call failed:", err);
       }
     }
 
     // Mode B2: Gemini Native Neural TTS via GEMINI_API_KEY
-    // Never fall through from Fal to Gemini when DISABLE_PAID_MODEL_FALLBACK is active.
+    // Never fall through from Gradium to Gemini when DISABLE_PAID_MODEL_FALLBACK is active.
     if (
       geminiKey &&
       !geminiBroken &&
-      (!falAttempted || (!fallbackDisabled && !validatedReferenceAudio))
+      (!gradiumAttempted || (!fallbackDisabled && !validatedReferenceAudio))
     ) {
       const ttsModel = resolveGeminiTtsModel();
       try {

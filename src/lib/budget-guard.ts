@@ -19,8 +19,8 @@ import {
 import type {
   AdminTelemetrySnapshot,
   CircuitBreakerRecord,
-  FalBalanceSnapshot,
   GeminiResourceUsage,
+  GradiumVoiceUsage,
   HardCapWindow,
   PaidResource,
   PublicAdvisoryCode,
@@ -36,8 +36,8 @@ import type {
 export type {
   AdminTelemetrySnapshot,
   CircuitBreakerRecord,
-  FalBalanceSnapshot,
   GeminiResourceUsage,
+  GradiumVoiceUsage,
   HardCapWindow,
   PaidResource,
   PublicAdvisoryCode,
@@ -51,10 +51,6 @@ export type {
 };
 
 const DEFAULT_LEDGER_FILENAME = ".vokaloom-budget-ledger.json";
-const FAL_BILLING_ENDPOINT =
-  "https://api.fal.ai/v1/account/billing?expand=credits";
-const FAL_BALANCE_CACHE_TTL_MS = 60_000;
-const FAL_BALANCE_FETCH_TIMEOUT_MS = 5_000;
 const REDIS_REST_TIMEOUT_MS = 3_000;
 const DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS = 15 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,11 +58,17 @@ const MONTH_MS = 30 * DAY_MS;
 const MAX_PRO_DAILY_ENTRIES = 5_000;
 
 const DEFAULT_LOW_QUOTA_WARN_RATIO = 0.2;
-const DEFAULT_FAL_LOW_BALANCE_WARN_USD = 5.0;
-const DEFAULT_FAL_MIN_BALANCE_USD = 1.0;
 const DEFAULT_PRO_DAILY_IMAGE_LIMIT = 25;
 const DEFAULT_PRO_DAILY_AUDIO_LIMIT = 100;
 const DEFAULT_PRO_DAILY_VISION_LIMIT = 50;
+
+export const DEFAULT_GRADIUM_API_BASE_URL = "https://api.gradium.ai/api";
+
+export function resolveGradiumApiBaseUrl(): string {
+  const raw = process.env.GRADIUM_API_BASE_URL?.trim();
+  const base = raw || DEFAULT_GRADIUM_API_BASE_URL;
+  return base.replace(/\/+$/, "");
+}
 
 export const DEFAULT_GEMINI_VISION_MODEL = "gemini-3.5-flash-lite";
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1";
@@ -112,9 +114,9 @@ interface BudgetLedgerData {
   proDailyUsage: Record<string, ProDailyBucket>;
   circuitBreakers: {
     gemini?: CircuitBreakerRecord;
-    fal?: CircuitBreakerRecord;
+    gradium?: CircuitBreakerRecord;
   };
-  falBalance?: FalBalanceSnapshot;
+  gradiumUsage: GradiumVoiceUsage;
   stockRateLimits: {
     pexels?: StockRateLimitSnapshot;
     unsplash?: StockRateLimitSnapshot;
@@ -136,16 +138,15 @@ export type BlockReason =
   | "pro_daily_cap"
   | "emergency_pause"
   | "circuit_breaker"
-  | "fal_min_balance"
   | "durable_store_unavailable";
 
 export interface ReserveSlotOptions {
   role?: EntitlementRole | "guest";
   userKey?: string;
-  providers?: Array<"gemini" | "fal">;
+  providers?: Array<"gemini" | "gradium">;
   requireAllProviders?: boolean;
   skipProDailyCap?: boolean;
-  providerUnavailableReason?: "circuit_breaker" | "fal_min_balance";
+  providerUnavailableReason?: "circuit_breaker";
 }
 
 export interface ReserveSlotResult {
@@ -258,24 +259,6 @@ export function resolveLowQuotaWarnRatio(): number {
   );
 }
 
-export function resolveFalLowBalanceWarnUsd(): number {
-  return parseNumberInRange(
-    process.env.FAL_LOW_BALANCE_WARN_USD,
-    0,
-    100_000,
-    DEFAULT_FAL_LOW_BALANCE_WARN_USD
-  );
-}
-
-export function resolveFalMinBalanceUsd(): number {
-  return parseNumberInRange(
-    process.env.FAL_MIN_BALANCE_USD,
-    0,
-    100_000,
-    DEFAULT_FAL_MIN_BALANCE_USD
-  );
-}
-
 export function resolveProClientDailyLimit(
   resource: PaidResource
 ): number | null {
@@ -347,6 +330,15 @@ function createEmptyGeminiUsage(): GeminiResourceUsage {
   };
 }
 
+function createEmptyGradiumUsage(): GradiumVoiceUsage {
+  return {
+    calls: 0,
+    characters: 0,
+    clonedVoicesCreated: 0,
+    lastCallAt: null,
+  };
+}
+
 function createDefaultLedgerData(
   windowMode = resolveHardCapWindow()
 ): BudgetLedgerData {
@@ -361,6 +353,7 @@ function createDefaultLedgerData(
     },
     proDailyUsage: {},
     circuitBreakers: {},
+    gradiumUsage: createEmptyGradiumUsage(),
     stockRateLimits: {},
     geminiUsage: {
       image: createEmptyGeminiUsage(),
@@ -440,6 +433,35 @@ function normalizeGeminiUsageRecord(raw: unknown): GeminiResourceUsage {
       Number.isFinite(obj.estimatedUsd) &&
       obj.estimatedUsd >= 0
         ? obj.estimatedUsd
+        : 0,
+    lastCallAt:
+      typeof obj.lastCallAt === "number" && Number.isFinite(obj.lastCallAt)
+        ? obj.lastCallAt
+        : null,
+  };
+}
+
+function normalizeGradiumUsageRecord(raw: unknown): GradiumVoiceUsage {
+  if (!raw || typeof raw !== "object") {
+    return createEmptyGradiumUsage();
+  }
+  const obj = raw as Partial<GradiumVoiceUsage>;
+  return {
+    calls:
+      typeof obj.calls === "number" && Number.isFinite(obj.calls) && obj.calls >= 0
+        ? Math.floor(obj.calls)
+        : 0,
+    characters:
+      typeof obj.characters === "number" &&
+      Number.isFinite(obj.characters) &&
+      obj.characters >= 0
+        ? Math.floor(obj.characters)
+        : 0,
+    clonedVoicesCreated:
+      typeof obj.clonedVoicesCreated === "number" &&
+      Number.isFinite(obj.clonedVoicesCreated) &&
+      obj.clonedVoicesCreated >= 0
+        ? Math.floor(obj.clonedVoicesCreated)
         : 0,
     lastCallAt:
       typeof obj.lastCallAt === "number" && Number.isFinite(obj.lastCallAt)
@@ -570,38 +592,17 @@ function normalizeLedgerData(
     ) {
       base.circuitBreakers.gemini = geminiCb;
     }
-    const falCb = obj.circuitBreakers.fal;
+    const gradiumCb = obj.circuitBreakers.gradium;
     if (
-      falCb &&
-      typeof falCb.blockedUntil === "number" &&
-      now < falCb.blockedUntil
+      gradiumCb &&
+      typeof gradiumCb.blockedUntil === "number" &&
+      now < gradiumCb.blockedUntil
     ) {
-      base.circuitBreakers.fal = falCb;
+      base.circuitBreakers.gradium = gradiumCb;
     }
   }
 
-  if (obj.falBalance && typeof obj.falBalance === "object") {
-    base.falBalance = {
-      currentBalance:
-        typeof obj.falBalance.currentBalance === "number" &&
-        Number.isFinite(obj.falBalance.currentBalance)
-          ? obj.falBalance.currentBalance
-          : null,
-      currency:
-        typeof obj.falBalance.currency === "string" && obj.falBalance.currency
-          ? obj.falBalance.currency
-          : "USD",
-      permissionRestricted: Boolean(obj.falBalance.permissionRestricted),
-      fetchedAt:
-        typeof obj.falBalance.fetchedAt === "number" &&
-        Number.isFinite(obj.falBalance.fetchedAt)
-          ? obj.falBalance.fetchedAt
-          : 0,
-      ...(typeof obj.falBalance.error === "string"
-        ? { error: obj.falBalance.error }
-        : {}),
-    };
-  }
+  base.gradiumUsage = normalizeGradiumUsageRecord(obj.gradiumUsage);
 
   if (obj.stockRateLimits && typeof obj.stockRateLimits === "object") {
     for (const provider of ["pexels", "unsplash"] as const) {
@@ -776,7 +777,7 @@ async function readLocalOrMemLedger(
 const REDIS_PREFIX = "vokaloom:{budget}:";
 const REDIS_EPOCH_KEY = `${REDIS_PREFIX}epoch`;
 const REDIS_PAUSE_KEY = `${REDIS_PREFIX}pause`;
-const REDIS_FAL_BALANCE_KEY = `${REDIS_PREFIX}fal_balance`;
+const REDIS_GRADIUM_USAGE_KEY = `${REDIS_PREFIX}gradium_usage`;
 const REDIS_BUSINESS_CONFIG_KEY = `${REDIS_PREFIX}business_config`;
 const REDIS_REVOKED_PRO_KEY = `${REDIS_PREFIX}revoked_pro`;
 
@@ -797,7 +798,7 @@ function redisProKey(
   return `${REDIS_PREFIX}pro:${epoch}:${resource}:${digest}`;
 }
 
-function redisCircuitBreakerKey(provider: "gemini" | "fal"): string {
+function redisCircuitBreakerKey(provider: "gemini" | "gradium"): string {
   return `${REDIS_PREFIX}cb:${provider}`;
 }
 
@@ -975,6 +976,33 @@ function parseRedisHashToGeminiUsage(
   return usage;
 }
 
+function parseRedisHashToGradiumUsage(
+  rawHash: unknown
+): GradiumVoiceUsage {
+  const usage = createEmptyGradiumUsage();
+  if (!Array.isArray(rawHash)) return usage;
+  for (let i = 0; i + 1 < rawHash.length; i += 2) {
+    const field = String(rawHash[i]);
+    const val = Number(rawHash[i + 1]);
+    if (!Number.isFinite(val)) continue;
+    switch (field) {
+      case "calls":
+        usage.calls = Math.max(0, Math.floor(val));
+        break;
+      case "characters":
+        usage.characters = Math.max(0, Math.floor(val));
+        break;
+      case "clonedVoicesCreated":
+        usage.clonedVoicesCreated = Math.max(0, Math.floor(val));
+        break;
+      case "lastCallAt":
+        usage.lastCallAt = val > 0 ? val : null;
+        break;
+    }
+  }
+  return usage;
+}
+
 async function readRedisLedgerSnapshot(): Promise<BudgetLedgerData> {
   const now = Date.now();
   const activeWindow = resolveHardCapWindow();
@@ -988,8 +1016,8 @@ async function readRedisLedgerSnapshot(): Promise<BudgetLedgerData> {
     ["GET", redisCapKey(epoch, activeWindow, "vision")],
     ["PTTL", redisCapKey(epoch, activeWindow, "vision")],
     ["GET", redisCircuitBreakerKey("gemini")],
-    ["GET", redisCircuitBreakerKey("fal")],
-    ["GET", REDIS_FAL_BALANCE_KEY],
+    ["GET", redisCircuitBreakerKey("gradium")],
+    ["HGETALL", REDIS_GRADIUM_USAGE_KEY],
     ["GET", redisStockKey("pexels")],
     ["GET", redisStockKey("unsplash")],
     ["HGETALL", redisGeminiUsageKey("image")],
@@ -1025,15 +1053,12 @@ async function readRedisLedgerSnapshot(): Promise<BudgetLedgerData> {
   if (geminiCb && now < geminiCb.blockedUntil) {
     ledger.circuitBreakers.gemini = geminiCb;
   }
-  const falCb = parseJsonSafe<CircuitBreakerRecord>(results[8]?.result);
-  if (falCb && now < falCb.blockedUntil) {
-    ledger.circuitBreakers.fal = falCb;
+  const gradiumCb = parseJsonSafe<CircuitBreakerRecord>(results[8]?.result);
+  if (gradiumCb && now < gradiumCb.blockedUntil) {
+    ledger.circuitBreakers.gradium = gradiumCb;
   }
 
-  const falBal = parseJsonSafe<FalBalanceSnapshot>(results[9]?.result);
-  if (falBal) {
-    ledger.falBalance = falBal;
-  }
+  ledger.gradiumUsage = parseRedisHashToGradiumUsage(results[9]?.result);
 
   const pexelsStock = parseJsonSafe<StockRateLimitSnapshot>(results[10]?.result);
   if (pexelsStock) {
@@ -1208,41 +1233,20 @@ function projectPublicSnapshot(ledger: BudgetLedgerData): PublicQuotaSnapshot {
     now < ledger.circuitBreakers.gemini.blockedUntil
       ? ledger.circuitBreakers.gemini
       : null;
-  const falBroken =
-    ledger.circuitBreakers.fal && now < ledger.circuitBreakers.fal.blockedUntil
-      ? ledger.circuitBreakers.fal
+  const gradiumBroken =
+    ledger.circuitBreakers.gradium &&
+    now < ledger.circuitBreakers.gradium.blockedUntil
+      ? ledger.circuitBreakers.gradium
       : null;
-  if (geminiBroken || falBroken) {
+  if (geminiBroken || gradiumBroken) {
     advisories.push({
       code: "provider_circuit_broken",
       severity: "critical",
       resetAt: Math.max(
         geminiBroken?.blockedUntil ?? 0,
-        falBroken?.blockedUntil ?? 0
+        gradiumBroken?.blockedUntil ?? 0
       ),
     });
-  }
-
-  if (
-    ledger.falBalance &&
-    !ledger.falBalance.permissionRestricted &&
-    ledger.falBalance.currentBalance !== null
-  ) {
-    const minFloor = resolveFalMinBalanceUsd();
-    const lowWarn = resolveFalLowBalanceWarnUsd();
-    if (ledger.falBalance.currentBalance <= minFloor) {
-      advisories.push({
-        code: "provider_balance_floor",
-        severity: "critical",
-        resource: "audio",
-      });
-    } else if (ledger.falBalance.currentBalance <= lowWarn) {
-      advisories.push({
-        code: "provider_balance_low",
-        severity: "warning",
-        resource: "audio",
-      });
-    }
   }
 
   return {
@@ -1459,7 +1463,7 @@ export async function saveServerBusinessConfig(
 
 /**
  * Read-only eligibility check that inspects emergency pause, durable store
- * availability, circuit breakers, Fal floor status, pro daily fair-use limits,
+ * availability, circuit breakers, pro daily fair-use limits,
  * and global hard caps WITHOUT mutating or reserving any quota slot.
  */
 export async function checkPaidGenerationEligibility(
@@ -1994,8 +1998,6 @@ export function getBudgetCapErrorMessage(
       return translate(locale, "api.budget.emergencyPaused");
     case "circuit_breaker":
       return translate(locale, "api.budget.circuitBroken");
-    case "fal_min_balance":
-      return translate(locale, "api.budget.falMinBalance");
     case "pro_daily_cap":
       return translate(locale, "api.budget.proDailyCapReached", {
         resource: resourceLabel,
@@ -2143,7 +2145,7 @@ export function isUpstreamConfigError(err: unknown): {
 }
 
 export async function isProviderCircuitBroken(
-  provider: "gemini" | "fal"
+  provider: "gemini" | "gradium"
 ): Promise<boolean> {
   const { ledger } = await readCurrentLedgerWithFallback();
   const rec = ledger.circuitBreakers[provider];
@@ -2151,7 +2153,7 @@ export async function isProviderCircuitBroken(
 }
 
 export async function recordProviderExhaustion(
-  provider: "gemini" | "fal",
+  provider: "gemini" | "gradium",
   statusCode?: number,
   reason?: string
 ): Promise<CircuitBreakerRecord> {
@@ -2193,7 +2195,7 @@ export async function recordProviderExhaustion(
 }
 
 // ============================================================================
-// Upstream Telemetry Collectors: Gemini Usage, Stock Headers, Fal.ai Balance
+// Upstream Telemetry Collectors: Gemini Usage, Gradium Usage, Stock Headers
 // ============================================================================
 
 export function estimateGeminiCallUsd(
@@ -2385,230 +2387,46 @@ export async function isStockProviderRateLimited(
   return now - snap.updatedAt < DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS;
 }
 
-async function persistFalBalanceSnapshot(
-  snapshot: FalBalanceSnapshot
-): Promise<void> {
+export async function recordGradiumUsage(data: {
+  characters: number;
+  isClone?: boolean;
+}): Promise<void> {
+  const now = Date.now();
+  const characters =
+    Number.isFinite(data.characters) && data.characters > 0
+      ? Math.floor(data.characters)
+      : 0;
+  const clonedDelta = data.isClone ? 1 : 0;
+
   if (resolveStorageBackend() === "redis") {
     try {
       await runRedisPipeline([
-        ["SET", REDIS_FAL_BALANCE_KEY, JSON.stringify(snapshot)],
+        ["HINCRBY", REDIS_GRADIUM_USAGE_KEY, "calls", "1"],
+        ["HINCRBY", REDIS_GRADIUM_USAGE_KEY, "characters", String(characters)],
+        [
+          "HINCRBY",
+          REDIS_GRADIUM_USAGE_KEY,
+          "clonedVoicesCreated",
+          String(clonedDelta),
+        ],
+        ["HSET", REDIS_GRADIUM_USAGE_KEY, "lastCallAt", String(now)],
       ]);
       return;
     } catch (err) {
-      console.warn("Redis Fal balance write failed, using fallback:", err);
+      console.warn("Redis Gradium usage write failed, using fallback:", err);
     }
   }
 
   const localBackend: "file" | "memory" =
     process.env.NODE_ENV !== "production" ? "file" : "memory";
   await mutateLocalOrMemLedger(localBackend, (ledger) => {
-    ledger.falBalance = snapshot;
+    const slot = ledger.gradiumUsage ?? createEmptyGradiumUsage();
+    slot.calls += 1;
+    slot.characters += characters;
+    slot.clonedVoicesCreated += clonedDelta;
+    slot.lastCallAt = now;
+    ledger.gradiumUsage = slot;
   });
-}
-
-export async function invalidateFalBalanceCache(): Promise<void> {
-  if (resolveStorageBackend() === "redis") {
-    try {
-      const existingRes = await runRedisPipeline([["GET", REDIS_FAL_BALANCE_KEY]]);
-      const existing = parseJsonSafe<FalBalanceSnapshot>(existingRes[0]?.result);
-      if (existing) {
-        await runRedisPipeline([
-          [
-            "SET",
-            REDIS_FAL_BALANCE_KEY,
-            JSON.stringify({ ...existing, fetchedAt: 0 }),
-          ],
-        ]);
-      }
-      return;
-    } catch {
-      return;
-    }
-  }
-
-  const localBackend: "file" | "memory" =
-    process.env.NODE_ENV !== "production" ? "file" : "memory";
-  await mutateLocalOrMemLedger(localBackend, (ledger) => {
-    if (ledger.falBalance) {
-      ledger.falBalance = { ...ledger.falBalance, fetchedAt: 0 };
-    }
-  });
-}
-
-export async function resolveFalBillingKey(
-  explicitBillingOrFalKey?: string
-): Promise<string | undefined> {
-  const trimmed = explicitBillingOrFalKey?.trim();
-  if (trimmed) {
-    return trimmed;
-  }
-  const dedicatedBillingKey = await resolveApiKey("FAL_BILLING_KEY");
-  if (dedicatedBillingKey) {
-    return dedicatedBillingKey;
-  }
-  return await resolveApiKey("FAL_KEY");
-}
-
-export async function fetchFalBalanceSnapshot(
-  explicitFalKey?: string,
-  options: { force?: boolean } = {}
-): Promise<FalBalanceSnapshot | null> {
-  const falKey = await resolveFalBillingKey(explicitFalKey);
-  if (!falKey) {
-    return null;
-  }
-
-  const now = Date.now();
-  const { ledger } = await readCurrentLedgerWithFallback();
-  const cached = ledger.falBalance;
-
-  if (
-    !options.force &&
-    cached &&
-    cached.fetchedAt > 0 &&
-    now - cached.fetchedAt < FAL_BALANCE_CACHE_TTL_MS
-  ) {
-    return cached;
-  }
-
-  try {
-    const res = await fetch(FAL_BILLING_ENDPOINT, {
-      method: "GET",
-      headers: {
-        Authorization: `Key ${falKey}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(FAL_BALANCE_FETCH_TIMEOUT_MS),
-    });
-
-    if (res.status === 403) {
-      const restricted: FalBalanceSnapshot = {
-        currentBalance: null,
-        currency: "USD",
-        permissionRestricted: true,
-        fetchedAt: Date.now(),
-      };
-      await persistFalBalanceSnapshot(restricted);
-      return restricted;
-    }
-
-    if (!res.ok) {
-      const errored: FalBalanceSnapshot = {
-        currentBalance: cached?.currentBalance ?? null,
-        currency: cached?.currency ?? "USD",
-        permissionRestricted: false,
-        fetchedAt: Date.now(),
-        error: `HTTP ${res.status}`,
-      };
-      await persistFalBalanceSnapshot(errored);
-      return errored;
-    }
-
-    const payload = (await res.json()) as {
-      credits?: {
-        current_balance?: unknown;
-        currency?: unknown;
-      };
-    };
-
-    const rawBal = payload?.credits?.current_balance;
-    const parsedBal =
-      typeof rawBal === "number"
-        ? rawBal
-        : typeof rawBal === "string"
-          ? Number(rawBal)
-          : NaN;
-    const currentBalance = Number.isFinite(parsedBal) ? parsedBal : null;
-    const currency =
-      typeof payload?.credits?.currency === "string" &&
-      payload.credits.currency.trim()
-        ? payload.credits.currency.trim().toUpperCase()
-        : "USD";
-
-    const snapshot: FalBalanceSnapshot = {
-      currentBalance,
-      currency,
-      permissionRestricted: false,
-      fetchedAt: Date.now(),
-    };
-    await persistFalBalanceSnapshot(snapshot);
-    return snapshot;
-  } catch (err) {
-    const fallback: FalBalanceSnapshot = {
-      currentBalance: cached?.currentBalance ?? null,
-      currency: cached?.currency ?? "USD",
-      permissionRestricted: cached?.permissionRestricted ?? false,
-      fetchedAt: Date.now(),
-      error: err instanceof Error ? err.message : "Fal billing fetch failed",
-    };
-    return fallback;
-  }
-}
-
-export async function refreshFalBalanceSnapshot(
-  explicitBillingOrFalKey?: string
-): Promise<FalBalanceSnapshot | null> {
-  return fetchFalBalanceSnapshot(explicitBillingOrFalKey, { force: true });
-}
-
-export function refreshFalBalanceSnapshotAsync(falKey?: string): void {
-  void refreshFalBalanceSnapshot(falKey).catch(() => undefined);
-}
-
-export async function ensureFreshFalBalanceStatus(
-  explicitBillingOrFalKey?: string
-): Promise<{
-  known: boolean;
-  belowMinFloor: boolean;
-  lowWarning: boolean;
-  snapshot: FalBalanceSnapshot | null;
-}> {
-  const billingKey = await resolveFalBillingKey(explicitBillingOrFalKey);
-  if (billingKey) {
-    const { ledger } = await readCurrentLedgerWithFallback();
-    const cached = ledger.falBalance;
-    const now = Date.now();
-    const isFresh =
-      cached &&
-      cached.fetchedAt > 0 &&
-      now - cached.fetchedAt < FAL_BALANCE_CACHE_TTL_MS;
-    if (!isFresh) {
-      await fetchFalBalanceSnapshot(billingKey);
-    }
-  }
-  return getCachedFalBalanceStatus();
-}
-
-export async function getCachedFalBalanceStatus(): Promise<{
-  known: boolean;
-  belowMinFloor: boolean;
-  lowWarning: boolean;
-  snapshot: FalBalanceSnapshot | null;
-}> {
-  const { ledger } = await readCurrentLedgerWithFallback();
-  const snap = ledger.falBalance ?? null;
-  if (
-    !snap ||
-    snap.permissionRestricted ||
-    snap.currentBalance === null ||
-    !Number.isFinite(snap.currentBalance)
-  ) {
-    return {
-      known: false,
-      belowMinFloor: false,
-      lowWarning: false,
-      snapshot: snap,
-    };
-  }
-
-  const minFloor = resolveFalMinBalanceUsd();
-  const warnThreshold = resolveFalLowBalanceWarnUsd();
-  return {
-    known: true,
-    belowMinFloor: snap.currentBalance <= minFloor,
-    lowWarning: snap.currentBalance <= warnThreshold,
-    snapshot: snap,
-  };
 }
 
 // ============================================================================
@@ -2616,51 +2434,22 @@ export async function getCachedFalBalanceStatus(): Promise<{
 // ============================================================================
 
 export async function getAdminTelemetrySnapshot(options: {
-  falKey?: string;
-  falBillingKey?: string;
+  gradiumKey?: string;
   geminiKey?: string;
-  refreshFal?: boolean;
 } = {}): Promise<AdminTelemetrySnapshot> {
-  const falKey =
-    options.falKey !== undefined
-      ? options.falKey
-      : await resolveApiKey("FAL_KEY");
-  const falBillingKey =
-    options.falBillingKey !== undefined
-      ? options.falBillingKey
-      : await resolveApiKey("FAL_BILLING_KEY");
-  const effectiveBillingKey =
-    falBillingKey?.trim() || falKey?.trim() || undefined;
+  const gradiumKey =
+    options.gradiumKey !== undefined
+      ? options.gradiumKey
+      : await resolveApiKey("GRADIUM_API_KEY");
   const geminiKey =
     options.geminiKey !== undefined
       ? options.geminiKey
       : await resolveApiKey("GEMINI_API_KEY");
 
-  let liveFalBalance: FalBalanceSnapshot | null = null;
-  if (effectiveBillingKey) {
-    liveFalBalance = await fetchFalBalanceSnapshot(effectiveBillingKey, {
-      force: Boolean(options.refreshFal),
-    });
-  }
-
   const { ledger, backend, durableStoreWarning } =
     await readCurrentLedgerWithFallback();
   const now = Date.now();
   const publicSnapshot = projectPublicSnapshot(ledger);
-  const falBalance = liveFalBalance ?? ledger.falBalance ?? null;
-
-  const falKnownBalance =
-    falBalance &&
-    !falBalance.permissionRestricted &&
-    falBalance.currentBalance !== null
-      ? falBalance.currentBalance
-      : null;
-
-  const lowBalanceWarning =
-    falKnownBalance !== null &&
-    falKnownBalance <= resolveFalLowBalanceWarnUsd();
-  const belowMinFloor =
-    falKnownBalance !== null && falKnownBalance <= resolveFalMinBalanceUsd();
 
   const geminiTotals = {
     calls:
@@ -2699,8 +2488,6 @@ export async function getAdminTelemetrySnapshot(options: {
       window: resolveHardCapWindow(),
       disablePaidModelFallback: isPaidModelFallbackDisabled(),
       lowQuotaWarnRatio: resolveLowQuotaWarnRatio(),
-      falLowBalanceWarnUsd: resolveFalLowBalanceWarnUsd(),
-      falMinBalanceUsd: resolveFalMinBalanceUsd(),
       proClientDailyImageLimit:
         resolveProClientDailyLimit("image") ?? DEFAULT_PRO_DAILY_IMAGE_LIMIT,
       proClientDailyAudioLimit:
@@ -2715,17 +2502,14 @@ export async function getAdminTelemetrySnapshot(options: {
       runtimePaused: ledger.emergencyPause,
     },
     hardCaps: publicSnapshot.resources,
-    fal: {
-      configured: Boolean(falKey),
-      billingKeyConfigured: Boolean(falBillingKey),
-      balance: falBalance,
-      lowBalanceWarning,
-      belowMinFloor,
+    gradium: {
+      configured: Boolean(gradiumKey),
       circuitBreaker:
-        ledger.circuitBreakers.fal &&
-        now < ledger.circuitBreakers.fal.blockedUntil
-          ? ledger.circuitBreakers.fal
+        ledger.circuitBreakers.gradium &&
+        now < ledger.circuitBreakers.gradium.blockedUntil
+          ? ledger.circuitBreakers.gradium
           : null,
+      usage: ledger.gradiumUsage ?? createEmptyGradiumUsage(),
     },
     stock: {
       pexels: ledger.stockRateLimits.pexels ?? null,
@@ -2755,7 +2539,7 @@ export async function resetBudgetCaps(): Promise<void> {
       await runRedisPipeline([
         ["SET", REDIS_EPOCH_KEY, String(nextEpoch)],
         ["DEL", redisCircuitBreakerKey("gemini")],
-        ["DEL", redisCircuitBreakerKey("fal")],
+        ["DEL", redisCircuitBreakerKey("gradium")],
       ]);
       return;
     } catch (err) {

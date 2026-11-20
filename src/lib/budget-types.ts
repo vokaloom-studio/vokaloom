@@ -26,9 +26,7 @@ export type PublicAdvisoryCode =
   | "vision_cap_exhausted"
   | "stock_quota_low"
   | "stock_rate_limited"
-  | "provider_circuit_broken"
-  | "provider_balance_low"
-  | "provider_balance_floor";
+  | "provider_circuit_broken";
 
 export interface PublicQuotaAdvisory {
   code: PublicAdvisoryCode;
@@ -56,12 +54,11 @@ export interface CircuitBreakerRecord {
   reason?: string;
 }
 
-export interface FalBalanceSnapshot {
-  currentBalance: number | null;
-  currency: string;
-  permissionRestricted: boolean;
-  fetchedAt: number;
-  error?: string;
+export interface GradiumVoiceUsage {
+  calls: number;
+  characters: number;
+  clonedVoicesCreated: number;
+  lastCallAt: number | null;
 }
 
 export interface StockRateLimitSnapshot {
@@ -101,8 +98,6 @@ export interface AdminTelemetrySnapshot {
     window: HardCapWindow;
     disablePaidModelFallback: boolean;
     lowQuotaWarnRatio: number;
-    falLowBalanceWarnUsd: number;
-    falMinBalanceUsd: number;
     proClientDailyImageLimit: number;
     proClientDailyAudioLimit: number;
     proClientDailyVisionLimit: number;
@@ -114,13 +109,10 @@ export interface AdminTelemetrySnapshot {
     runtimePaused: boolean;
   };
   hardCaps: Record<PaidResource, PublicResourceQuota>;
-  fal: {
+  gradium: {
     configured: boolean;
-    billingKeyConfigured: boolean;
-    balance: FalBalanceSnapshot | null;
-    lowBalanceWarning: boolean;
-    belowMinFloor: boolean;
     circuitBreaker: CircuitBreakerRecord | null;
+    usage: GradiumVoiceUsage;
   };
   stock: {
     pexels: StockRateLimitSnapshot | null;

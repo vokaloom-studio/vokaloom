@@ -149,7 +149,7 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
     await voiceTab.click();
     await expect(voiceTab).toHaveAttribute("aria-selected", "true");
 
-    // Disable zero-shot clone mode so preset Kokoro-82M / fallback synthesizes immediately
+    // Disable zero-shot clone mode so preset Gradium TTS / fallback synthesizes immediately
     const cloneToggle = page.getByTestId("btn-clone-toggle");
     await expect(cloneToggle).toHaveAttribute("aria-expanded", "true");
     await cloneToggle.click();
@@ -388,8 +388,6 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
         window: "24h",
         disablePaidModelFallback: true,
         lowQuotaWarnRatio: 0.2,
-        falLowBalanceWarnUsd: 5,
-        falMinBalanceUsd: 1,
         proClientDailyImageLimit: 25,
         proClientDailyAudioLimit: 100,
         proClientDailyVisionLimit: 50,
@@ -423,18 +421,15 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
           resetAt: null,
         },
       },
-      fal: {
+      gradium: {
         configured: true,
-        billingKeyConfigured: true,
-        balance: {
-          currentBalance: 14.75,
-          currency: "USD",
-          permissionRestricted: false,
-          fetchedAt: Date.now(),
-        },
-        lowBalanceWarning: false,
-        belowMinFloor: false,
         circuitBreaker: null,
+        usage: {
+          calls: 2,
+          characters: 240,
+          clonedVoicesCreated: 1,
+          lastCallAt: Date.now(),
+        },
       },
       stock: {
         pexels: {
@@ -547,13 +542,11 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
               geminiConfigured: true,
               pexelsConfigured: true,
               unsplashConfigured: true,
-              falConfigured: true,
-              falBillingConfigured: true,
+              gradiumConfigured: true,
             },
             maskedKeys: {
               GEMINI_API_KEY: "AIza••••5678",
-              FAL_KEY: "fal_••••1234",
-              FAL_BILLING_KEY: "falb••••9012",
+              GRADIUM_API_KEY: "gd_••••1234",
             },
             vipClientCodes: ["VOKALOOM-PRO-2026"],
             telemetry: buildTelemetry(),
@@ -631,7 +624,9 @@ test.describe("Vokaloom Studio Workbench E2E", () => {
       page.getByTestId("telemetry-signing-secret-warning")
     ).toBeVisible();
     await expect(page.getByTestId("vault-prod-notice")).toBeVisible();
-    await expect(page.getByTestId("telemetry-fal-panel")).toContainText("$14.75");
+    await expect(page.getByTestId("telemetry-gradium-panel")).toContainText(
+      "240 chars"
+    );
     await expect(page.getByTestId("telemetry-stock-panel")).toContainText(
       "192 / 200"
     );

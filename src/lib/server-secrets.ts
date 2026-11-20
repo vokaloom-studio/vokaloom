@@ -7,15 +7,13 @@ export type SecretKeyName =
   | "GEMINI_API_KEY"
   | "PEXELS_API_KEY"
   | "UNSPLASH_ACCESS_KEY"
-  | "FAL_KEY"
-  | "FAL_BILLING_KEY";
+  | "GRADIUM_API_KEY";
 
 export const SECRET_KEY_NAMES: readonly SecretKeyName[] = [
   "GEMINI_API_KEY",
   "PEXELS_API_KEY",
   "UNSPLASH_ACCESS_KEY",
-  "FAL_KEY",
-  "FAL_BILLING_KEY",
+  "GRADIUM_API_KEY",
 ];
 
 export const VAULT_COOKIE_NAME = "vokaloom_vault_v1";
@@ -40,8 +38,7 @@ const PLACEHOLDERS: Record<SecretKeyName, string> = {
   GEMINI_API_KEY: "your_google_ai_studio_key",
   PEXELS_API_KEY: "your_pexels_api_key",
   UNSPLASH_ACCESS_KEY: "your_unsplash_access_key",
-  FAL_KEY: "your_fal_ai_key",
-  FAL_BILLING_KEY: "your_fal_billing_readonly_key",
+  GRADIUM_API_KEY: "your_gradium_api_key",
 };
 
 const ALL_PLACEHOLDERS = new Set<string>(Object.values(PLACEHOLDERS));

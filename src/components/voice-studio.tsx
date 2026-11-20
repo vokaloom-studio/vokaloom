@@ -497,7 +497,7 @@ export function VoiceStudio({ onRequirePaywall }: VoiceStudioProps) {
         voiceId: isCloneOutput ? undefined : selectedPreset.id,
         sampleName:
           isCloneOutput && referenceAudioName ? referenceAudioName : undefined,
-        engine: data.engine || "Kokoro-82M (Apache-2.0)",
+        engine: data.engine || "Gradium AI Neural TTS",
         isFallback: Boolean(data.isFallback),
         audioUrl: data.audioUrl,
         durationMs: data.durationMs || 3200,

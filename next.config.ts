@@ -13,8 +13,8 @@ const contentSecurityPolicy = [
     : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' https://images.pexels.com https://images.unsplash.com data: blob:",
-  "media-src 'self' https://*.fal.media https://fal.media https://storage.googleapis.com data: blob:",
-  "connect-src 'self' https://images.pexels.com https://images.unsplash.com https://*.fal.media https://fal.media https://storage.googleapis.com",
+  "media-src 'self' https://storage.googleapis.com data: blob:",
+  "connect-src 'self' https://images.pexels.com https://images.unsplash.com https://storage.googleapis.com",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
 ].join("; ");

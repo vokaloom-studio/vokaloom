@@ -59,8 +59,7 @@ interface EngineHealth {
   geminiConfigured: boolean;
   pexelsConfigured: boolean;
   unsplashConfigured: boolean;
-  falConfigured: boolean;
-  falBillingConfigured?: boolean;
+  gradiumConfigured: boolean;
 }
 
 type MaskedKeysMap = Partial<Record<SecretKeyName, string | null>>;
@@ -82,10 +81,9 @@ const VAULT_KEY_FIELDS: ReadonlyArray<{
   { keyName: "GEMINI_API_KEY", serviceHint: "Gemini Vision / Swap / TTS" },
   { keyName: "PEXELS_API_KEY", serviceHint: "Pexels Portrait Stock" },
   { keyName: "UNSPLASH_ACCESS_KEY", serviceHint: "Unsplash Portrait Stock" },
-  { keyName: "FAL_KEY", serviceHint: "Fal.ai Kokoro-82M & F5-TTS" },
   {
-    keyName: "FAL_BILLING_KEY",
-    serviceHint: "Fal.ai Billing Telemetry (Read-Only)",
+    keyName: "GRADIUM_API_KEY",
+    serviceHint: "Gradium AI Neural TTS & Voice Cloning",
   },
 ];
 
@@ -93,8 +91,7 @@ const EMPTY_VAULT_INPUTS: Record<SecretKeyName, string> = {
   GEMINI_API_KEY: "",
   PEXELS_API_KEY: "",
   UNSPLASH_ACCESS_KEY: "",
-  FAL_KEY: "",
-  FAL_BILLING_KEY: "",
+  GRADIUM_API_KEY: "",
 };
 
 export default function VokaloomAdminPage() {
@@ -116,8 +113,7 @@ export default function VokaloomAdminPage() {
     geminiConfigured: false,
     pexelsConfigured: false,
     unsplashConfigured: false,
-    falConfigured: false,
-    falBillingConfigured: false,
+    gradiumConfigured: false,
   });
   const [maskedKeys, setMaskedKeys] = useState<MaskedKeysMap>({});
   const [vaultInputs, setVaultInputs] = useState<Record<SecretKeyName, string>>(
@@ -161,7 +157,7 @@ export default function VokaloomAdminPage() {
   });
 
   const fetchAdminStatus = useCallback(
-    async (adminKeyHeader?: string, refreshFal = false) => {
+    async (adminKeyHeader?: string) => {
       setIsRefreshingHealth(true);
       try {
         const headers: Record<string, string> = {
@@ -170,8 +166,7 @@ export default function VokaloomAdminPage() {
         if (adminKeyHeader) {
           headers["x-admin-key"] = adminKeyHeader;
         }
-        const url = refreshFal ? "/api/admin?refresh=1" : "/api/admin";
-        const res = await fetch(url, { headers, cache: "no-store" });
+        const res = await fetch("/api/admin", { headers, cache: "no-store" });
         if (!res.ok) return;
 
         const data = (await res.json()) as AdminApiGetResponse;
@@ -637,10 +632,10 @@ export default function VokaloomAdminPage() {
       envVar: "UNSPLASH_ACCESS_KEY",
     },
     {
-      key: "fal",
-      name: t("admin.engine.fal"),
-      active: health.falConfigured,
-      envVar: "FAL_KEY",
+      key: "gradium",
+      name: t("admin.engine.gradium"),
+      active: health.gradiumConfigured,
+      envVar: "GRADIUM_API_KEY",
     },
   ];
 
@@ -897,7 +892,7 @@ export default function VokaloomAdminPage() {
                       type="button"
                       variant="outline"
                       size="xs"
-                      onClick={() => void fetchAdminStatus(undefined, true)}
+                      onClick={() => void fetchAdminStatus()}
                       disabled={isRefreshingHealth}
                       className="h-9 border-white/[0.1] bg-[#13151D] text-[#E4E4E7] hover:border-white/[0.18] hover:bg-[#191c26] hover:text-[#F4F4F5] md:h-6"
                     >
@@ -1502,73 +1497,56 @@ export default function VokaloomAdminPage() {
 
                   {telemetry && (
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                      {/* Panel A: Fal.ai Live Balance & Guard */}
+                      {/* Panel A: Gradium AI Voice Engine & Guard */}
                       <div
-                        data-testid="telemetry-fal-panel"
+                        data-testid="telemetry-gradium-panel"
                         className="studio-well flex flex-col justify-between gap-2.5 rounded-lg p-3.5"
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-semibold text-[#F4F4F5]">
-                              {t("admin.telemetry.falTitle")}
+                              {t("admin.telemetry.gradiumTitle")}
                             </span>
                             <span
                               className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                                telemetry.fal.circuitBreaker
+                                telemetry.gradium.circuitBreaker
                                   ? "border-red-500/45 bg-red-500/15 text-red-300"
                                   : "border-emerald-500/35 bg-emerald-500/10 text-emerald-400"
                               }`}
                             >
-                              {telemetry.fal.circuitBreaker
+                              {telemetry.gradium.circuitBreaker
                                 ? t("admin.telemetry.circuitTripped", {
                                     time: formatTimestampShort(
-                                      telemetry.fal.circuitBreaker.blockedUntil
+                                      telemetry.gradium.circuitBreaker.blockedUntil
                                     ),
                                   })
                                 : t("admin.telemetry.circuitHealthy")}
                             </span>
                           </div>
 
-                          {!telemetry.fal.configured &&
-                          !telemetry.fal.billingKeyConfigured ? (
+                          {!telemetry.gradium.configured ? (
                             <p className="font-mono text-[11px] text-[#9CA3B2]">
-                              {t("admin.telemetry.falUnconfigured")}
+                              {t("admin.telemetry.gradiumUnconfigured")}
                             </p>
-                          ) : telemetry.fal.balance?.permissionRestricted ? (
-                            <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 font-mono text-[11px] text-amber-200">
-                              {t("admin.telemetry.falPermissionRestricted")}
-                            </p>
-                          ) : telemetry.fal.balance?.currentBalance !== null &&
-                            telemetry.fal.balance?.currentBalance !== undefined ? (
+                          ) : (
                             <div className="space-y-1">
-                              <p
-                                className={`font-mono text-lg font-semibold tabular-nums ${
-                                  telemetry.fal.belowMinFloor
-                                    ? "text-red-400"
-                                    : telemetry.fal.lowBalanceWarning
-                                      ? "text-amber-300"
-                                      : "text-emerald-400"
-                                }`}
-                              >
-                                ${telemetry.fal.balance.currentBalance.toFixed(2)}{" "}
-                                <span className="text-xs font-normal text-[#9CA3B2]">
-                                  {telemetry.fal.balance.currency}
-                                </span>
+                              <p className="font-mono text-xs font-semibold text-emerald-400">
+                                {t("admin.telemetry.gradiumConfiguredReady")}
+                              </p>
+                              <p className="font-mono text-[11px] tabular-nums text-amber-300">
+                                {t("admin.telemetry.gradiumUsageRow", {
+                                  calls: telemetry.gradium.usage.calls,
+                                  chars: telemetry.gradium.usage.characters,
+                                  clones:
+                                    telemetry.gradium.usage.clonedVoicesCreated,
+                                })}
                               </p>
                             </div>
-                          ) : (
-                            <p className="font-mono text-[11px] text-[#9CA3B2]">
-                              {telemetry.fal.balance?.error ||
-                                t("admin.telemetry.falBalanceUnavailable")}
-                            </p>
                           )}
                         </div>
 
                         <p className="border-t border-white/[0.06] pt-2 font-mono text-[11px] text-[#9CA3B2]">
-                          {t("admin.telemetry.falThresholds", {
-                            warn: telemetry.config.falLowBalanceWarnUsd.toFixed(2),
-                            min: telemetry.config.falMinBalanceUsd.toFixed(2),
-                          })}
+                          {t("admin.telemetry.gradiumMeteringNote")}
                         </p>
                       </div>
 

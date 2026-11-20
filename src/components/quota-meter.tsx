@@ -79,10 +79,6 @@ function getAdvisoryText(
       return t("budget.meter.advisory.stockLow");
     case "provider_circuit_broken":
       return t("budget.meter.advisory.circuitBroken");
-    case "provider_balance_floor":
-      return t("budget.meter.advisory.providerFloor");
-    case "provider_balance_low":
-      return t("budget.meter.advisory.providerLowBalance");
     default:
       return t("budget.toast.capReached");
   }

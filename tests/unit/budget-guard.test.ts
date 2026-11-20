@@ -5,7 +5,6 @@ import path from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
 
 import {
-  fetchFalBalanceSnapshot,
   getAdminTelemetrySnapshot,
   getPublicQuotaSnapshot,
   isProviderCircuitBroken,
@@ -66,11 +65,11 @@ function restoreEnvAndSetBase() {
   process.env.ADMIN_MASTER_KEY = "UNIT-TEST-MASTER-KEY";
   process.env.VIP_CLIENT_CODES = "UNIT-VIP-PASS";
   process.env.GEMINI_API_KEY = "AIzaUnitTestGeminiKey123456";
-  process.env.FAL_KEY = "fal_unit_test_secret_key_123456";
+  process.env.GRADIUM_API_KEY = "gradium_unit_test_secret_key_123456";
   process.env.PEXELS_API_KEY = "pexels_unit_test_key_123456";
   process.env.UNSPLASH_ACCESS_KEY = "unsplash_unit_test_key_123456";
 
-  delete process.env.FAL_BILLING_KEY;
+  delete process.env.GRADIUM_API_BASE_URL;
   delete process.env.SESSION_SIGNING_SECRET;
   delete process.env.GEMINI_VISION_MODEL;
   delete process.env.GEMINI_IMAGE_MODEL;
@@ -87,8 +86,6 @@ function restoreEnvAndSetBase() {
   delete process.env.PRO_CLIENT_DAILY_IMAGE_LIMIT;
   delete process.env.PRO_CLIENT_DAILY_AUDIO_LIMIT;
   delete process.env.PRO_CLIENT_DAILY_VISION_LIMIT;
-  delete process.env.FAL_LOW_BALANCE_WARN_USD;
-  delete process.env.FAL_MIN_BALANCE_USD;
   (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 }
 
@@ -134,7 +131,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
 
     let geminiImageCalls = 0;
     let geminiVisionCalls = 0;
-    let falSubscribeCalls = 0;
+    let gradiumTtsCalls = 0;
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -250,52 +247,32 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
         }
       }
 
-      if (url.includes("queue.fal.run")) {
-        const method = (init?.method || "GET").toUpperCase();
-        if (method === "POST") {
-          falSubscribeCalls += 1;
-          return new Response(
-            JSON.stringify({
-              request_id: "req-fal-1",
-              response_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-1",
-              status_url:
-                "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-1/status",
-              cancel_url:
-                "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-1/cancel",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-        if (url.includes("/status/stream")) {
-          return new Response(
-            'data: {"status":"COMPLETED"}\n\n',
-            {
-              status: 200,
-              headers: { "content-type": "text/event-stream" },
-            }
-          );
-        }
-        if (new URL(url).pathname.endsWith("/status")) {
-          return new Response(JSON.stringify({ status: "COMPLETED" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        return new Response(
-          JSON.stringify({
-            audio_url: "https://cdn.fal.media/unit-test-audio.mp3",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.includes("api.fal.ai/v1/account/billing")) {
-        return new Response(
-          JSON.stringify({
-            credits: { current_balance: 18.42, currency: "USD" },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
+      if (url === "https://api.gradium.ai/api/post/speech/tts") {
+        gradiumTtsCalls += 1;
+        const hdrs = new Headers(init?.headers);
+        assert.equal(hdrs.get("x-api-key"), "gradium_unit_test_secret_key_123456");
+        const payload = JSON.parse(String(init?.body || "{}")) as {
+          text?: string;
+          voice_id?: string;
+          output_format?: string;
+          only_audio?: boolean;
+          model_name?: string;
+        };
+        assert.equal(payload.text, "Hola mundo Vokaloom.");
+        assert.equal(payload.voice_id, "3p0eIGbkmny71GlA");
+        assert.equal(payload.output_format, "wav");
+        assert.equal(payload.only_audio, true);
+        assert.equal(payload.model_name, "default");
+        const fakeWav = Buffer.concat([
+          Buffer.from("RIFF"),
+          Buffer.alloc(4, 0),
+          Buffer.from("WAVEfmt "),
+          Buffer.alloc(16, 0),
+        ]);
+        return new Response(fakeWav, {
+          status: 200,
+          headers: { "content-type": "audio/wav" },
+        });
       }
 
       throw new Error(`Unexpected fetch in test: ${url}`);
@@ -372,7 +349,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(swapData2.budget.resources.image.remaining, 0);
     assert.equal(geminiImageCalls, 1);
 
-    // 3. Voice Call 1 succeeds, Call 2 blocked with 429 without calling Fal
+    // 3. Voice Call 1 succeeds via Gradium, Call 2 blocked with 429 without calling Gradium
     const voiceRes1 = await voicePost(
       new Request("http://localhost/api/voice", {
         method: "POST",
@@ -390,10 +367,12 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(voiceRes1.status, 200);
     const voiceData1 = (await voiceRes1.json()) as {
       audioUrl: string;
+      engine: string;
       budget: { resources: { audio: { used: number; status: string } } };
     };
-    assert.equal(voiceData1.audioUrl, "https://cdn.fal.media/unit-test-audio.mp3");
-    assert.equal(falSubscribeCalls, 1);
+    assert.ok(voiceData1.audioUrl.startsWith("data:audio/wav;base64,"));
+    assert.equal(voiceData1.engine, "Gradium AI Neural TTS");
+    assert.equal(gradiumTtsCalls, 1);
     assert.equal(voiceData1.budget.resources.audio.used, 1);
     assert.equal(voiceData1.budget.resources.audio.status, "exhausted");
 
@@ -418,7 +397,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     };
     assert.equal(voiceData2.capReached, true);
     assert.equal(voiceData2.resource, "audio");
-    assert.equal(falSubscribeCalls, 1);
+    assert.equal(gradiumTtsCalls, 1);
 
     // 4. Backgrounds Vision Call 1 uses Gemini + captures stock headers; Call 2 falls back gracefully
     const bgRes1 = await backgroundsPost(
@@ -469,15 +448,14 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.ok(bgData2.visionCapNotice && bgData2.visionCapNotice.length > 0);
     assert.equal(geminiVisionCalls, 1);
 
-    // 5. Privacy check: /api/quota-status NEVER exposes balance or secrets
+    // 5. Privacy check: /api/quota-status NEVER exposes secrets
     const publicRes = await quotaStatusGet(
       new Request("http://localhost/api/quota-status")
     );
     assert.equal(publicRes.status, 200);
     assert.equal(publicRes.headers.get("cache-control"), "no-store");
     const publicText = await publicRes.text();
-    assert.equal(publicText.includes("18.42"), false);
-    assert.equal(publicText.includes("fal_unit_test"), false);
+    assert.equal(publicText.includes("gradium_unit_test"), false);
     assert.equal(publicText.includes("AIzaUnitTest"), false);
 
     // 6. Auth check: /api/admin rejects unauthenticated and pro_client, exposes full telemetry to operator
@@ -502,8 +480,17 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(authAdminRes.status, 200);
     const authAdminJson = (await authAdminRes.json()) as {
       authenticated: boolean;
+      health: { gradiumConfigured: boolean };
+      maskedKeys: { GRADIUM_API_KEY?: string | null };
       telemetry: {
-        fal: { balance: { currentBalance: number } };
+        gradium: {
+          configured: boolean;
+          usage: {
+            calls: number;
+            characters: number;
+            clonedVoicesCreated: number;
+          };
+        };
         stock: {
           pexels: { limit: number; remaining: number };
           unsplash: { limit: number; remaining: number };
@@ -512,7 +499,15 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
       };
     };
     assert.equal(authAdminJson.authenticated, true);
-    assert.equal(authAdminJson.telemetry.fal.balance.currentBalance, 18.42);
+    assert.equal(authAdminJson.health.gradiumConfigured, true);
+    assert.ok(authAdminJson.maskedKeys.GRADIUM_API_KEY);
+    assert.equal(authAdminJson.telemetry.gradium.configured, true);
+    assert.equal(authAdminJson.telemetry.gradium.usage.calls, 1);
+    assert.equal(
+      authAdminJson.telemetry.gradium.usage.characters,
+      "Hola mundo Vokaloom.".length
+    );
+    assert.equal(authAdminJson.telemetry.gradium.usage.clonedVoicesCreated, 0);
     assert.equal(authAdminJson.telemetry.stock.pexels.limit, 200);
     assert.equal(authAdminJson.telemetry.stock.pexels.remaining, 195);
     assert.equal(authAdminJson.telemetry.stock.unsplash.limit, 50);
@@ -554,8 +549,8 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
         throw new Error("Fallback model must NOT be called!");
       }
 
-      if (url.includes("queue.fal.run")) {
-        calledModels.push("fal-kokoro");
+      if (url.includes("api.gradium.ai/api/post/speech/tts")) {
+        calledModels.push("gradium-tts");
         return new Response(JSON.stringify({ detail: "Upstream error" }), {
           status: 500,
           headers: { "content-type": "application/json" },
@@ -612,7 +607,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(swapJson2.reason, "circuit_breaker");
     assert.deepEqual(calledModels, ["gemini-nano-banana-2.1"]);
 
-    // Voice call with Fal failing MUST NOT fall through to Gemini TTS
+    // Voice call with Gradium failing MUST NOT fall through to Gemini TTS
     const voiceRes = await voicePost(
       new Request("http://localhost/api/voice", {
         method: "POST",
@@ -630,123 +625,129 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(calledModels.includes("gemini-3.8-flash-lite-tts"), false);
   });
 
-  it("handles Fal 403 permissionRestricted gracefully and hard-blocks when balance <= FAL_MIN_BALANCE_USD", async () => {
+  it("performs zero-shot voice cloning with GRADIUM_API_KEY via POST /voices/ and POST /post/speech/tts", async () => {
     process.env.HARD_CAP_AUDIO_LIMIT = "5";
-    process.env.FAL_MIN_BALANCE_USD = "1.0";
+    delete process.env.GEMINI_API_KEY;
 
-    let billingStatus = 403;
-    let billingBalance = 0;
-    let falInferCalls = 0;
+    let cloneUploadCount = 0;
+    let cloneUploadHeadersOk = false;
+    let cloneHasAudioFile = false;
+    let cloneLanguage = "";
+    let cloneEnhance = "";
+    let ttsCalledWithUid = "";
+    let deletedVoiceUid = "";
+
+    const fakeCloneWav = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4, 0),
+      Buffer.from("WAVEfmt "),
+      Buffer.alloc(24, 0),
+    ]);
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("api.fal.ai/v1/account/billing")) {
-        if (billingStatus === 403) {
-          return new Response("Forbidden", { status: 403 });
-        }
+      const method = (init?.method || "GET").toUpperCase();
+      const hdrs = new Headers(init?.headers);
+
+      if (url === "https://api.gradium.ai/api/voices/" && method === "POST") {
+        cloneUploadCount += 1;
+        cloneUploadHeadersOk =
+          hdrs.get("x-api-key") === "gradium_unit_test_secret_key_123456";
+        assert.ok(init?.body instanceof FormData);
+        const audioField = init.body.get("audio_file");
+        cloneHasAudioFile =
+          audioField instanceof Blob && audioField.size > 0;
+        cloneLanguage = String(init.body.get("language") ?? "");
+        cloneEnhance = String(init.body.get("enhance") ?? "");
         return new Response(
           JSON.stringify({
-            credits: { current_balance: billingBalance, currency: "USD" },
+            uid: "gradium_clone_uid_777",
+            name: String(init.body.get("name") ?? "clone"),
+            language: cloneLanguage,
           }),
-          { status: 200, headers: { "content-type": "application/json" } }
+          { status: 201, headers: { "content-type": "application/json" } }
         );
       }
 
-      if (url.includes("queue.fal.run")) {
-        const method = (init?.method || "GET").toUpperCase();
-        if (method === "POST") {
-          falInferCalls += 1;
-          return new Response(
-            JSON.stringify({
-              request_id: "req-fal-bal",
-              response_url:
-                "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-bal",
-              status_url:
-                "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-bal/status",
-              cancel_url:
-                "https://queue.fal.run/fal-ai/kokoro/requests/req-fal-bal/cancel",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-        if (url.includes("/status/stream")) {
-          return new Response(
-            'data: {"status":"COMPLETED"}\n\n',
-            {
-              status: 200,
-              headers: { "content-type": "text/event-stream" },
-            }
-          );
-        }
-        if (new URL(url).pathname.endsWith("/status")) {
-          return new Response(JSON.stringify({ status: "COMPLETED" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        return new Response(
-          JSON.stringify({
-            audio_url: "https://cdn.fal.media/bal-ok.mp3",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
+      if (
+        url === "https://api.gradium.ai/api/post/speech/tts" &&
+        method === "POST"
+      ) {
+        assert.equal(
+          hdrs.get("x-api-key"),
+          "gradium_unit_test_secret_key_123456"
         );
+        const body = JSON.parse(String(init?.body || "{}")) as {
+          text?: string;
+          voice_id?: string;
+          output_format?: string;
+          only_audio?: boolean;
+        };
+        ttsCalledWithUid = body.voice_id || "";
+        assert.equal(body.output_format, "wav");
+        assert.equal(body.only_audio, true);
+        return new Response(fakeCloneWav, {
+          status: 200,
+          headers: { "content-type": "audio/wav" },
+        });
       }
 
-      throw new Error(`Unexpected fetch: ${url}`);
+      if (
+        url === "https://api.gradium.ai/api/voices/gradium_clone_uid_777" &&
+        method === "DELETE"
+      ) {
+        assert.equal(
+          hdrs.get("x-api-key"),
+          "gradium_unit_test_secret_key_123456"
+        );
+        deletedVoiceUid = "gradium_clone_uid_777";
+        return new Response(null, { status: 204 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
     }) as typeof fetch;
 
-    const snap403 = await fetchFalBalanceSnapshot(process.env.FAL_KEY, {
-      force: true,
-    });
-    assert.ok(snap403);
-    assert.equal(snap403.permissionRestricted, true);
-    assert.equal(snap403.currentBalance, null);
-
     const operatorCookie = makeOperatorCookieHeader();
-    const resAllowed = await voicePost(
+    const res = await voicePost(
       new Request("http://localhost/api/voice", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: operatorCookie },
         body: JSON.stringify({
-          text: "Allowed when 403 permissionRestricted.",
-          voiceId: "sofia-es",
-          language: "es",
-        }),
-      })
-    );
-    assert.equal(resAllowed.status, 200);
-    assert.equal(falInferCalls, 1);
-
-    // Now set live balance below FAL_MIN_BALANCE_USD (0.50 <= 1.00)
-    billingStatus = 200;
-    billingBalance = 0.5;
-    const snapLow = await fetchFalBalanceSnapshot(process.env.FAL_KEY, {
-      force: true,
-    });
-    assert.ok(snapLow);
-    assert.equal(snapLow.permissionRestricted, false);
-    assert.equal(snapLow.currentBalance, 0.5);
-
-    const resBlocked = await voicePost(
-      new Request("http://localhost/api/voice", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: operatorCookie },
-        body: JSON.stringify({
-          text: "Should block due to low Fal balance floor.",
+          text: "Hola, esta es una locución clonada con Gradium AI.",
           voiceId: "sofia-es",
           language: "es",
           referenceAudioBase64: TINY_WAV_BASE64,
         }),
       })
     );
-    assert.equal(resBlocked.status, 429);
-    const blockedData = (await resBlocked.json()) as {
-      capReached: boolean;
-      reason: string;
+    assert.equal(res.status, 200);
+    const data = (await res.json()) as {
+      audioUrl: string;
+      engine: string;
+      isFallback: boolean;
     };
-    assert.equal(blockedData.capReached, true);
-    assert.equal(blockedData.reason, "fal_min_balance");
-    assert.equal(falInferCalls, 1);
+    assert.equal(data.isFallback, false);
+    assert.equal(data.engine, "Gradium AI (Zero-Shot Clone)");
+    assert.ok(data.audioUrl.startsWith("data:audio/wav;base64,"));
+    assert.equal(cloneUploadCount, 1);
+    assert.equal(cloneUploadHeadersOk, true);
+    assert.equal(cloneHasAudioFile, true);
+    assert.equal(cloneLanguage, "es");
+    assert.equal(cloneEnhance, "true");
+    assert.equal(ttsCalledWithUid, "gradium_clone_uid_777");
+
+    // Allow non-blocking post-response cleanup microtask to settle
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(deletedVoiceUid, "gradium_clone_uid_777");
+
+    const telemetry = await getAdminTelemetrySnapshot();
+    assert.equal(telemetry.gradium.configured, true);
+    assert.equal(telemetry.gradium.usage.calls, 1);
+    assert.equal(telemetry.gradium.usage.clonedVoicesCreated, 1);
+    assert.equal(
+      telemetry.gradium.usage.characters,
+      "Hola, esta es una locución clonada con Gradium AI.".length
+    );
   });
 
   it("enforces pro_client daily fair-use limits while letting operator bypass when global hard cap is unset", async () => {
@@ -928,7 +929,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     process.env.BUDGET_REQUIRE_DURABLE_STORE = "false";
 
     const warnSnap = await getAdminTelemetrySnapshot({
-      falKey: "",
+      gradiumKey: "",
       geminiKey: "",
     });
     assert.equal(warnSnap.storage.backend, "memory");
@@ -1071,7 +1072,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     process.env.GEMINI_IMAGE_MODEL = "gemini-custom-image-test";
     process.env.GEMINI_TTS_MODEL = "gemini-custom-tts-test";
     process.env.DISABLE_PAID_MODEL_FALLBACK = "false";
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
 
     const hitUrls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -1190,7 +1191,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
   });
 
   it("ignores spoofable IP headers when TRUST_PROXY is unset and stops IP-header trial bypass", async () => {
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
     delete process.env.GEMINI_API_KEY;
 
     const ua = `SpoofAgent/${Date.now()}`;
@@ -1260,54 +1261,65 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(blocked4.status, 402);
   });
 
-  it("uses dedicated FAL_BILLING_KEY and enforces live Fal floor automatically in /api/voice", async () => {
-    process.env.FAL_KEY = "fal_inference_only_key_12345";
-    process.env.FAL_BILLING_KEY = "fal_readonly_billing_key_67890";
-    process.env.FAL_MIN_BALANCE_USD = "1.0";
+  it("supports GRADIUM_API_BASE_URL override, trips gradium circuit breaker on 402/429, and blocks retries cleanly", async () => {
+    process.env.GRADIUM_API_KEY = "gradium_region_test_key_12345";
+    process.env.GRADIUM_API_BASE_URL = "https://eu.api.gradium.ai/api/";
+    process.env.DISABLE_PAID_MODEL_FALLBACK = "true";
     process.env.HARD_CAP_AUDIO_LIMIT = "5";
 
-    let billingAuthHeader = "";
-    let inferCalled = false;
+    let gradiumCalls = 0;
 
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("api.fal.ai/v1/account/billing")) {
-        const hdrs = new Headers(init?.headers);
-        billingAuthHeader = hdrs.get("authorization") || "";
+      if (url === "https://eu.api.gradium.ai/api/post/speech/tts") {
+        gradiumCalls += 1;
         return new Response(
-          JSON.stringify({ credits: { current_balance: 0.4, currency: "USD" } }),
-          { status: 200, headers: { "content-type": "application/json" } }
+          JSON.stringify({ detail: "Insufficient credits" }),
+          { status: 402, headers: { "content-type": "application/json" } }
         );
-      }
-      if (url.includes("queue.fal.run")) {
-        inferCalled = true;
-        throw new Error("Fal inference must NOT execute when live floor triggers!");
       }
       throw new Error(`Unexpected fetch: ${url}`);
     }) as typeof fetch;
 
     const operatorCookie = makeOperatorCookieHeader();
-    const res = await voicePost(
+    const res1 = await voicePost(
       new Request("http://localhost/api/voice", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: operatorCookie },
         body: JSON.stringify({
-          text: "Voice call checks cold balance automatically.",
-          voiceId: "sofia-es",
+          text: "First Gradium call hits 402 exhaustion.",
+          voiceId: "mateo-es",
           language: "es",
         }),
       })
     );
-    assert.equal(res.status, 429);
-    const data = (await res.json()) as { reason: string; capReached: boolean };
-    assert.equal(data.reason, "fal_min_balance");
-    assert.equal(data.capReached, true);
-    assert.equal(billingAuthHeader, "Key fal_readonly_billing_key_67890");
-    assert.equal(inferCalled, false);
+    assert.equal(res1.status, 200);
+    const data1 = (await res1.json()) as { isFallback: boolean };
+    assert.equal(data1.isFallback, true);
+    assert.equal(gradiumCalls, 1);
+    assert.equal(await isProviderCircuitBroken("gradium"), true);
+
+    const res2 = await voicePost(
+      new Request("http://localhost/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: operatorCookie },
+        body: JSON.stringify({
+          text: "Second call should be blocked by gradium circuit breaker.",
+          voiceId: "mateo-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(res2.status, 429);
+    const data2 = (await res2.json()) as { reason: string; capReached: boolean };
+    assert.equal(data2.reason, "circuit_breaker");
+    assert.equal(data2.capReached, true);
+    assert.equal(gradiumCalls, 1);
 
     const telemetry = await getAdminTelemetrySnapshot();
-    assert.equal(telemetry.fal.billingKeyConfigured, true);
-    assert.equal(telemetry.fal.belowMinFloor, true);
+    assert.equal(telemetry.gradium.configured, true);
+    assert.ok(telemetry.gradium.circuitBreaker);
+    assert.equal(telemetry.gradium.circuitBreaker?.statusCode, 402);
   });
 
   it("does not burn paid image cap slots on upstream 404/502 fetches and preserves guest credits on 429 blocks", async () => {
@@ -1352,35 +1364,17 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
           { status: 200, headers: { "content-type": "application/json" } }
         );
       }
-      if (url.includes("queue.fal.run")) {
-        const isPost = !url.includes("/requests/");
-        if (isPost) {
-          return new Response(
-            JSON.stringify({
-              request_id: "req-guest",
-              response_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest",
-              status_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest/status",
-              cancel_url: "https://queue.fal.run/fal-ai/kokoro/requests/req-guest/cancel",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } }
-          );
-        }
-        if (url.includes("/status/stream")) {
-          return new Response('data: {"status":"COMPLETED"}\n\n', {
-            status: 200,
-            headers: { "content-type": "text/event-stream" },
-          });
-        }
-        if (new URL(url).pathname.endsWith("/status")) {
-          return new Response(JSON.stringify({ status: "COMPLETED" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        return new Response(
-          JSON.stringify({ audio_url: "https://cdn.fal.media/ok.mp3" }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
+      if (url === "https://api.gradium.ai/api/post/speech/tts") {
+        const fakeWav = Buffer.concat([
+          Buffer.from("RIFF"),
+          Buffer.alloc(4, 0),
+          Buffer.from("WAVEfmt "),
+          Buffer.alloc(16, 0),
+        ]);
+        return new Response(fakeWav, {
+          status: 200,
+          headers: { "content-type": "audio/wav" },
+        });
       }
       throw new Error(`Unexpected fetch: ${url}`);
     }) as typeof fetch;
@@ -1782,7 +1776,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
   });
 
   it("syncs guest quota limits dynamically with maxTrialCredits=0 and maxTrialCredits=5", async () => {
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
     delete process.env.GEMINI_API_KEY;
 
     // 1. Set maxTrialCredits = 0 via admin server business config -> immediate 402
@@ -1969,7 +1963,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
 
   it("returns 502 in production on permanent upstream 401/404 config errors instead of silent fallback", async () => {
     process.env.SESSION_SIGNING_SECRET = "prod-test-signing-secret";
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -2050,6 +2044,41 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
     assert.equal(prodVoiceJson.providerConfigError, true);
     assert.equal(prodVoiceJson.statusCode, 401);
 
+    // Production returns HTTP 502 on Gradium 403/401 permanent config errors as well
+    process.env.GRADIUM_API_KEY = "invalid_gradium_key_prod";
+    process.env.DISABLE_PAID_MODEL_FALLBACK = "true";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "https://api.gradium.ai/api/post/speech/tts") {
+        return new Response(JSON.stringify({ detail: "Invalid API key" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const prodGradiumRes = await voicePost(
+      new Request("https://app.vokaloom.example/api/voice", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: opCookie },
+        body: JSON.stringify({
+          text: "Production Gradium config error test.",
+          voiceId: "mateo-es",
+          language: "es",
+        }),
+      })
+    );
+    assert.equal(prodGradiumRes.status, 502);
+    const prodGradiumJson = (await prodGradiumRes.json()) as {
+      providerConfigError: boolean;
+      statusCode: number;
+    };
+    assert.equal(prodGradiumJson.providerConfigError, true);
+    assert.equal(prodGradiumJson.statusCode, 403);
+    delete process.env.GRADIUM_API_KEY;
+    delete process.env.DISABLE_PAID_MODEL_FALLBACK;
+
     // Also verify HTTPS origin matches internal http:// request behind TLS proxy in production
     const tlsProxyLogin = await adminPost(
       new Request("http://127.0.0.1:3000/api/admin", {
@@ -2101,7 +2130,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
   });
 
   it("instantly revokes active 30-day pro_client cookies via POST /api/admin revoke-pro-code", async () => {
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
     delete process.env.GEMINI_API_KEY;
 
     // 1. Activate VIP pass and capture 30-day cookie
@@ -2206,7 +2235,7 @@ describe("Vokaloom Budget Guard, Telemetry & Hard-Cap Enforcement", () => {
   });
 
   it("calls Gemini TTS on v1beta with valid responseModalities, speechConfig, verbatim text, and preserves RIFF WAV output", async () => {
-    delete process.env.FAL_KEY;
+    delete process.env.GRADIUM_API_KEY;
 
     const capturedCalls: Array<{
       url: string;
